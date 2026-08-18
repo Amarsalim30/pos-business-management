@@ -27,6 +27,32 @@ class StockAdjustmentCreate(BaseModel):
     note: Optional[str] = Field(None, description="Reason for adjustment (optional)")
 
 
+class StockReceiveCreate(BaseModel):
+    product_id: int
+    quantity: Optional[Decimal] = Field(None, gt=0, description="Direct piece/meter quantity")
+    rolls_received: Optional[int] = Field(None, ge=0, description="Roll helper: full rolls received")
+    loose_meters_received: Optional[Decimal] = Field(None, ge=0, description="Roll helper: loose meters received")
+    unit_cost: Optional[Decimal] = Field(None, ge=0, description="Optional new buying cost price")
+    reference_id: Optional[str] = Field(None, max_length=100, description="Supplier Delivery Note # / PO # / Invoice #")
+    note: Optional[str] = Field(None, description="Receiving notes or supplier name")
+
+
+class BatchStockReceiveItem(BaseModel):
+    product_id: int
+    quantity: Optional[Decimal] = Field(None, gt=0, description="Direct piece/meter quantity")
+    rolls_received: Optional[int] = Field(None, ge=0, description="Roll helper: full rolls received")
+    loose_meters_received: Optional[Decimal] = Field(None, ge=0, description="Roll helper: loose meters received")
+    unit_cost: Optional[Decimal] = Field(None, ge=0, description="Optional new buying cost price")
+    note: Optional[str] = None
+
+
+class BatchStockReceiveCreate(BaseModel):
+    reference_id: Optional[str] = Field(None, max_length=100, description="Supplier Delivery Note # / PO # / Invoice #")
+    supplier_name: Optional[str] = Field(None, max_length=150, description="Supplier / Vendor Business Name")
+    note: Optional[str] = Field(None, description="General GRN remarks")
+    items: List[BatchStockReceiveItem] = Field(..., min_length=1, description="List of delivered items")
+
+
 class InventoryItemResponse(BaseModel):
     product_id: int
     product_name: str

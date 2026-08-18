@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from backend.app.models.product import Product
 from backend.app.models.inventory import Inventory, StockMovement, StockTake, StockTakeItem
-from backend.app.schemas.inventory import StockAdjustmentCreate, StockTakeItemCreate, InventoryItemResponse
+from backend.app.schemas.inventory import (
+    StockAdjustmentCreate,
+    StockReceiveCreate,
+    BatchStockReceiveCreate,
+    StockTakeItemCreate,
+    InventoryItemResponse
+)
 from backend.app.utils.roll_conversion import format_roll_display, roll_count_to_meters
 
 
@@ -175,6 +181,190 @@ def adjust_stock(
     db.refresh(inv)
 
     return prev_qty, new_qty
+
+
+def receive_stock(
+    db: Session,
+    store_id: int,
+    user_id: int,
+    receive_in: StockReceiveCreate
+) -> Tuple[Decimal, Decimal, Decimal]:
+    """
+    Inbound stock receipt from supplier / delivery / purchase.
+    Increments inventory with movement type 'in'.
+    Optionally updates cost price.
+    Returns: (previous_quantity, received_quantity, new_quantity)
+    """
+    prod = db.query(Product).filter(Product.id == receive_in.product_id, Product.store_id == store_id).first()
+    if not prod:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    # Calculate received quantity in base units (meters for rolls, units for pieces)
+    received_qty = Decimal("0.00")
+    if prod.unit_type == "roll":
+        if receive_in.rolls_received is not None or receive_in.loose_meters_received is not None:
+            rolls = receive_in.rolls_received or 0
+            loose = receive_in.loose_meters_received or Decimal("0.00")
+            received_qty = roll_count_to_meters(rolls, loose, prod.meters_per_roll)
+        elif receive_in.quantity is not None:
+            received_qty = Decimal(str(receive_in.quantity))
+    else:
+        if receive_in.quantity is not None:
+            received_qty = Decimal(str(receive_in.quantity))
+        elif receive_in.rolls_received is not None:
+            received_qty = Decimal(str(receive_in.rolls_received))
+
+    if received_qty <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Received quantity must be greater than zero")
+
+    inv = (
+        db.query(Inventory)
+        .filter(Inventory.product_id == receive_in.product_id, Inventory.store_id == store_id)
+        .with_for_update()
+        .first()
+    )
+    if not inv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory record not found")
+
+    prev_qty = Decimal(str(inv.quantity))
+    new_qty = prev_qty + received_qty
+
+    inv.quantity = new_qty
+    inv.last_updated = datetime.now(timezone.utc)
+
+    # If unit cost provided, update product buying cost and loose meter cost
+    if receive_in.unit_cost is not None and receive_in.unit_cost >= 0:
+        prod.cost_price = receive_in.unit_cost
+        if prod.unit_type == "roll" and prod.meters_per_roll:
+            prod.cost_per_meter = Decimal(str(receive_in.unit_cost)) / prod.meters_per_roll
+
+    ref_id = (receive_in.reference_id or "").strip() or "STOCK_RECEIVE"
+    mov = StockMovement(
+        product_id=prod.id,
+        store_id=store_id,
+        type="in",
+        quantity=received_qty,
+        unit_sold="meter" if prod.unit_type == "roll" else "piece",
+        previous_quantity=prev_qty,
+        new_quantity=new_qty,
+        reference_id=ref_id,
+        note=receive_in.note or f"Inbound stock received ({ref_id})",
+        user_id=user_id
+    )
+    db.add(mov)
+    db.commit()
+    db.refresh(inv)
+
+    return prev_qty, received_qty, new_qty
+
+
+def receive_batch_stock(
+    db: Session,
+    store_id: int,
+    user_id: int,
+    batch_in: BatchStockReceiveCreate
+) -> List[dict]:
+    """
+    Multi-product Goods Received Note (GRN) batch receipt.
+    Atomically updates inventory, cost prices, and records audit logs for all items.
+    """
+    if not batch_in.items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No items provided in GRN batch")
+
+    ref_id = (batch_in.reference_id or "").strip() or "GRN_BATCH"
+    supplier = (batch_in.supplier_name or "").strip()
+    header_note = (batch_in.note or "").strip()
+    now_utc = datetime.now(timezone.utc)
+
+    results = []
+
+    for item in batch_in.items:
+        prod = db.query(Product).filter(Product.id == item.product_id, Product.store_id == store_id).first()
+        if not prod:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product with ID {item.product_id} not found"
+            )
+
+        # Calculate received quantity in base units
+        received_qty = Decimal("0.00")
+        if prod.unit_type == "roll":
+            if item.rolls_received is not None or item.loose_meters_received is not None:
+                rolls = item.rolls_received or 0
+                loose = item.loose_meters_received or Decimal("0.00")
+                received_qty = roll_count_to_meters(rolls, loose, prod.meters_per_roll)
+            elif item.quantity is not None:
+                received_qty = Decimal(str(item.quantity))
+        else:
+            if item.quantity is not None:
+                received_qty = Decimal(str(item.quantity))
+            elif item.rolls_received is not None:
+                received_qty = Decimal(str(item.rolls_received))
+
+        if received_qty <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid received quantity for product '{prod.name}'"
+            )
+
+        inv = (
+            db.query(Inventory)
+            .filter(Inventory.product_id == item.product_id, Inventory.store_id == store_id)
+            .with_for_update()
+            .first()
+        )
+        if not inv:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Inventory record missing for '{prod.name}'"
+            )
+
+        prev_qty = Decimal(str(inv.quantity))
+        new_qty = prev_qty + received_qty
+
+        inv.quantity = new_qty
+        inv.last_updated = now_utc
+
+        # Update cost price if supplied
+        if item.unit_cost is not None and item.unit_cost >= 0:
+            prod.cost_price = item.unit_cost
+            if prod.unit_type == "roll" and prod.meters_per_roll:
+                prod.cost_per_meter = Decimal(str(item.unit_cost)) / prod.meters_per_roll
+
+        # Build movement note
+        notes_parts = []
+        if supplier:
+            notes_parts.append(f"Supplier: {supplier}")
+        if item.note:
+            notes_parts.append(item.note)
+        elif header_note:
+            notes_parts.append(header_note)
+        mov_note = " | ".join(notes_parts) if notes_parts else f"GRN {ref_id}"
+
+        mov = StockMovement(
+            product_id=prod.id,
+            store_id=store_id,
+            type="in",
+            quantity=received_qty,
+            unit_sold="meter" if prod.unit_type == "roll" else "piece",
+            previous_quantity=prev_qty,
+            new_quantity=new_qty,
+            reference_id=ref_id,
+            note=mov_note,
+            user_id=user_id
+        )
+        db.add(mov)
+
+        results.append({
+            "product_id": prod.id,
+            "product_name": prod.name,
+            "previous_quantity": prev_qty,
+            "received_quantity": received_qty,
+            "new_quantity": new_qty
+        })
+
+    db.commit()
+    return results
 
 
 def list_stock_movements(

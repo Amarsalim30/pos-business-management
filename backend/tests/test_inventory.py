@@ -171,3 +171,141 @@ def test_stock_take_lifecycle_and_variance(owner_auth_client):
     # Verify inventory was updated
     prod_check = owner_auth_client.get(f"/api/v1/products/{prod_id}").json()
     assert float(prod_check["current_stock"]) == exp_qty + 3.0
+
+
+def test_receive_inbound_stock_flow(owner_auth_client):
+    # 1. Piece item receive with supplier delivery reference & cost update
+    p_piece = owner_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Battery Breaker 63A",
+        "sku": "BRK-63A-DC",
+        "cost_price": 800.0,
+        "selling_price": 1200.0,
+        "initial_stock": 5.0
+    }).json()
+
+    rec_res = owner_auth_client.post("/api/v1/inventory/receive", json={
+        "product_id": p_piece["id"],
+        "quantity": 10.0,
+        "unit_cost": 750.0,
+        "reference_id": "DN-SUPPLIER-8891",
+        "note": "Delivered by SolarMax Kenya Ltd"
+    })
+    assert rec_res.status_code == 200
+    rec_data = rec_res.json()
+    assert float(rec_data["previous_quantity"]) == 5.0
+    assert float(rec_data["received_quantity"]) == 10.0
+    assert float(rec_data["new_quantity"]) == 15.0
+
+    # Verify updated cost price
+    p_check = owner_auth_client.get(f"/api/v1/products/{p_piece['id']}").json()
+    assert float(p_check["cost_price"]) == 750.0
+
+    # 2. Roll item receive with rolls + loose meters breakdown
+    p_roll = owner_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Submersible Cable 4mm",
+        "sku": "CBL-SUB-4MM",
+        "unit_type": "roll",
+        "meters_per_roll": 100.0,
+        "cost_price": 8000.0,
+        "selling_price": 11000.0,
+        "initial_stock": 100.0
+    }).json()
+
+    rec_roll_res = owner_auth_client.post("/api/v1/inventory/receive", json={
+        "product_id": p_roll["id"],
+        "rolls_received": 2,
+        "loose_meters_received": 35.5,
+        "reference_id": "INV-PO-2026-004",
+        "note": "2 fresh rolls + 35.5m test cut offcut"
+    })
+    assert rec_roll_res.status_code == 200
+    rec_roll_data = rec_roll_res.json()
+    assert float(rec_roll_data["previous_quantity"]) == 100.0
+    assert float(rec_roll_data["received_quantity"]) == 235.5
+    assert float(rec_roll_data["new_quantity"]) == 335.5
+
+    # 3. Check movement logs
+    movs = owner_auth_client.get(f"/api/v1/inventory/movements?product_id={p_roll['id']}").json()
+    in_mov = next(m for m in movs if m["type"] == "in" and m["reference_id"] == "INV-PO-2026-004")
+    assert float(in_mov["quantity"]) == 235.5
+    assert in_mov["note"] == "2 fresh rolls + 35.5m test cut offcut"
+
+
+def test_receive_batch_stock_flow(owner_auth_client):
+    # 1. Setup multiple products
+    p1 = owner_auth_client.post("/api/v1/products/", json={
+        "name": "Surge Protector 2P DC",
+        "sku": "SPD-2P-DC",
+        "cost_price": 1200.0,
+        "selling_price": 1800.0,
+        "initial_stock": 4.0
+    }).json()
+
+    p2 = owner_auth_client.post("/api/v1/products/", json={
+        "name": "Earth Rod 5ft Copper",
+        "sku": "ROD-5FT-CU",
+        "cost_price": 950.0,
+        "selling_price": 1400.0,
+        "initial_stock": 10.0
+    }).json()
+
+    p3 = owner_auth_client.post("/api/v1/products/", json={
+        "name": "Earthing Cable 16mm Green",
+        "sku": "CBL-16MM-GRN",
+        "unit_type": "roll",
+        "meters_per_roll": 100.0,
+        "cost_price": 14000.0,
+        "selling_price": 19000.0,
+        "initial_stock": 50.0
+    }).json()
+
+    # 2. Post Multi-Item GRN
+    grn_payload = {
+        "reference_id": "DN-MULTIDEL-7721",
+        "supplier_name": "East Africa Solar Supplies Ltd",
+        "note": "Full morning truck consignment",
+        "items": [
+            {
+                "product_id": p1["id"],
+                "quantity": 16.0,
+                "unit_cost": 1150.0,
+                "note": "16 pcs boxed"
+            },
+            {
+                "product_id": p2["id"],
+                "quantity": 25.0,
+                "unit_cost": 900.0
+            },
+            {
+                "product_id": p3["id"],
+                "rolls_received": 3,
+                "loose_meters_received": 40.0,
+                "unit_cost": 13500.0
+            }
+        ]
+    }
+
+    res = owner_auth_client.post("/api/v1/inventory/receive-batch", json=grn_payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["items"]) == 3
+
+    # 3. Verify stock balances
+    p1_check = owner_auth_client.get(f"/api/v1/products/{p1['id']}").json()
+    assert float(p1_check["current_stock"]) == 20.0  # 4 + 16
+    assert float(p1_check["cost_price"]) == 1150.0
+
+    p2_check = owner_auth_client.get(f"/api/v1/products/{p2['id']}").json()
+    assert float(p2_check["current_stock"]) == 35.0  # 10 + 25
+    assert float(p2_check["cost_price"]) == 900.0
+
+    p3_check = owner_auth_client.get(f"/api/v1/products/{p3['id']}").json()
+    assert float(p3_check["current_stock"]) == 390.0  # 50 + (3*100 + 40)
+    assert float(p3_check["cost_price"]) == 13500.0
+    assert float(p3_check["cost_per_meter"]) == 135.0
+
+    # 4. Verify Movement Audit entries
+    movs = owner_auth_client.get("/api/v1/inventory/movements?limit=10").json()
+    batch_movs = [m for m in movs if m["reference_id"] == "DN-MULTIDEL-7721"]
+    assert len(batch_movs) == 3
+    assert all("Supplier: East Africa Solar Supplies Ltd" in m["note"] for m in batch_movs)

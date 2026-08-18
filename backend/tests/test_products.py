@@ -79,6 +79,7 @@ def test_create_roll_product_with_auto_conversion(owner_auth_client):
     assert data["unit_type"] == "roll"
     assert float(data["meters_per_roll"]) == 100.0
     assert float(data["current_stock"]) == 485.0
+    assert float(data["price_per_roll"]) == 8500.0
     assert "4 rolls + 85.0m loose" in data["formatted_stock"]
 
 

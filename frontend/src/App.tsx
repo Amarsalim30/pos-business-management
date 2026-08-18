@@ -6,10 +6,10 @@ import { Dashboard } from './pages/Dashboard';
 import { ProductsPage } from './pages/Products';
 import { InventoryPage } from './pages/Inventory';
 import { StockTakePage } from './pages/StockTake';
-import { 
-  LayoutDashboard, 
-  Package, 
-  Boxes, 
+import {
+  LayoutDashboard,
+  Package,
+  Boxes,
   ClipboardCheck,
   LogOut
 } from 'lucide-react';
@@ -20,7 +20,7 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-    { label: 'Products & Rolls', path: '/products', icon: Package },
+    { label: 'Products ', path: '/products', icon: Package },
     { label: 'Inventory Levels', path: '/inventory', icon: Boxes },
     { label: 'Stock Take Audit', path: '/stock-take', icon: ClipboardCheck },
   ];
@@ -53,11 +53,10 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    isActive
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isActive
                       ? 'bg-amber-50 text-amber-800 border border-amber-200/80 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
+                    }`}
                 >
                   <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-amber-600' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
@@ -102,7 +101,7 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          
+
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<NavigationLayout><Dashboard /></NavigationLayout>} />
             <Route path="/products" element={<NavigationLayout><ProductsPage /></NavigationLayout>} />

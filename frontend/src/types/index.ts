@@ -48,6 +48,7 @@ export interface Product {
   meters_per_roll: number | null;
   cost_price: number;
   selling_price: number;
+  price_per_roll?: number | null;
   price_per_meter: number | null;
   cost_per_meter: number | null;
   reorder_level: number;

@@ -110,6 +110,11 @@ def create_product(db: Session, store_id: int, user_id: int, product_in: Product
     if product_in.unit_type == "roll" and not meters_per_roll:
         meters_per_roll = Decimal("100.00")
 
+    # Explicit price_per_roll handling
+    price_per_roll = product_in.price_per_roll
+    if product_in.unit_type == "roll" and price_per_roll is None:
+        price_per_roll = product_in.selling_price
+
     product = Product(
         name=product_in.name,
         sku=sku_val,
@@ -120,6 +125,7 @@ def create_product(db: Session, store_id: int, user_id: int, product_in: Product
         meters_per_roll=meters_per_roll,
         cost_price=product_in.cost_price,
         selling_price=product_in.selling_price,
+        price_per_roll=price_per_roll,
         price_per_meter=product_in.price_per_meter,
         cost_per_meter=product_in.cost_per_meter,
         reorder_level=product_in.reorder_level,
@@ -187,6 +193,10 @@ def update_product(db: Session, store_id: int, product_id: int, product_in: Prod
         prod.cost_price = product_in.cost_price
     if product_in.selling_price is not None:
         prod.selling_price = product_in.selling_price
+        if prod.unit_type == "roll" and product_in.price_per_roll is None:
+            prod.price_per_roll = product_in.selling_price
+    if product_in.price_per_roll is not None:
+        prod.price_per_roll = product_in.price_per_roll
     if product_in.price_per_meter is not None:
         prod.price_per_meter = product_in.price_per_meter
     if product_in.cost_per_meter is not None:

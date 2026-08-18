@@ -5,6 +5,8 @@ from backend.app.core.database import get_db
 from backend.app.schemas.inventory import (
     InventoryItemResponse,
     StockAdjustmentCreate,
+    StockReceiveCreate,
+    BatchStockReceiveCreate,
     StockMovementResponse,
     StockTakeCreate,
     StockTakeItemCreate,
@@ -47,6 +49,38 @@ def post_stock_adjustment(
         "message": "Stock adjusted successfully",
         "previous_quantity": prev_qty,
         "new_quantity": new_qty
+    }
+
+
+@inventory_router.post("/receive", status_code=status.HTTP_200_OK)
+def post_stock_receive(
+    rec_in: StockReceiveCreate,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = store_id or current_user.store_id or 1
+    prev_qty, received_qty, new_qty = inventory_service.receive_stock(db, target_store_id, current_user.id, rec_in)
+    return {
+        "message": "Stock received successfully",
+        "previous_quantity": prev_qty,
+        "received_quantity": received_qty,
+        "new_quantity": new_qty
+    }
+
+
+@inventory_router.post("/receive-batch", status_code=status.HTTP_200_OK)
+def post_batch_stock_receive(
+    batch_in: BatchStockReceiveCreate,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = store_id or current_user.store_id or 1
+    results = inventory_service.receive_batch_stock(db, target_store_id, current_user.id, batch_in)
+    return {
+        "message": f"Successfully received {len(results)} items into inventory",
+        "items": results
     }
 
 

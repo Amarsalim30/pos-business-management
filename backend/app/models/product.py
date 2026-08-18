@@ -30,6 +30,7 @@ class Product(Base):
     meters_per_roll = Column(Numeric(10, 2), nullable=True)  # e.g., 100.00, 50.00
     cost_price = Column(Numeric(12, 2), nullable=False)  # BP (Buying Price per piece or per roll)
     selling_price = Column(Numeric(12, 2), nullable=False)  # SP (Selling Price per piece or per roll)
+    price_per_roll = Column(Numeric(12, 2), nullable=True)  # Explicit SP per roll (equals selling_price for rolls)
     price_per_meter = Column(Numeric(12, 2), nullable=True)  # SP per loose meter
     cost_per_meter = Column(Numeric(12, 2), nullable=True)  # BP per loose meter
     reorder_level = Column(Numeric(10, 2), default=5.00, nullable=False)

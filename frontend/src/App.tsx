@@ -28,7 +28,7 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-    { label: 'POS Terminal', path: '/pos', icon: ShoppingCart },
+    { label: 'Shop Sales', path: '/pos', icon: ShoppingCart },
     { label: 'Sales & Invoices', path: '/sales', icon: Receipt },
     { label: 'Quotations', path: '/pre-sales', icon: FileCheck2 },
     { label: 'Customers', path: '/customers', icon: Users },
@@ -66,8 +66,8 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
                   key={item.path}
                   to={item.path}
                   className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${isActive
-                      ? 'bg-amber-50 text-amber-800 border border-amber-200/80 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-amber-50 text-amber-800 border border-amber-200/80 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                 >
                   <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-amber-600' : 'text-slate-400'}`} />

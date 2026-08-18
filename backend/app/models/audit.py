@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from backend.app.core.database import Base
@@ -11,7 +11,7 @@ class Session(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     token_jti = Column(String(64), unique=True, index=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     user = relationship("User", back_populates="sessions")
 
@@ -25,4 +25,4 @@ class AuditLog(Base):
     table_name = Column(String(50), nullable=False)
     record_id = Column(Integer, nullable=True)
     changes = Column(JSON, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)

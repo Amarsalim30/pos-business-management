@@ -8,7 +8,9 @@ import {
   AlertTriangle, 
   Check, 
   RefreshCw,
-  Layers
+  Layers,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 
 export const ProductsPage: React.FC = () => {
@@ -19,6 +21,7 @@ export const ProductsPage: React.FC = () => {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -62,33 +65,86 @@ export const ProductsPage: React.FC = () => {
     }
   };
 
-  const handleCreateProduct = async (e: React.FormEvent) => {
+  const handleOpenCreateModal = () => {
+    setEditingProduct(null);
+    resetForm();
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (p: Product) => {
+    setEditingProduct(p);
+    setName(p.name);
+    setSku(p.sku || '');
+    setCategoryId(p.category_id !== null ? p.category_id : '');
+    setUnitType(p.unit_type);
+    setMetersPerRoll(p.meters_per_roll ? String(p.meters_per_roll) : '100');
+    setCostPrice(String(p.cost_price));
+    setSellingPrice(String(p.selling_price));
+    setPricePerMeter(p.price_per_meter ? String(p.price_per_meter) : '');
+    setReorderLevel(String(p.reorder_level || '5'));
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteProduct = async (p: Product) => {
+    if (!window.confirm(`Are you sure you want to deactivate "${p.name}"?`)) {
+      return;
+    }
+    try {
+      await apiFetch(`/api/v1/products/${p.id}`, { method: 'DELETE' });
+      loadProducts();
+    } catch (err: any) {
+      alert(err.message || 'Failed to deactivate product');
+    }
+  };
+
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
     try {
-      await apiFetch('/api/v1/products/', {
-        method: 'POST',
-        body: JSON.stringify({
-          name,
-          sku: sku.trim() || null,
-          category_id: categoryId === '' ? null : Number(categoryId),
-          unit: unitType === 'roll' ? 'meters' : 'pcs',
-          unit_type: unitType,
-          meters_per_roll: unitType === 'roll' ? parseFloat(metersPerRoll) : null,
-          cost_price: parseFloat(costPrice),
-          selling_price: parseFloat(sellingPrice),
-          price_per_meter: unitType === 'roll' && pricePerMeter ? parseFloat(pricePerMeter) : null,
-          initial_stock: parseFloat(initialStock || '0'),
-          reorder_level: parseFloat(reorderLevel || '5'),
-          is_taxable: true,
-        }),
-      });
+      if (editingProduct) {
+        // Update existing product
+        await apiFetch(`/api/v1/products/${editingProduct.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name,
+            sku: sku.trim() || null,
+            category_id: categoryId === '' ? null : Number(categoryId),
+            unit: unitType === 'roll' ? 'meters' : 'pcs',
+            unit_type: unitType,
+            meters_per_roll: unitType === 'roll' ? parseFloat(metersPerRoll) : null,
+            cost_price: parseFloat(costPrice),
+            selling_price: parseFloat(sellingPrice),
+            price_per_meter: unitType === 'roll' && pricePerMeter ? parseFloat(pricePerMeter) : null,
+            reorder_level: parseFloat(reorderLevel || '5'),
+          }),
+        });
+      } else {
+        // Create new product
+        await apiFetch('/api/v1/products/', {
+          method: 'POST',
+          body: JSON.stringify({
+            name,
+            sku: sku.trim() || null,
+            category_id: categoryId === '' ? null : Number(categoryId),
+            unit: unitType === 'roll' ? 'meters' : 'pcs',
+            unit_type: unitType,
+            meters_per_roll: unitType === 'roll' ? parseFloat(metersPerRoll) : null,
+            cost_price: parseFloat(costPrice),
+            selling_price: parseFloat(sellingPrice),
+            price_per_meter: unitType === 'roll' && pricePerMeter ? parseFloat(pricePerMeter) : null,
+            initial_stock: parseFloat(initialStock || '0'),
+            reorder_level: parseFloat(reorderLevel || '5'),
+            is_taxable: true,
+          }),
+        });
+      }
       setIsModalOpen(false);
       resetForm();
       loadProducts();
     } catch (err: any) {
-      setFormError(err.message || 'Failed to create product');
+      setFormError(err.message || 'Failed to save product');
     }
   };
 
@@ -121,7 +177,7 @@ export const ProductsPage: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={handleOpenCreateModal}
           className="flex items-center space-x-1.5 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-500 transition-all shadow-xs active:scale-[0.98] cursor-pointer"
         >
           <Plus className="h-4 w-4" />
@@ -179,19 +235,20 @@ export const ProductsPage: React.FC = () => {
               <th className="p-3.5 text-right">Selling Price (SP)</th>
               <th className="p-3.5 text-right">Current Stock</th>
               <th className="p-3.5 text-center">Status</th>
+              <th className="p-3.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium">
             {loading ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-400">
+                <td colSpan={7} className="p-8 text-center text-slate-400">
                   <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-amber-600" />
                   Loading product catalog...
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-400">
+                <td colSpan={7} className="p-8 text-center text-slate-400">
                   No products found matching criteria.
                 </td>
               </tr>
@@ -243,6 +300,24 @@ export const ProductsPage: React.FC = () => {
                       </span>
                     )}
                   </td>
+                  <td className="p-3.5 text-right">
+                    <div className="flex items-center justify-end space-x-1.5">
+                      <button
+                        onClick={() => handleOpenEditModal(p)}
+                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-amber-700 transition-all cursor-pointer shadow-2xs"
+                        title="Edit Product Details & Pricing"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProduct(p)}
+                        className="rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-all cursor-pointer shadow-2xs"
+                        title="Deactivate Product"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))
             )}
@@ -250,11 +325,13 @@ export const ProductsPage: React.FC = () => {
         </table>
       </div>
 
-      {/* New Product Modal */}
+      {/* Product Create / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
-            <h3 className="text-base font-bold text-slate-900">Create New Inventory Product</h3>
+            <h3 className="text-base font-bold text-slate-900">
+              {editingProduct ? `Edit Product: ${editingProduct.name}` : 'Create New Inventory Product'}
+            </h3>
 
             {formError && (
               <div className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-700">
@@ -262,7 +339,7 @@ export const ProductsPage: React.FC = () => {
               </div>
             )}
 
-            <form onSubmit={handleCreateProduct} className="space-y-3.5">
+            <form onSubmit={handleSaveProduct} className="space-y-3.5">
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
                   <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">Product Name</label>
@@ -372,7 +449,7 @@ export const ProductsPage: React.FC = () => {
                     placeholder="0.00"
                     value={costPrice}
                     onChange={(e) => setCostPrice(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 font-mono"
                   />
                 </div>
 
@@ -386,29 +463,31 @@ export const ProductsPage: React.FC = () => {
                     placeholder="0.00"
                     value={sellingPrice}
                     onChange={(e) => setSellingPrice(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 font-mono"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
-                    {unitType === 'roll' ? 'Initial Stock (Total Meters)' : 'Initial Quantity'}
-                  </label>
-                  <input
-                    type="number"
-                    value={initialStock}
-                    onChange={(e) => setInitialStock(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
-                  />
-                </div>
+                {!editingProduct && (
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
+                      {unitType === 'roll' ? 'Initial Stock (Total Meters)' : 'Initial Quantity'}
+                    </label>
+                    <input
+                      type="number"
+                      value={initialStock}
+                      onChange={(e) => setInitialStock(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 font-mono"
+                    />
+                  </div>
+                )}
 
-                <div>
+                <div className={editingProduct ? 'col-span-2' : ''}>
                   <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">Reorder Alert Level</label>
                   <input
                     type="number"
                     value={reorderLevel}
                     onChange={(e) => setReorderLevel(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 font-mono"
                   />
                 </div>
               </div>
@@ -426,7 +505,7 @@ export const ProductsPage: React.FC = () => {
                   className="flex items-center space-x-1.5 rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-amber-500 shadow-xs cursor-pointer"
                 >
                   <Check className="h-4 w-4" />
-                  <span>Save Product</span>
+                  <span>{editingProduct ? 'Save Changes' : 'Create Product'}</span>
                 </button>
               </div>
             </form>

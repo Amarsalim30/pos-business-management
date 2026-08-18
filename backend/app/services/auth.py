@@ -29,7 +29,7 @@ def create_user_session(db: DBSession, user: User) -> Tuple[str, str]:
     session = UserSession(
         user_id=user.id,
         token_jti=jti,
-        expires_at=expires_at.replace(tzinfo=None)
+        expires_at=expires_at
     )
     db.add(session)
     
@@ -79,7 +79,12 @@ def refresh_user_token(db: DBSession, refresh_token: str) -> Optional[Tuple[str,
         UserSession.user_id == int(user_id)
     ).first()
     
-    if not session or session.expires_at < datetime.utcnow():
+    now_utc = datetime.now(timezone.utc)
+    sess_exp = session.expires_at
+    if sess_exp.tzinfo is None:
+        sess_exp = sess_exp.replace(tzinfo=timezone.utc)
+
+    if sess_exp < now_utc:
         return None
     
     user = db.query(User).filter(User.id == int(user_id), User.is_active == True).first()

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from backend.app.core.database import Base
@@ -11,7 +11,7 @@ class Inventory(Base):
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     store_id = Column(Integer, ForeignKey("stores.id"), nullable=False)
     quantity = Column(Numeric(12, 2), default=0.00, nullable=False)  # Base decimal: meters for rolls, units for pieces
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_updated = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     __table_args__ = (
         UniqueConstraint("product_id", "store_id", name="uq_product_store"),
@@ -34,7 +34,7 @@ class StockMovement(Base):
     reference_id = Column(String(100), nullable=True)  # Invoice #, PO #, StockTake ID, etc.
     note = Column(Text, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     product = relationship("Product", back_populates="movements")
     user = relationship("User")
@@ -48,7 +48,7 @@ class StockTake(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(String(20), default="in_progress", nullable=False)  # 'in_progress', 'completed', 'cancelled'
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     completed_at = Column(DateTime, nullable=True)
 
     items = relationship("StockTakeItem", back_populates="stock_take", cascade="all, delete-orphan")

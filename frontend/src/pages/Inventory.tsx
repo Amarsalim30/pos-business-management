@@ -339,19 +339,83 @@ export const InventoryPage: React.FC = () => {
                 </button>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
-                  Quantity ({adjustModalItem.unit_type === 'roll' ? 'Meters' : adjustModalItem.unit})
-                </label>
-                <input
-                  type="number"
-                  required
-                  placeholder="e.g. 5"
-                  value={adjustQuantity}
-                  onChange={(e) => setAdjustQuantity(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600 font-mono"
-                />
-              </div>
+              {adjustModalItem.unit_type === 'roll' ? (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3 space-y-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-sky-800 flex items-center justify-between">
+                      <span>Roll Quantity Breakdown</span>
+                      <span className="font-mono text-[10px] font-normal text-sky-600">({adjustModalItem.meters_per_roll}m / roll)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Full Rolls</label>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          id="calc-rolls"
+                          onChange={(e) => {
+                            const rolls = parseFloat(e.target.value) || 0;
+                            const looseInput = document.getElementById('calc-loose') as HTMLInputElement;
+                            const loose = parseFloat(looseInput?.value) || 0;
+                            const mpr = Number(adjustModalItem.meters_per_roll) || 100;
+                            setAdjustQuantity(String((rolls * mpr) + loose));
+                          }}
+                          className="w-full rounded-lg bg-white border border-sky-300 px-2.5 py-1.5 text-xs text-slate-900 font-mono focus:outline-none focus:border-sky-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Loose Meters</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          placeholder="0.0"
+                          id="calc-loose"
+                          onChange={(e) => {
+                            const loose = parseFloat(e.target.value) || 0;
+                            const rollsInput = document.getElementById('calc-rolls') as HTMLInputElement;
+                            const rolls = parseFloat(rollsInput?.value) || 0;
+                            const mpr = Number(adjustModalItem.meters_per_roll) || 100;
+                            setAdjustQuantity(String((rolls * mpr) + loose));
+                          }}
+                          className="w-full rounded-lg bg-white border border-sky-300 px-2.5 py-1.5 text-xs text-slate-900 font-mono focus:outline-none focus:border-sky-600"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
+                      Total Meters to Adjust
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      placeholder="e.g. 150.0"
+                      value={adjustQuantity}
+                      onChange={(e) => setAdjustQuantity(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600 font-mono font-bold"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
+                    Quantity ({adjustModalItem.unit})
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="e.g. 5"
+                    value={adjustQuantity}
+                    onChange={(e) => setAdjustQuantity(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600 font-mono font-bold"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
@@ -360,7 +424,7 @@ export const InventoryPage: React.FC = () => {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Broken packaging, Found inventory, Shelf count fix"
+                  placeholder="e.g. Broken packaging, Found inventory, Physical count correction"
                   value={adjustNote}
                   onChange={(e) => setAdjustNote(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600"

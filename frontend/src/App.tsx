@@ -5,10 +5,12 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { ProductsPage } from './pages/Products';
 import { InventoryPage } from './pages/Inventory';
+import { StockTakePage } from './pages/StockTake';
 import { 
   LayoutDashboard, 
   Package, 
   Boxes, 
+  ClipboardCheck,
   LogOut
 } from 'lucide-react';
 
@@ -20,6 +22,7 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
     { label: 'Products & Rolls', path: '/products', icon: Package },
     { label: 'Inventory Levels', path: '/inventory', icon: Boxes },
+    { label: 'Stock Take Audit', path: '/stock-take', icon: ClipboardCheck },
   ];
 
   return (
@@ -104,6 +107,7 @@ export function App() {
             <Route path="/" element={<NavigationLayout><Dashboard /></NavigationLayout>} />
             <Route path="/products" element={<NavigationLayout><ProductsPage /></NavigationLayout>} />
             <Route path="/inventory" element={<NavigationLayout><InventoryPage /></NavigationLayout>} />
+            <Route path="/stock-take" element={<NavigationLayout><StockTakePage /></NavigationLayout>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

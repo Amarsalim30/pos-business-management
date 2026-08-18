@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
@@ -102,7 +102,7 @@ def deduct_stock(
 
     new_qty = prev_qty - base_deduction
     inv.quantity = new_qty
-    inv.last_updated = datetime.utcnow()
+    inv.last_updated = datetime.now(timezone.utc)
 
     # 4. Record Movement
     mov = StockMovement(
@@ -156,7 +156,7 @@ def adjust_stock(
         )
 
     inv.quantity = new_qty
-    inv.last_updated = datetime.utcnow()
+    inv.last_updated = datetime.now(timezone.utc)
 
     mov = StockMovement(
         product_id=prod.id,
@@ -296,7 +296,7 @@ def reconcile_stock_take(db: Session, store_id: int, user_id: int, stock_take_id
             if inv:
                 prev_qty = inv.quantity
                 inv.quantity = item.counted_quantity
-                inv.last_updated = datetime.utcnow()
+                inv.last_updated = datetime.now(timezone.utc)
 
                 mov = StockMovement(
                     product_id=item.product_id,
@@ -312,7 +312,7 @@ def reconcile_stock_take(db: Session, store_id: int, user_id: int, stock_take_id
                 db.add(mov)
 
     st.status = "completed"
-    st.completed_at = datetime.utcnow()
+    st.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(st)
     return st

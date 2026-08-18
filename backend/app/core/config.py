@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Database
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/pos_db"
+    DATABASE_URL: str = "postgresql://postgres:SOHCAHTOA1967@localhost:5432/pos_db"
     
     # Security / JWT
     JWT_SECRET_KEY: str = "change_this_to_a_very_secure_secret_key_at_least_32_chars_long"

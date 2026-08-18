@@ -15,7 +15,6 @@ import {
   Landmark,
   FileText,
   CheckCircle2,
-  Layers,
   Percent,
   Bookmark,
   Play,
@@ -24,10 +23,7 @@ import {
   UserPlus,
   Split,
   ShieldAlert,
-  Tag,
-  Zap,
-  RotateCcw,
-  Sparkles
+  Zap
 } from 'lucide-react';
 
 interface CartItem {

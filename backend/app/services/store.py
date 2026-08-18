@@ -1,9 +1,9 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from backend.app.models.store import Store, RecurringExpense
-from backend.app.models.audit import AuditLog
-from backend.app.schemas.store import StoreUpdate, RecurringExpenseCreate, RecurringExpenseUpdate
+from app.models.store import Store, RecurringExpense
+from app.models.audit import AuditLog
+from app.schemas.store import StoreUpdate, RecurringExpenseCreate, RecurringExpenseUpdate
 
 
 def get_store(db: Session, store_id: Optional[int] = None) -> Store:

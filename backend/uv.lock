@@ -735,7 +735,7 @@ wheels = [
 ]
 
 [[package]]
-name = "pos-business-management"
+name = "pos-business"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

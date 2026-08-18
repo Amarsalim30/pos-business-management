@@ -1,7 +1,7 @@
 [project]
-name = "pos-business-management"
+name = "pos-business"
 version = "0.1.0"
-description = "Add your description here"
+description = "POS Business Management System"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

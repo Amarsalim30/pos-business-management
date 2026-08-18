@@ -1,17 +1,17 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-from backend.app.core.database import get_db
-from backend.app.schemas.user import UserCreate, UserUpdate, UserResponse
-from backend.app.services.user import (
+from app.core.database import get_db
+from app.schemas.user import UserCreate, UserUpdate, UserResponse
+from app.services.user import (
     create_user,
     list_users,
     get_user_by_id,
     update_user,
     deactivate_user
 )
-from backend.app.dependencies import require_owner
-from backend.app.models.user import User
+from app.dependencies import require_owner
+from app.models.user import User
 
 router = APIRouter(prefix="/users", tags=["users"])
 

@@ -14,8 +14,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from backend.app.core.config import settings
-from backend.app.models import Base
+from app.core.config import settings
+from app.models import Base
 
 target_metadata = Base.metadata
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

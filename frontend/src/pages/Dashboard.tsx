@@ -9,7 +9,9 @@ import {
   Shield, 
   DollarSign, 
   Plus, 
-  CheckCircle2
+  CheckCircle2,
+  Store as StoreIcon,
+  Percent
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
@@ -81,107 +83,116 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* Top Header */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+    <div className="min-h-screen bg-slate-50 text-slate-800">
+      {/* Top Navigation Bar */}
+      <header className="border-b border-slate-200 bg-white px-6 py-3.5 flex items-center justify-between sticky top-0 z-10 shadow-xs">
         <div className="flex items-center space-x-3">
-          <div className="h-10 w-10 rounded-xl bg-amber-500 flex items-center justify-center text-slate-950 font-black text-xl shadow-md shadow-amber-500/20">
+          <div className="h-9 w-9 rounded-lg bg-amber-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
             POS
           </div>
           <div>
-            <h1 className="text-lg font-bold text-white leading-tight">
-              {store?.name || 'Loading Store...'}
-            </h1>
-            <div className="flex items-center space-x-2 text-xs text-slate-400">
-              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
-              <span>Online • Local DB</span>
+            <div className="flex items-center space-x-2">
+              <h1 className="text-base font-bold text-slate-900 leading-none">
+                {store?.name || 'Loading Store...'}
+              </h1>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1"></span>
+                Active
+              </span>
+            </div>
+            <div className="text-xs text-slate-500 mt-0.5">
+              Single-Store Mode • Local Postgres
             </div>
           </div>
         </div>
 
         <div className="flex items-center space-x-4">
           <div className="text-right">
-            <div className="text-sm font-semibold text-white flex items-center justify-end space-x-1.5">
+            <div className="text-sm font-semibold text-slate-900 flex items-center justify-end space-x-1.5">
               <span>{user?.full_name}</span>
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 uppercase">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 uppercase">
                 {user?.role}
               </span>
             </div>
-            <div className="text-xs text-slate-400">@{user?.username}</div>
+            <div className="text-xs text-slate-500">@{user?.username}</div>
           </div>
 
           <button
             onClick={() => logout()}
-            className="flex items-center space-x-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer"
+            className="flex items-center space-x-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-xs cursor-pointer"
           >
-            <LogOut className="h-4 w-4 text-slate-400" />
+            <LogOut className="h-3.5 w-3.5 text-slate-500" />
             <span>Sign Out</span>
           </button>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto p-6 space-y-8">
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto p-6 space-y-6">
         {message && (
-          <div className="flex items-center space-x-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-sm text-emerald-400">
-            <CheckCircle2 className="h-5 w-5 shrink-0" />
-            <span>{message}</span>
+          <div className="flex items-center space-x-2 rounded-lg bg-emerald-50 border border-emerald-200 p-3.5 text-sm text-emerald-800 shadow-xs">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span className="font-medium">{message}</span>
           </div>
         )}
 
-        {/* Foundation Sprint Overview Banner */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <div className="inline-flex items-center space-x-2 text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">
-                <Shield className="h-4 w-4" />
-                <span>Sprint 1: Foundation Completed</span>
-              </div>
-              <h2 className="text-xl font-bold text-white">System Status & Environment</h2>
-              <p className="text-sm text-slate-400 mt-1">
-                FastAPI backend, PostgreSQL data store, Cookie JWT Auth, and multi-user RBAC active.
-              </p>
+        {/* Foundation Summary Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4.5 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500 mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider">Store Status</span>
+              <StoreIcon className="h-4 w-4 text-amber-600" />
             </div>
-            <div className="flex flex-wrap gap-2">
-              <div className="rounded-xl border border-slate-800 bg-slate-800/50 px-4 py-2.5">
-                <div className="text-[11px] font-medium text-slate-400">Standard VAT Rate</div>
-                <div className="text-base font-bold text-amber-400">
-                  {store?.vat_rate ? `${(Number(store.vat_rate) * 100).toFixed(0)}%` : '16%'}
-                </div>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-800/50 px-4 py-2.5">
-                <div className="text-[11px] font-medium text-slate-400">Active Role Access</div>
-                <div className="text-base font-bold text-white capitalize">{user?.role}</div>
-              </div>
+            <div className="text-lg font-bold text-slate-900">{store?.name || '---'}</div>
+            <div className="text-xs text-slate-500 mt-1">{store?.address || 'Nairobi, Kenya'} • {store?.phone || '+254...'}</div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4.5 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500 mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider">Tax & VAT Config</span>
+              <Percent className="h-4 w-4 text-amber-600" />
             </div>
+            <div className="text-lg font-bold text-slate-900 font-mono">
+              {store?.vat_rate ? `${(Number(store.vat_rate) * 100).toFixed(0)}% Standard` : '16%'}
+            </div>
+            <div className="text-xs text-slate-500 mt-1">Tax-inclusive pricing extraction active</div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4.5 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500 mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider">System Sprint</span>
+              <Shield className="h-4 w-4 text-amber-600" />
+            </div>
+            <div className="text-lg font-bold text-emerald-700">Sprint 1 Ready</div>
+            <div className="text-xs text-slate-500 mt-1">FastAPI Backend • RBAC • Clean White Tokens</div>
           </div>
         </div>
 
-        {/* Owner Views vs Staff View */}
+        {/* Owner View vs Staff View */}
         {user?.role === 'owner' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* User Management Overview */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* User Management */}
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <Users className="h-5 w-5 text-amber-500" />
-                  <h3 className="font-bold text-white">Staff & User Management</h3>
+                <div className="flex items-center space-x-2">
+                  <Users className="h-4 w-4 text-amber-600" />
+                  <h3 className="font-bold text-slate-900 text-sm">Store Users & Roles</h3>
                 </div>
-                <span className="text-xs bg-slate-800 px-2.5 py-1 rounded-full text-slate-300 font-medium">
+                <span className="text-xs bg-slate-100 px-2.5 py-0.5 rounded-full text-slate-600 font-bold">
                   {users.length} Users
                 </span>
               </div>
 
-              <div className="divide-y divide-slate-800/80 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50">
+              <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200">
                 {users.map((u) => (
-                  <div key={u.id} className="flex items-center justify-between p-3.5">
+                  <div key={u.id} className="flex items-center justify-between p-3 bg-white hover:bg-slate-50/70 transition-colors">
                     <div>
-                      <div className="font-medium text-sm text-white">{u.full_name}</div>
-                      <div className="text-xs text-slate-400">@{u.username}</div>
+                      <div className="font-semibold text-sm text-slate-900">{u.full_name}</div>
+                      <div className="text-xs text-slate-500">@{u.username}</div>
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        u.role === 'owner' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                        u.role === 'owner' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-slate-100 text-slate-700 border border-slate-200'
                       }`}>
                         {u.role}
                       </span>
@@ -193,44 +204,44 @@ export const Dashboard: React.FC = () => {
             </div>
 
             {/* Recurring Expenses (Rent & Payroll) */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <DollarSign className="h-5 w-5 text-amber-500" />
-                  <h3 className="font-bold text-white">Monthly Fixed Expenses</h3>
+                <div className="flex items-center space-x-2">
+                  <DollarSign className="h-4 w-4 text-amber-600" />
+                  <h3 className="font-bold text-slate-900 text-sm">Monthly Fixed Deductions</h3>
                 </div>
-                <span className="text-xs bg-slate-800 px-2.5 py-1 rounded-full text-slate-300 font-medium">
-                  {expenses.length} Items
+                <span className="text-xs bg-slate-100 px-2.5 py-0.5 rounded-full text-slate-600 font-bold">
+                  {expenses.length} Fixed Overheads
                 </span>
               </div>
 
-              <div className="divide-y divide-slate-800/80 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50">
+              <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200">
                 {expenses.map((e) => (
-                  <div key={e.id} className="flex items-center justify-between p-3.5">
+                  <div key={e.id} className="flex items-center justify-between p-3 bg-white hover:bg-slate-50/70 transition-colors">
                     <div>
-                      <div className="font-medium text-sm text-white">{e.name}</div>
-                      <div className="text-xs text-slate-400 capitalize">{e.category}</div>
+                      <div className="font-semibold text-sm text-slate-900">{e.name}</div>
+                      <div className="text-xs text-slate-500 capitalize">{e.category}</div>
                     </div>
-                    <div className="text-sm font-bold text-white">
+                    <div className="text-sm font-bold text-slate-900 font-mono">
                       KES {Number(e.amount).toLocaleString()}
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Add Expense Mini Form */}
-              <form onSubmit={handleAddExpense} className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-2">
+              {/* Add Expense Form */}
+              <form onSubmit={handleAddExpense} className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1">
                 <input
                   type="text"
-                  placeholder="Expense name (e.g. Mary Salary)"
+                  placeholder="Expense name"
                   value={newExpenseName}
                   onChange={(e) => setNewExpenseName(e.target.value)}
-                  className="rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  className="rounded-lg bg-white border border-slate-300 px-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                 />
                 <select
                   value={newExpenseCategory}
                   onChange={(e) => setNewExpenseCategory(e.target.value as any)}
-                  className="rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  className="rounded-lg bg-white border border-slate-300 px-2 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-amber-600"
                 >
                   <option value="payroll">Payroll</option>
                   <option value="rent">Rent</option>
@@ -241,24 +252,24 @@ export const Dashboard: React.FC = () => {
                   placeholder="Amount (KES)"
                   value={newExpenseAmount}
                   onChange={(e) => setNewExpenseAmount(e.target.value)}
-                  className="rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  className="rounded-lg bg-white border border-slate-300 px-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                 />
                 <button
                   type="submit"
-                  className="flex items-center justify-center space-x-1 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
+                  className="flex items-center justify-center space-x-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 transition-all cursor-pointer shadow-xs active:scale-[0.98]"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  <span>Add</span>
+                  <span>Add Fixed</span>
                 </button>
               </form>
             </div>
           </div>
         ) : (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-8 text-center space-y-3">
-            <Receipt className="h-10 w-10 text-amber-500 mx-auto" />
-            <h3 className="text-lg font-bold text-white">Register Ready for Phase 2 & 3</h3>
-            <p className="text-sm text-slate-400 max-w-md mx-auto">
-              Staff cashier session active. Inventory catalog, quick POS search, and invoice issuance will be loaded in the next sprints.
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center space-y-3 shadow-xs">
+            <Receipt className="h-10 w-10 text-amber-600 mx-auto" />
+            <h3 className="text-base font-bold text-slate-900">Cashier Register Workspace</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Staff session active. Product lookup, roll unit conversions, and sales invoicing will open in Sprints 2 & 3.
             </p>
           </div>
         )}

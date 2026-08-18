@@ -89,7 +89,7 @@ export const InventoryPage: React.FC = () => {
 
   const filteredItems = items.filter(i => 
     i.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    i.sku.toLowerCase().includes(searchQuery.toLowerCase())
+    (i.sku && i.sku.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -193,7 +193,7 @@ export const InventoryPage: React.FC = () => {
                     <tr key={item.product_id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="p-3.5">
                         <div className="font-bold text-slate-900">{item.product_name}</div>
-                        <div className="text-[11px] font-mono text-slate-400">{item.sku}</div>
+                        <div className="text-[11px] font-mono text-slate-400">{item.sku || '---'}</div>
                       </td>
                       <td className="p-3.5">
                         {item.unit_type === 'roll' ? (
@@ -301,7 +301,7 @@ export const InventoryPage: React.FC = () => {
             <div>
               <h3 className="text-base font-bold text-slate-900">Manual Stock Adjustment</h3>
               <p className="text-xs text-slate-500 mt-0.5 font-semibold">
-                {adjustModalItem.product_name} ({adjustModalItem.sku})
+                {adjustModalItem.product_name} {adjustModalItem.sku ? `(${adjustModalItem.sku})` : ''}
               </p>
             </div>
 

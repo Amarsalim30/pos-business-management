@@ -11,7 +11,7 @@ def test_create_category_and_list(owner_auth_client):
     assert any(c["name"] == "Solar Panels" for c in cat_list)
 
 
-def test_create_piece_product(owner_auth_client):
+def test_create_piece_product_with_sku(owner_auth_client):
     prod_data = {
         "name": "Solar Inverter 3KVA",
         "sku": "INV-3KVA-001",
@@ -26,8 +26,37 @@ def test_create_piece_product(owner_auth_client):
     assert res.status_code == 201
     data = res.json()
     assert data["name"] == "Solar Inverter 3KVA"
+    assert data["sku"] == "INV-3KVA-001"
     assert float(data["current_stock"]) == 5.0
     assert data["unit_type"] == "piece"
+
+
+def test_create_product_without_sku_optional(owner_auth_client):
+    prod_data = {
+        "name": "Generic Tape Roll",
+        "sku": None,
+        "unit": "pcs",
+        "unit_type": "piece",
+        "cost_price": 50.00,
+        "selling_price": 80.00,
+        "initial_stock": 10.0
+    }
+    res = owner_auth_client.post("/api/v1/products/", json=prod_data)
+    assert res.status_code == 201
+    data = res.json()
+    assert data["name"] == "Generic Tape Roll"
+    assert data["sku"] is None
+
+    # Verify multiple products can exist with null SKU without conflict
+    prod_data2 = {
+        "name": "Another Generic Tape",
+        "sku": "",
+        "cost_price": 40.00,
+        "selling_price": 70.00
+    }
+    res2 = owner_auth_client.post("/api/v1/products/", json=prod_data2)
+    assert res2.status_code == 201
+    assert res2.json()["sku"] is None
 
 
 def test_create_roll_product_with_auto_conversion(owner_auth_client):

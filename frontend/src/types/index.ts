@@ -40,7 +40,7 @@ export interface Category {
 export interface Product {
   id: number;
   name: string;
-  sku: string;
+  sku: string | null;
   category_id: number | null;
   store_id: number;
   unit: string;
@@ -63,7 +63,7 @@ export interface Product {
 export interface InventoryItem {
   product_id: number;
   product_name: string;
-  sku: string;
+  sku: string | null;
   unit: string;
   unit_type: 'piece' | 'roll';
   meters_per_roll: number | null;

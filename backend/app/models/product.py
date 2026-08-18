@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
-from app.core.database import Base
+from backend.app.core.database import Base
 
 
 class Category(Base):
@@ -22,7 +22,7 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(150), nullable=False, index=True)
-    sku = Column(String(50), nullable=False, index=True)
+    sku = Column(String(50), nullable=True, index=True)
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     store_id = Column(Integer, ForeignKey("stores.id"), nullable=False)
     unit = Column(String(20), default="pcs", nullable=False)  # 'pcs', 'meters', 'kg', 'set'

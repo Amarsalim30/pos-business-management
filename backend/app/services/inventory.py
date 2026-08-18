@@ -3,10 +3,10 @@ from decimal import Decimal
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from app.models.product import Product
-from app.models.inventory import Inventory, StockMovement, StockTake, StockTakeItem
-from app.schemas.inventory import StockAdjustmentCreate, StockTakeItemCreate, InventoryItemResponse
-from app.utils.roll_conversion import format_roll_display, roll_count_to_meters
+from backend.app.models.product import Product
+from backend.app.models.inventory import Inventory, StockMovement, StockTake, StockTakeItem
+from backend.app.schemas.inventory import StockAdjustmentCreate, StockTakeItemCreate, InventoryItemResponse
+from backend.app.utils.roll_conversion import format_roll_display, roll_count_to_meters
 
 
 # =========================================================================

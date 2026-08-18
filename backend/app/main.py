@@ -2,12 +2,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from app.core.config import settings
-from app.core.database import engine, Base, SessionLocal
-from app.models.user import User
-from app.models.store import Store, RecurringExpense
-from app.core.security import get_password_hash
-from app.routers import auth, users, stores, health, products, inventory
+from backend.app.core.config import settings
+from backend.app.core.database import engine, Base, SessionLocal
+from backend.app.models.user import User
+from backend.app.models.store import Store, RecurringExpense
+from backend.app.core.security import get_password_hash
+from backend.app.routers import auth, users, stores, health, products, inventory
 
 
 def init_first_store_and_owner():

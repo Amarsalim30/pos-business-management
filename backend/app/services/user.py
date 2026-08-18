@@ -1,10 +1,10 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from app.models.user import User
-from app.models.audit import AuditLog
-from app.schemas.user import UserCreate, UserUpdate
-from app.core.security import get_password_hash
+from backend.app.models.user import User
+from backend.app.models.audit import AuditLog
+from backend.app.schemas.user import UserCreate, UserUpdate
+from backend.app.core.security import get_password_hash
 
 
 def create_user(db: Session, user_in: UserCreate, current_user_id: Optional[int] = None) -> User:

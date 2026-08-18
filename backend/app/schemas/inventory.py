@@ -30,7 +30,7 @@ class StockAdjustmentCreate(BaseModel):
 class InventoryItemResponse(BaseModel):
     product_id: int
     product_name: str
-    sku: str
+    sku: Optional[str] = None
     unit: str
     unit_type: str
     meters_per_roll: Optional[Decimal] = None

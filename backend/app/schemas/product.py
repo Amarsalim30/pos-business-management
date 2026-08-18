@@ -23,7 +23,7 @@ class CategoryResponse(CategoryBase):
 
 class ProductBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=150)
-    sku: str = Field(..., min_length=1, max_length=50)
+    sku: Optional[str] = Field(None, max_length=50)
     category_id: Optional[int] = None
     unit: str = "pcs"
     unit_type: str = Field("piece", pattern="^(piece|roll)$")
@@ -60,9 +60,10 @@ class ProductUpdate(BaseModel):
 class ProductResponse(ProductBase):
     id: int
     store_id: int
-    current_stock: Decimal = Decimal("0.00")
+    sku: Optional[str] = None
+    current_stock: Optional[Decimal] = Decimal("0.00")
     formatted_stock: Optional[str] = None
-    is_low_stock: bool = False
+    is_low_stock: Optional[bool] = False
     created_at: datetime
     updated_at: datetime
 

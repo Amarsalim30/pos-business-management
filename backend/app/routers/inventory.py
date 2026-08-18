@@ -1,8 +1,8 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-from app.core.database import get_db
-from app.schemas.inventory import (
+from backend.app.core.database import get_db
+from backend.app.schemas.inventory import (
     InventoryItemResponse,
     StockAdjustmentCreate,
     StockMovementResponse,
@@ -11,9 +11,9 @@ from app.schemas.inventory import (
     StockTakeResponse,
     StockTakeItemResponse
 )
-from app.services import inventory as inventory_service
-from app.dependencies import get_current_user, require_owner
-from app.models.user import User
+from backend.app.services import inventory as inventory_service
+from backend.app.dependencies import get_current_user, require_owner
+from backend.app.models.user import User
 
 inventory_router = APIRouter(prefix="/inventory", tags=["inventory"])
 stock_takes_router = APIRouter(prefix="/stock-takes", tags=["stock-takes"])

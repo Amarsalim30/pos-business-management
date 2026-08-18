@@ -71,7 +71,7 @@ export const ProductsPage: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({
           name,
-          sku,
+          sku: sku.trim() || null,
           category_id: categoryId === '' ? null : Number(categoryId),
           unit: unitType === 'roll' ? 'meters' : 'pcs',
           unit_type: unitType,
@@ -200,7 +200,7 @@ export const ProductsPage: React.FC = () => {
                 <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
                   <td className="p-3.5">
                     <div className="font-bold text-slate-900">{p.name}</div>
-                    <div className="text-[11px] font-mono text-slate-400 mt-0.5">{p.sku}</div>
+                    <div className="text-[11px] font-mono text-slate-400 mt-0.5">{p.sku || '---'}</div>
                   </td>
                   <td className="p-3.5">
                     {p.unit_type === 'roll' ? (
@@ -277,11 +277,12 @@ export const ProductsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">SKU / Code</label>
+                  <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
+                    SKU / Code <span className="text-slate-400 font-normal text-[10px] lowercase">(optional)</span>
+                  </label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. CBL-4MM-BLK"
+                    placeholder="e.g. CBL-4MM-BLK (leave blank if none)"
                     value={sku}
                     onChange={(e) => setSku(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 font-mono"

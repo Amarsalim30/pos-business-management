@@ -3,10 +3,10 @@ from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from fastapi import HTTPException, status
-from app.models.product import Category, Product
-from app.models.inventory import Inventory, StockMovement
-from app.schemas.product import CategoryCreate, ProductCreate, ProductUpdate
-from app.utils.roll_conversion import format_roll_display
+from backend.app.models.product import Category, Product
+from backend.app.models.inventory import Inventory, StockMovement
+from backend.app.schemas.product import CategoryCreate, ProductCreate, ProductUpdate
+from backend.app.utils.roll_conversion import format_roll_display
 
 
 # =========================================================================
@@ -98,10 +98,12 @@ def get_product(db: Session, store_id: int, product_id: int) -> Tuple[Product, D
 
 
 def create_product(db: Session, store_id: int, user_id: int, product_in: ProductCreate) -> Tuple[Product, Decimal, str, bool]:
-    # Check duplicate SKU within the store
-    existing = db.query(Product).filter(Product.store_id == store_id, Product.sku == product_in.sku).first()
-    if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Product with SKU '{product_in.sku}' already exists")
+    # Check duplicate SKU within the store only if SKU is provided
+    sku_val = (product_in.sku or "").strip() or None
+    if sku_val:
+        existing = db.query(Product).filter(Product.store_id == store_id, Product.sku == sku_val).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Product with SKU '{sku_val}' already exists")
 
     # If roll product, default meters_per_roll to 100 if omitted
     meters_per_roll = product_in.meters_per_roll
@@ -110,7 +112,7 @@ def create_product(db: Session, store_id: int, user_id: int, product_in: Product
 
     product = Product(
         name=product_in.name,
-        sku=product_in.sku,
+        sku=sku_val,
         category_id=product_in.category_id,
         store_id=store_id,
         unit=product_in.unit,
@@ -165,11 +167,13 @@ def update_product(db: Session, store_id: int, product_id: int, product_in: Prod
 
     if product_in.name is not None:
         prod.name = product_in.name
-    if product_in.sku is not None and product_in.sku != prod.sku:
-        existing = db.query(Product).filter(Product.store_id == store_id, Product.sku == product_in.sku, Product.id != product_id).first()
-        if existing:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Duplicate SKU")
-        prod.sku = product_in.sku
+    if product_in.sku is not None:
+        sku_val = product_in.sku.strip() or None
+        if sku_val and sku_val != prod.sku:
+            existing = db.query(Product).filter(Product.store_id == store_id, Product.sku == sku_val, Product.id != product_id).first()
+            if existing:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Duplicate SKU")
+        prod.sku = sku_val
     if product_in.category_id is not None:
         prod.category_id = product_in.category_id
     if product_in.unit is not None:

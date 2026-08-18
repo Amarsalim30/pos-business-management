@@ -36,7 +36,7 @@ def test_login_nonexistent_user(client):
 
 
 def test_login_inactive_user(client, db_session):
-    from backend.app.models.user import User
+    from app.models.user import User
     user = db_session.query(User).filter(User.username == "staff").first()
     user.is_active = False
     db_session.commit()

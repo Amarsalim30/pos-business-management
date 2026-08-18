@@ -3,10 +3,10 @@ from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from fastapi import HTTPException, status
-from backend.app.models.product import Category, Product
-from backend.app.models.inventory import Inventory, StockMovement
-from backend.app.schemas.product import CategoryCreate, ProductCreate, ProductUpdate
-from backend.app.utils.roll_conversion import format_roll_display
+from app.models.product import Category, Product
+from app.models.inventory import Inventory, StockMovement
+from app.schemas.product import CategoryCreate, ProductCreate, ProductUpdate
+from app.utils.roll_conversion import format_roll_display
 
 
 # =========================================================================

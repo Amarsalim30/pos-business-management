@@ -81,6 +81,8 @@ export interface InventoryItem {
 export interface StockMovement {
   id: number;
   product_id: number;
+  product_name?: string | null;
+  sku?: string | null;
   store_id: number;
   type: string;
   quantity: number;

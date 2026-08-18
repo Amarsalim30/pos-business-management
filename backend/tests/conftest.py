@@ -4,11 +4,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
-from backend.app.core.database import Base, get_db
-from backend.app.main import app
-from backend.app.models.user import User
-from backend.app.models.store import Store, RecurringExpense
-from backend.app.core.security import get_password_hash
+from app.core.database import Base, get_db
+from app.main import app
+from app.models.user import User
+from app.models.store import Store, RecurringExpense
+from app.core.security import get_password_hash
 
 # In-memory SQLite for superfast regression tests
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"

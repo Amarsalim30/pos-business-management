@@ -1,15 +1,15 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-from backend.app.core.database import get_db
-from backend.app.schemas.store import (
+from app.core.database import get_db
+from app.schemas.store import (
     StoreUpdate,
     StoreResponse,
     RecurringExpenseCreate,
     RecurringExpenseUpdate,
     RecurringExpenseResponse
 )
-from backend.app.services.store import (
+from app.services.store import (
     get_store,
     update_store,
     list_recurring_expenses,
@@ -17,8 +17,8 @@ from backend.app.services.store import (
     update_recurring_expense,
     delete_recurring_expense
 )
-from backend.app.dependencies import require_owner, get_current_user
-from backend.app.models.user import User
+from app.dependencies import require_owner, get_current_user
+from app.models.user import User
 
 router = APIRouter(prefix="/stores", tags=["stores"])
 

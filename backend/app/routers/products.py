@@ -1,11 +1,11 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-from backend.app.core.database import get_db
-from backend.app.schemas.product import CategoryCreate, CategoryResponse, ProductCreate, ProductUpdate, ProductResponse
-from backend.app.services import product as product_service
-from backend.app.dependencies import get_current_user, require_owner, require_staff
-from backend.app.models.user import User
+from app.core.database import get_db
+from app.schemas.product import CategoryCreate, CategoryResponse, ProductCreate, ProductUpdate, ProductResponse
+from app.services import product as product_service
+from app.dependencies import get_current_user, require_owner, require_staff
+from app.models.user import User
 
 categories_router = APIRouter(prefix="/categories", tags=["categories"])
 products_router = APIRouter(prefix="/products", tags=["products"])

@@ -1,8 +1,8 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-from backend.app.core.database import get_db
-from backend.app.schemas.inventory import (
+from app.core.database import get_db
+from app.schemas.inventory import (
     InventoryItemResponse,
     StockAdjustmentCreate,
     StockReceiveCreate,
@@ -13,9 +13,9 @@ from backend.app.schemas.inventory import (
     StockTakeResponse,
     StockTakeItemResponse
 )
-from backend.app.services import inventory as inventory_service
-from backend.app.dependencies import get_current_user, require_owner, require_staff
-from backend.app.models.user import User
+from app.services import inventory as inventory_service
+from app.dependencies import get_current_user, require_owner, require_staff
+from app.models.user import User
 
 inventory_router = APIRouter(prefix="/inventory", tags=["inventory"])
 stock_takes_router = APIRouter(prefix="/stock-takes", tags=["stock-takes"])
@@ -94,7 +94,14 @@ def get_stock_movements(
 ):
     target_store_id = store_id or current_user.store_id or 1
     movements = inventory_service.list_stock_movements(db, target_store_id, product_id=product_id, limit=limit)
-    return [StockMovementResponse.model_validate(m) for m in movements]
+    res = []
+    for m in movements:
+        item = StockMovementResponse.model_validate(m)
+        if m.product:
+            item.product_name = m.product.name
+            item.sku = m.product.sku
+        res.append(item)
+    return res
 
 
 # =========================================================================
@@ -239,6 +246,40 @@ def post_reconcile_stock_take(
 ):
     target_store_id = store_id or current_user.store_id or 1
     st = inventory_service.reconcile_stock_take(db, target_store_id, current_user.id, stock_take_id)
+    items = [
+        StockTakeItemResponse(
+            id=item.id,
+            product_id=item.product_id,
+            product_name=item.product.name if item.product else f"Product #{item.product_id}",
+            expected_quantity=item.expected_quantity,
+            counted_quantity=item.counted_quantity,
+            variance=item.variance,
+            rolls_counted=item.rolls_counted,
+            loose_meters_counted=item.loose_meters_counted
+        )
+        for item in st.items
+    ]
+    return StockTakeResponse(
+        id=st.id,
+        store_id=st.store_id,
+        user_id=st.user_id,
+        status=st.status,
+        notes=st.notes,
+        created_at=st.created_at,
+        completed_at=st.completed_at,
+        items=items
+    )
+
+
+@stock_takes_router.post("/{stock_take_id}/cancel", response_model=StockTakeResponse)
+def post_cancel_stock_take(
+    stock_take_id: int,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = store_id or current_user.store_id or 1
+    st = inventory_service.cancel_stock_take(db, target_store_id, current_user.id, stock_take_id)
     items = [
         StockTakeItemResponse(
             id=item.id,

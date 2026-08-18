@@ -1,8 +1,8 @@
 from decimal import Decimal
 import pytest
-from backend.app.services.inventory import deduct_stock, adjust_stock
-from backend.app.schemas.inventory import StockAdjustmentCreate
-from backend.app.utils.roll_conversion import format_roll_display
+from app.services.inventory import deduct_stock, adjust_stock
+from app.schemas.inventory import StockAdjustmentCreate
+from app.utils.roll_conversion import format_roll_display
 
 
 def test_roll_formatting_utility():
@@ -171,6 +171,18 @@ def test_stock_take_lifecycle_and_variance(owner_auth_client):
     # Verify inventory was updated
     prod_check = owner_auth_client.get(f"/api/v1/products/{prod_id}").json()
     assert float(prod_check["current_stock"]) == exp_qty + 3.0
+
+
+def test_cancel_stock_take(owner_auth_client):
+    # 1. Start stock take
+    st_res = owner_auth_client.post("/api/v1/stock-takes/", json={"notes": "Accidental session"})
+    assert st_res.status_code == 201
+    st_id = st_res.json()["id"]
+
+    # 2. Cancel session
+    cancel_res = owner_auth_client.post(f"/api/v1/stock-takes/{st_id}/cancel")
+    assert cancel_res.status_code == 200
+    assert cancel_res.json()["status"] == "cancelled"
 
 
 def test_receive_inbound_stock_flow(owner_auth_client):

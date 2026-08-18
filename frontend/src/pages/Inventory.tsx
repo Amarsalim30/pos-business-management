@@ -53,13 +53,14 @@ export const InventoryPage: React.FC = () => {
   const [submittingGRN, setSubmittingGRN] = useState(false);
 
   const [movementProductFilter, setMovementProductFilter] = useState<number | 'all'>('all');
+  const [movementLimit, setMovementLimit] = useState<number>(100);
 
   useEffect(() => {
     loadInventory();
     if (activeTab === 'history') {
       loadMovements();
     }
-  }, [lowStockOnly, activeTab, movementProductFilter]);
+  }, [lowStockOnly, activeTab, movementProductFilter, movementLimit]);
 
   const loadInventory = async () => {
     setLoading(true);
@@ -75,7 +76,7 @@ export const InventoryPage: React.FC = () => {
 
   const loadMovements = async () => {
     try {
-      let url = '/api/v1/inventory/movements?limit=200';
+      let url = `/api/v1/inventory/movements?limit=${movementLimit}`;
       if (movementProductFilter !== 'all') {
         url += `&product_id=${movementProductFilter}`;
       }
@@ -88,11 +89,12 @@ export const InventoryPage: React.FC = () => {
 
   const exportMovementsCSV = () => {
     if (movements.length === 0) return;
-    const headers = ['ID', 'Date', 'Product ID', 'Type', 'Quantity', 'Unit', 'Prev Balance', 'New Balance', 'Reference', 'Note'];
+    const headers = ['ID', 'Date', 'Product Name', 'SKU', 'Type', 'Quantity', 'Unit', 'Prev Balance', 'New Balance', 'Reference', 'Note'];
     const rows = movements.map(m => [
       m.id,
       new Date(m.created_at).toLocaleString(),
-      m.product_id,
+      `"${(m.product_name || `Product #${m.product_id}`).replace(/"/g, '""')}"`,
+      `"${(m.sku || '').replace(/"/g, '""')}"`,
       m.type,
       m.quantity,
       m.unit_sold || 'pcs',
@@ -501,20 +503,36 @@ export const InventoryPage: React.FC = () => {
         /* Movement Audit View */
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs">
-            <div className="flex items-center space-x-3">
-              <label className="text-xs font-bold text-slate-700">Filter by Product:</label>
-              <select
-                value={movementProductFilter}
-                onChange={(e) => setMovementProductFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 bg-slate-50/50"
-              >
-                <option value="all">All Products</option>
-                {items.map((i) => (
-                  <option key={i.product_id} value={i.product_id}>
-                    {i.product_name} {i.sku ? `(${i.sku})` : ''}
-                  </option>
-                ))}
-              </select>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center space-x-2">
+                <label className="text-xs font-bold text-slate-700">Product:</label>
+                <select
+                  value={movementProductFilter}
+                  onChange={(e) => setMovementProductFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 bg-slate-50/50"
+                >
+                  <option value="all">All Products</option>
+                  {items.map((i) => (
+                    <option key={i.product_id} value={i.product_id}>
+                      {i.product_name} {i.sku ? `(${i.sku})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <label className="text-xs font-bold text-slate-700">Rows:</label>
+                <select
+                  value={movementLimit}
+                  onChange={(e) => setMovementLimit(Number(e.target.value))}
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 bg-slate-50/50"
+                >
+                  <option value={50}>50 rows</option>
+                  <option value={100}>100 rows</option>
+                  <option value={200}>200 rows</option>
+                  <option value={500}>500 rows</option>
+                </select>
+              </div>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -542,7 +560,7 @@ export const InventoryPage: React.FC = () => {
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3">Timestamp</th>
-                    <th className="px-4 py-3">Product ID</th>
+                    <th className="px-4 py-3">Delivered Product</th>
                     <th className="px-4 py-3">Type</th>
                     <th className="px-4 py-3">Delta / Quantity</th>
                     <th className="px-4 py-3">Previous Balance</th>
@@ -564,8 +582,15 @@ export const InventoryPage: React.FC = () => {
                         <td className="px-4 py-3 text-slate-500 font-mono text-[11px]">
                           {new Date(m.created_at).toLocaleString()}
                         </td>
-                        <td className="px-4 py-3 font-mono text-slate-600">
-                          #{m.product_id}
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-slate-900">
+                            {m.product_name || `Product #${m.product_id}`}
+                          </div>
+                          {m.sku && (
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              SKU: {m.sku}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span
@@ -872,7 +897,7 @@ export const InventoryPage: React.FC = () => {
                       <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                         <th className="px-3 py-2.5">Delivered Product</th>
                         <th className="px-3 py-2.5 w-60">Received Quantity</th>
-                        <th className="px-3 py-2.5 w-32">Unit Cost (BP)</th>
+                        <th className="px-3 py-2.5 w-36">Buying Cost (BP)</th>
                         <th className="px-3 py-2.5 w-28 text-right">Line Total</th>
                         <th className="px-3 py-2.5 w-12 text-center"></th>
                       </tr>
@@ -952,15 +977,20 @@ export const InventoryPage: React.FC = () => {
                               </td>
 
                               <td className="px-3 py-2.5">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  placeholder="Buying BP"
-                                  value={line.unit_cost}
-                                  onChange={(e) => handleUpdateGRNLine(line.product_id, 'unit_cost', e.target.value)}
-                                  className="w-28 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 font-mono focus:outline-none focus:border-emerald-600"
-                                />
+                                <div className="space-y-0.5">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    placeholder="Cost"
+                                    value={line.unit_cost}
+                                    onChange={(e) => handleUpdateGRNLine(line.product_id, 'unit_cost', e.target.value)}
+                                    className="w-28 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 font-mono focus:outline-none focus:border-emerald-600"
+                                  />
+                                  <div className="text-[10px] text-slate-400 font-mono">
+                                    {line.unit_type === 'roll' ? 'per roll' : `per ${line.unit}`}
+                                  </div>
+                                </div>
                               </td>
 
                               <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-900">

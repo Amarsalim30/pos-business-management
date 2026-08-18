@@ -143,7 +143,7 @@ export const ProductsPage: React.FC = () => {
     setReorderLevel(String(p.reorder_level || '5'));
     
     // Set percentage number (e.g. 0.16 -> 16, 0.08 -> 8, 0 -> 0)
-    const rate = p.tax_rate !== undefined ? Number(p.tax_rate) : (p.is_taxable ? 0.16 : 0.0);
+    const rate = p.tax_rate !== undefined ? Number(p.tax_rate) : 0.0;
     setTaxPercent(String(rate * 100));
     
     setFormError(null);

@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class StockMovementResponse(BaseModel):
     id: int
     product_id: int
+    product_name: Optional[str] = None
+    sku: Optional[str] = None
     store_id: int
     type: str
     quantity: Decimal

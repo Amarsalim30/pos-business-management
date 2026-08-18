@@ -3,16 +3,16 @@ from decimal import Decimal
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from backend.app.models.product import Product
-from backend.app.models.inventory import Inventory, StockMovement, StockTake, StockTakeItem
-from backend.app.schemas.inventory import (
+from app.models.product import Product
+from app.models.inventory import Inventory, StockMovement, StockTake, StockTakeItem
+from app.schemas.inventory import (
     StockAdjustmentCreate,
     StockReceiveCreate,
     BatchStockReceiveCreate,
     StockTakeItemCreate,
     InventoryItemResponse
 )
-from backend.app.utils.roll_conversion import format_roll_display, roll_count_to_meters
+from app.utils.roll_conversion import format_roll_display, roll_count_to_meters
 
 
 # =========================================================================
@@ -511,6 +511,18 @@ def reconcile_stock_take(db: Session, store_id: int, user_id: int, stock_take_id
                 db.add(mov)
 
     st.status = "completed"
+    st.completed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(st)
+    return st
+
+
+def cancel_stock_take(db: Session, store_id: int, user_id: int, stock_take_id: int) -> StockTake:
+    st = get_stock_take(db, store_id, stock_take_id)
+    if st.status != "in_progress":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only in-progress stock takes can be cancelled")
+
+    st.status = "cancelled"
     st.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(st)

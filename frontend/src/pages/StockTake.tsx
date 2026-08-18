@@ -161,18 +161,47 @@ export const StockTakePage: React.FC = () => {
     }
   };
 
+  const handleCancelStockTake = async () => {
+    if (!activeSession) return;
+    if (!window.confirm('Are you sure you want to cancel this stock take session? All recorded progress will be dropped.')) {
+      return;
+    }
+
+    try {
+      await apiFetch(`/api/v1/stock-takes/${activeSession.id}/cancel`, {
+        method: 'POST',
+      });
+      setActiveSession(null);
+      setSuccessMessage('Stock take session has been cancelled.');
+      loadPastSessions();
+    } catch (err: any) {
+      alert(err.message || 'Failed to cancel stock take');
+    }
+  };
+
+  const handleViewSession = async (sessionId: number) => {
+    try {
+      const freshSession = await apiFetch<StockTakeSession>(`/api/v1/stock-takes/${sessionId}`);
+      setActiveSession(freshSession);
+      setActiveTab('current');
+    } catch (err: any) {
+      alert(err.message || 'Failed to fetch session details');
+    }
+  };
+
   const exportStockTakeCSV = (session: StockTakeSession) => {
     const headers = ['Product', 'System Expected', 'Counted Quantity', 'Variance'];
     const rows = session.items.map(i => [
-      `"${i.product_name}"`,
+      `"${(i.product_name || '').replace(/"/g, '""')}"`,
       i.expected_quantity,
       i.counted_quantity !== null ? i.counted_quantity : 'Uncounted',
       i.variance !== null ? i.variance : '0'
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', url);
     link.setAttribute('download', `stock_take_session_${session.id}.csv`);
     document.body.appendChild(link);
     link.click();
@@ -274,14 +303,22 @@ export const StockTakePage: React.FC = () => {
                 </button>
 
                 {activeSession.status === 'in_progress' && (
-                  <button
-                    onClick={handleReconcile}
-                    disabled={reconciling}
-                    className="flex items-center space-x-1.5 rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition-all shadow-xs cursor-pointer active:scale-[0.98]"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    <span>{reconciling ? 'Reconciling...' : '1-Click Reconcile'}</span>
-                  </button>
+                  <>
+                    <button
+                      onClick={handleCancelStockTake}
+                      className="flex items-center space-x-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-all cursor-pointer"
+                    >
+                      <span>Cancel Session</span>
+                    </button>
+                    <button
+                      onClick={handleReconcile}
+                      disabled={reconciling}
+                      className="flex items-center space-x-1.5 rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition-all shadow-xs cursor-pointer active:scale-[0.98]"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      <span>{reconciling ? 'Reconciling...' : '1-Click Reconcile'}</span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -438,10 +475,7 @@ export const StockTakePage: React.FC = () => {
                     <td className="p-3.5 text-right">
                       <div className="flex items-center justify-end space-x-2">
                         <button
-                          onClick={() => {
-                            setActiveSession(session);
-                            setActiveTab('current');
-                          }}
+                          onClick={() => handleViewSession(session.id)}
                           className="rounded border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
                         >
                           View Session

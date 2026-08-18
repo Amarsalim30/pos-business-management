@@ -2,10 +2,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session as DBSession
-from backend.app.models.user import User
-from backend.app.models.audit import Session as UserSession, AuditLog
-from backend.app.core.security import verify_password, create_access_token, create_refresh_token, decode_token
-from backend.app.core.config import settings
+from app.models.user import User
+from app.models.audit import Session as UserSession, AuditLog
+from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token
+from app.core.config import settings
 
 
 def authenticate_user(db: DBSession, username: str, password: str) -> Optional[User]:

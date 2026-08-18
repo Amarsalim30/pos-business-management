@@ -10,11 +10,11 @@ import csv
 from decimal import Decimal
 from typing import Dict, Optional
 from sqlalchemy.orm import Session
-from backend.app.core.database import SessionLocal
-from backend.app.models.product import Category, Product
-from backend.app.models.inventory import Inventory, StockMovement
-from backend.app.models.store import Store
-from backend.app.models.user import User
+from app.core.database import SessionLocal
+from app.models.product import Category, Product
+from app.models.inventory import Inventory, StockMovement
+from app.models.store import Store
+from app.models.user import User
 
 
 def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv", store_id: Optional[int] = None):

@@ -7,7 +7,7 @@ from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.sale import (
     CustomerCreate, CustomerUpdate, CustomerResponse,
-    CustomerPaymentCreate, CustomerPaymentResponse
+    CustomerPaymentCreate, CustomerPaymentResponse, CustomerLedgerResponse
 )
 from app.services import sale as sale_service
 
@@ -43,6 +43,15 @@ def get_customer_by_id(
     return sale_service.get_customer(db, customer_id)
 
 
+@router.get("/{customer_id}/ledger", response_model=CustomerLedgerResponse)
+def get_customer_account_ledger(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return sale_service.get_customer_ledger(db, customer_id)
+
+
 @router.patch("/{customer_id}", response_model=CustomerResponse)
 def update_customer_details(
     customer_id: int,
@@ -61,3 +70,4 @@ def record_payment(
     current_user: User = Depends(get_current_user)
 ):
     return sale_service.record_customer_payment(db, customer_id, current_user.id, pay_in)
+

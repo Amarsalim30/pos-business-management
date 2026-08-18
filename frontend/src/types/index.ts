@@ -106,15 +106,37 @@ export interface Customer {
   created_at: string;
 }
 
-export interface CustomerPayment {
+export interface Payment {
   id: number;
-  customer_id: number;
+  sale_id?: number | null;
+  customer_id?: number | null;
   amount: number;
   payment_method: string;
-  reference: string | null;
-  notes: string | null;
+  reference?: string | null;
+  notes?: string | null;
   user_id: number;
   created_at: string;
+}
+
+export interface CustomerPayment extends Payment {}
+
+export interface CustomerLedgerEntry {
+  id: string;
+  date: string;
+  entry_type: 'sale' | 'payment' | 'void';
+  reference: string;
+  notes?: string | null;
+  debit?: number | null;
+  credit?: number | null;
+  running_balance: number;
+}
+
+export interface CustomerLedgerResponse {
+  customer_id: number;
+  customer_name: string;
+  phone?: string | null;
+  total_debt: number;
+  entries: CustomerLedgerEntry[];
 }
 
 export interface SaleItem {
@@ -145,13 +167,18 @@ export interface Sale {
   tax_amount: number;
   discount_amount: number;
   total_amount: number;
-  payment_method: 'cash' | 'mpesa' | 'card' | 'bank' | 'credit';
+  total_paid?: number;
+  balance_due?: number;
+  payment_method: string;
   payment_reference: string | null;
   status: 'paid' | 'unpaid' | 'partial' | 'voided';
   is_etr: boolean;
   notes: string | null;
+  voided_at?: string | null;
+  void_reason?: string | null;
   created_at: string;
   items: SaleItem[];
+  payments?: Payment[];
 }
 
 export interface PreSaleItem {

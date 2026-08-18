@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
@@ -6,7 +7,7 @@ from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.sale import (
-    SaleCreate, SaleResponse, SaleItemResponse, VoidSaleRequest
+    SaleCreate, SaleResponse, SaleItemResponse, VoidSaleRequest, PaymentCreate, PaymentResponse
 )
 from app.services import sale as sale_service
 
@@ -33,6 +34,20 @@ def _format_sale_response(s) -> SaleResponse:
             total=it.total
         ))
 
+    payments = []
+    for p in (s.payments or []):
+        payments.append(PaymentResponse(
+            id=p.id,
+            sale_id=p.sale_id,
+            customer_id=p.customer_id,
+            amount=p.amount,
+            payment_method=p.payment_method,
+            reference=p.reference,
+            notes=p.notes,
+            user_id=p.user_id,
+            created_at=p.created_at
+        ))
+
     return SaleResponse(
         id=s.id,
         invoice_no=s.invoice_no,
@@ -45,13 +60,18 @@ def _format_sale_response(s) -> SaleResponse:
         tax_amount=s.tax_amount,
         discount_amount=s.discount_amount,
         total_amount=s.total_amount,
+        total_paid=s.total_paid,
+        balance_due=s.balance_due,
         payment_method=s.payment_method,
         payment_reference=s.payment_reference,
-        status=s.status,
+        status=s.computed_status,
         is_etr=s.is_etr,
         notes=s.notes,
+        voided_at=s.voided_at,
+        void_reason=s.void_reason,
         created_at=s.created_at,
-        items=items
+        items=items,
+        payments=payments
     )
 
 
@@ -73,6 +93,8 @@ def get_sales(
     customer_id: Optional[int] = None,
     is_etr: Optional[bool] = None,
     status_filter: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
     limit: int = 50,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
@@ -81,7 +103,8 @@ def get_sales(
     target_store_id = store_id or current_user.store_id or 1
     sales = sale_service.list_sales(
         db, target_store_id, q=q, customer_id=customer_id,
-        is_etr=is_etr, status_filter=status_filter, limit=limit
+        is_etr=is_etr, status_filter=status_filter,
+        date_from=date_from, date_to=date_to, limit=limit
     )
     return [_format_sale_response(s) for s in sales]
 
@@ -96,6 +119,18 @@ def get_sale_detail(
     target_store_id = store_id or current_user.store_id or 1
     sale = sale_service.get_sale(db, target_store_id, sale_id)
     return _format_sale_response(sale)
+
+
+@router.post("/{sale_id}/payments", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
+def record_invoice_payment(
+    sale_id: int,
+    pay_in: PaymentCreate,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    target_store_id = store_id or current_user.store_id or 1
+    return sale_service.record_sale_payment(db, target_store_id, current_user.id, sale_id, pay_in)
 
 
 @router.post("/{sale_id}/void", response_model=SaleResponse)

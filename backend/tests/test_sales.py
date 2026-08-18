@@ -217,3 +217,127 @@ def test_pre_sale_quotation_to_sale_conversion(staff_auth_client):
     quote_check = staff_auth_client.get(f"/api/v1/pre-sales/{quote['id']}").json()
     assert quote_check["status"] == "converted"
     assert quote_check["converted_sale_id"] == sale_data["id"]
+
+
+def test_split_payments_at_checkout(staff_auth_client):
+    # 1. Create product
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Battery 200Ah Gel",
+        "cost_price": 25000.0,
+        "selling_price": 32000.0,
+        "initial_stock": 5.0
+    }).json()
+
+    # 2. Checkout with split payment (20,000 M-Pesa + 12,000 Cash)
+    sale_res = staff_auth_client.post("/api/v1/sales/", json={
+        "payment_method": "split",
+        "payments": [
+            {"amount": 20000.0, "payment_method": "mpesa", "reference": "QHG91238A"},
+            {"amount": 12000.0, "payment_method": "cash"}
+        ],
+        "items": [
+            {"product_id": prod["id"], "quantity": 1.0, "unit_price": 32000.0}
+        ]
+    })
+    assert sale_res.status_code == 201
+    sale_data = sale_res.json()
+    assert sale_data["status"] == "paid"
+    assert float(sale_data["total_paid"]) == 32000.0
+    assert float(sale_data["balance_due"]) == 0.0
+    assert len(sale_data["payments"]) == 2
+    assert sale_data["payments"][0]["payment_method"] == "mpesa"
+    assert float(sale_data["payments"][0]["amount"]) == 20000.0
+    assert sale_data["payments"][1]["payment_method"] == "cash"
+    assert float(sale_data["payments"][1]["amount"]) == 12000.0
+
+
+def test_credit_sale_requires_customer_selection(staff_auth_client):
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Cable 6mm",
+        "cost_price": 100.0,
+        "selling_price": 180.0,
+        "initial_stock": 50.0
+    }).json()
+
+    # Attempting credit sale without customer_id
+    fail_res = staff_auth_client.post("/api/v1/sales/", json={
+        "payment_method": "credit",
+        "items": [{"product_id": prod["id"], "quantity": 10.0, "unit_price": 180.0}]
+    })
+    assert fail_res.status_code == 400
+    assert "Customer selection is required" in fail_res.json()["detail"]
+
+
+def test_customer_live_statement_ledger(staff_auth_client):
+    # 1. Create customer
+    cust = staff_auth_client.post("/api/v1/customers/", json={
+        "name": "Taslam Energy Solutions Ltd",
+        "phone": "+254722000111"
+    }).json()
+
+    # 2. Create product
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Charge Controller 60A",
+        "cost_price": 5000.0,
+        "selling_price": 7242.0,
+        "initial_stock": 10.0
+    }).json()
+
+    # 3. Create sale of 7,242 on credit with 0 payment at checkout
+    sale_res = staff_auth_client.post("/api/v1/sales/", json={
+        "customer_id": cust["id"],
+        "payment_method": "credit",
+        "items": [{"product_id": prod["id"], "quantity": 1.0, "unit_price": 7242.0}]
+    })
+    assert sale_res.status_code == 201
+    sale = sale_res.json()
+    assert sale["status"] == "unpaid"
+    assert float(sale["balance_due"]) == 7242.0
+
+    # 4. Record invoice payment of 5,000 via M-Pesa
+    pay1 = staff_auth_client.post(f"/api/v1/sales/{sale['id']}/payments", json={
+        "amount": 5000.0,
+        "payment_method": "mpesa",
+        "reference": "QKH7129JK"
+    })
+    assert pay1.status_code == 201
+
+    # Sale status should now be 'partial' with 2,242 balance due
+    sale_check = staff_auth_client.get(f"/api/v1/sales/{sale['id']}").json()
+    assert sale_check["status"] == "partial"
+    assert float(sale_check["total_paid"]) == 5000.0
+    assert float(sale_check["balance_due"]) == 2242.0
+
+    # 5. Record second payment of 2,000 via Cash
+    pay2 = staff_auth_client.post(f"/api/v1/sales/{sale['id']}/payments", json={
+        "amount": 2000.0,
+        "payment_method": "cash"
+    })
+    assert pay2.status_code == 201
+
+    # 6. Fetch live statement ledger
+    ledger_res = staff_auth_client.get(f"/api/v1/customers/{cust['id']}/ledger")
+    assert ledger_res.status_code == 200
+    ledger = ledger_res.json()
+    assert ledger["customer_name"] == "Taslam Energy Solutions Ltd"
+    assert float(ledger["total_debt"]) == 242.0
+
+    # Verify rows match the screenshot structure exactly:
+    # Row 1: Sale 7,242 -> Debit 7,242, Credit None, Balance 7,242
+    # Row 2: Payment M-Pesa 5,000 -> Debit None, Credit 5,000, Balance 2,242
+    # Row 3: Payment Cash 2,000 -> Debit None, Credit 2,000, Balance 242
+    entries = ledger["entries"]
+    assert len(entries) == 3
+
+    assert entries[0]["entry_type"] == "sale"
+    assert float(entries[0]["debit"]) == 7242.0
+    assert float(entries[0]["running_balance"]) == 7242.0
+
+    assert entries[1]["entry_type"] == "payment"
+    assert float(entries[1]["credit"]) == 5000.0
+    assert float(entries[1]["running_balance"]) == 2242.0
+
+    assert entries[2]["entry_type"] == "payment"
+    assert float(entries[2]["credit"]) == 2000.0
+    assert float(entries[2]["running_balance"]) == 242.0
+

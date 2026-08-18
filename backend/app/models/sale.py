@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Optional, List
 from sqlalchemy import Column, Integer, String, Text, Numeric, Boolean, DateTime, ForeignKey, Index
 from sqlalchemy.orm import relationship
 
@@ -19,7 +20,7 @@ class Customer(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     sales = relationship("Sale", back_populates="customer")
-    payments = relationship("CustomerPayment", back_populates="customer")
+    payments = relationship("Payment", back_populates="customer", order_by="Payment.created_at")
     pre_sales = relationship("PreSaleDocument", back_populates="customer")
 
 
@@ -37,18 +38,51 @@ class Sale(Base):
     discount_amount = Column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     total_amount = Column(Numeric(12, 2), nullable=False)
     
-    payment_method = Column(String(30), nullable=False)  # 'cash', 'mpesa', 'card', 'bank', 'credit'
+    payment_method = Column(String(30), nullable=False)  # Primary payment method or 'split'
     payment_reference = Column(String(100), nullable=True)  # Mpesa code, cheque #, etc.
     status = Column(String(20), default="paid", nullable=False)  # 'paid', 'unpaid', 'partial', 'voided'
     is_etr = Column(Boolean, default=False, nullable=False)
     notes = Column(Text, nullable=True)
     
+    # Void Tracking
+    voided_at = Column(DateTime, nullable=True)
+    void_reason = Column(Text, nullable=True)
+    voided_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
     customer = relationship("Customer", back_populates="sales")
-    user = relationship("User")
+    user = relationship("User", foreign_keys=[user_id])
+    voided_by = relationship("User", foreign_keys=[voided_by_user_id])
     store = relationship("Store")
     items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
+    payments = relationship("Payment", back_populates="sale", cascade="all, delete-orphan", order_by="Payment.created_at")
+
+    @property
+    def total_paid(self) -> Decimal:
+        if not self.payments:
+            return self.total_amount if self.status == "paid" else Decimal("0.00")
+        return sum((p.amount for p in self.payments), Decimal("0.00"))
+
+    @property
+    def balance_due(self) -> Decimal:
+        if self.computed_status == "voided":
+            return Decimal("0.00")
+        return max(Decimal("0.00"), self.total_amount - self.total_paid)
+
+    @property
+    def computed_status(self) -> str:
+        if self.voided_at is not None or self.status == "voided":
+            return "voided"
+        if not self.payments:
+            return self.status or ("unpaid" if self.customer_id else "paid")
+        paid = self.total_paid
+        if paid >= self.total_amount:
+            return "paid"
+        elif paid > Decimal("0.00"):
+            return "partial"
+        else:
+            return "unpaid"
 
 
 class SaleItem(Base):
@@ -73,20 +107,28 @@ class SaleItem(Base):
     product = relationship("Product")
 
 
-class CustomerPayment(Base):
-    __tablename__ = "customer_payments"
+class Payment(Base):
+    __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True)
-    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    sale_id = Column(Integer, ForeignKey("sales.id", ondelete="CASCADE"), nullable=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=True)
     amount = Column(Numeric(12, 2), nullable=False)
-    payment_method = Column(String(30), nullable=False)  # 'cash', 'mpesa', 'bank', 'cheque'
-    reference = Column(String(100), nullable=True)
+    payment_method = Column(String(30), nullable=False)  # 'cash', 'mpesa', 'card', 'bank', 'cheque'
+    reference = Column(String(100), nullable=True)  # Mpesa code, cheque #, etc.
     notes = Column(Text, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
+    sale = relationship("Sale", back_populates="payments")
     customer = relationship("Customer", back_populates="payments")
     user = relationship("User")
+    store = relationship("Store")
+
+
+# Alias for backward compatibility
+CustomerPayment = Payment
 
 
 class PreSaleDocument(Base):

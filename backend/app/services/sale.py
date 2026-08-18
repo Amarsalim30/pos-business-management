@@ -5,18 +5,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 from fastapi import HTTPException, status
 
-from app.models.sale import Customer, Sale, SaleItem, CustomerPayment, PreSaleDocument, PreSaleItem
+from app.models.sale import Customer, Sale, SaleItem, Payment, PreSaleDocument, PreSaleItem
 from app.models.inventory import Inventory, StockMovement
 from app.models.product import Product
 from app.schemas.sale import (
-    CustomerCreate, CustomerUpdate, CustomerPaymentCreate,
-    SaleCreate, SaleItemCreate, PreSaleDocumentCreate
+    CustomerCreate, CustomerUpdate, CustomerPaymentCreate, PaymentCreate,
+    SaleCreate, SaleItemCreate, PreSaleDocumentCreate, CustomerLedgerEntry, CustomerLedgerResponse
 )
 from app.utils.roll_conversion import roll_count_to_meters
 
 
 # =========================================================================
-# Customer Services
+# Customer Services & Live Ledger
 # =========================================================================
 
 def create_customer(db: Session, cust_in: CustomerCreate) -> Customer:
@@ -71,28 +71,166 @@ def update_customer(db: Session, customer_id: int, cust_in: CustomerUpdate) -> C
     return cust
 
 
-def record_customer_payment(db: Session, customer_id: int, user_id: int, pay_in: CustomerPaymentCreate) -> CustomerPayment:
+def record_customer_payment(
+    db: Session, customer_id: int, user_id: int, pay_in: CustomerPaymentCreate, store_id: int = 1
+) -> Payment:
     cust = get_customer(db, customer_id)
     
-    pay = CustomerPayment(
-        customer_id=cust.id,
-        amount=pay_in.amount,
-        payment_method=pay_in.payment_method,
-        reference=pay_in.reference,
-        notes=pay_in.notes,
-        user_id=user_id
-    )
-    db.add(pay)
-    
-    # Reduce customer's outstanding balance
-    cust.balance -= pay_in.amount
+    if pay_in.sale_id:
+        return record_sale_payment(db, store_id, user_id, pay_in.sale_id, pay_in)
+
+    # Distribute payment to oldest unpaid / partially paid sales
+    unpaid_sales = db.query(Sale).filter(
+        Sale.customer_id == cust.id,
+        Sale.status.in_(["unpaid", "partial"]),
+        Sale.voided_at.is_(None)
+    ).order_by(Sale.id.asc()).all()
+
+    remaining_pay = pay_in.amount
+    primary_payment = None
+
+    for sale in unpaid_sales:
+        if remaining_pay <= Decimal("0.00"):
+            break
+        due = sale.balance_due
+        if due <= Decimal("0.00"):
+            continue
+        alloc = min(remaining_pay, due)
+        p = Payment(
+            sale_id=sale.id,
+            customer_id=cust.id,
+            store_id=store_id,
+            amount=alloc,
+            payment_method=pay_in.payment_method,
+            reference=pay_in.reference,
+            notes=pay_in.notes,
+            user_id=user_id
+        )
+        db.add(p)
+        if not primary_payment:
+            primary_payment = p
+        sale.status = sale.computed_status
+        remaining_pay -= alloc
+
+    # If any amount remains after paying off all known invoices, record as unallocated payment
+    if remaining_pay > Decimal("0.00") or not unpaid_sales:
+        p = Payment(
+            sale_id=None,
+            customer_id=cust.id,
+            store_id=store_id,
+            amount=remaining_pay,
+            payment_method=pay_in.payment_method,
+            reference=pay_in.reference,
+            notes=pay_in.notes,
+            user_id=user_id
+        )
+        db.add(p)
+        if not primary_payment:
+            primary_payment = p
+
+    # Reduce customer balance
+    cust.balance = max(Decimal("0.00"), cust.balance - pay_in.amount)
     db.commit()
-    db.refresh(pay)
-    return pay
+    if primary_payment:
+        db.refresh(primary_payment)
+    return primary_payment
+
+
+def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse:
+    cust = get_customer(db, customer_id)
+    
+    # Query all sales for this customer
+    sales = db.query(Sale).filter(
+        Sale.customer_id == customer_id
+    ).order_by(Sale.created_at.asc(), Sale.id.asc()).all()
+
+    # Query all payments for this customer
+    payments = db.query(Payment).filter(
+        Payment.customer_id == customer_id
+    ).order_by(Payment.created_at.asc(), Payment.id.asc()).all()
+
+    # Build chronological event timeline
+    events = []
+    
+    for s in sales:
+        events.append({
+            "id": f"sale-{s.id}",
+            "date": s.created_at,
+            "sort_priority": 1,  # sales first
+            "entry_type": "sale",
+            "reference": s.invoice_no,
+            "notes": s.notes,
+            "debit": s.total_amount,
+            "credit": None,
+            "amount": s.total_amount
+        })
+        if s.voided_at:
+            events.append({
+                "id": f"void-{s.id}",
+                "date": s.voided_at,
+                "sort_priority": 3,
+                "entry_type": "void",
+                "reference": f"VOID {s.invoice_no}",
+                "notes": f"Reason: {s.void_reason or 'Cancelled'}",
+                "debit": None,
+                "credit": s.total_amount,
+                "amount": -s.total_amount
+            })
+
+    for p in payments:
+        method_label = p.payment_method.capitalize()
+        ref_text = f"Payment ({method_label})"
+        if p.reference:
+            ref_text += f" - {p.reference}"
+        if p.sale:
+            ref_text += f" [for {p.sale.invoice_no}]"
+
+        events.append({
+            "id": f"pay-{p.id}",
+            "date": p.created_at,
+            "sort_priority": 2,  # payments after sale
+            "entry_type": "payment",
+            "reference": ref_text,
+            "notes": p.notes,
+            "debit": None,
+            "credit": p.amount,
+            "amount": -p.amount
+        })
+
+    # Sort chronological
+    events.sort(key=lambda x: (x["date"], x["sort_priority"]))
+
+    running = Decimal("0.00")
+    entries: List[CustomerLedgerEntry] = []
+
+    for ev in events:
+        if ev["debit"] is not None:
+            running += ev["debit"]
+        if ev["credit"] is not None:
+            running -= ev["credit"]
+
+        entries.append(CustomerLedgerEntry(
+            id=ev["id"],
+            date=ev["date"],
+            entry_type=ev["entry_type"],
+            reference=ev["reference"],
+            notes=ev["notes"],
+            debit=ev["debit"],
+            credit=ev["credit"],
+            running_balance=max(Decimal("0.00"), running)
+        ))
+
+    return CustomerLedgerResponse(
+        customer_id=cust.id,
+        customer_name=cust.name,
+        phone=cust.phone,
+        total_debt=max(Decimal("0.00"), running),
+        entries=entries
+    )
 
 
 # =========================================================================
-# Sales Checkout Engine (Atomic & Concurrency-Safe)
+# Sales Checkout Engine (Atomic, Concurrency-Safe & Split Payments)
 # =========================================================================
 
 def generate_invoice_number(db: Session, store_id: int) -> str:
@@ -119,13 +257,9 @@ def create_sale(db: Session, store_id: int, user_id: int, sale_in: SaleCreate) -
     if not sale_in.items:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sale must contain at least one item")
 
-    # 1. Validate customer if credit sale
+    # 1. Customer verification
     customer = None
-    if sale_in.payment_method == "credit":
-        if not sale_in.customer_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer is required for credit sales")
-        customer = get_customer(db, sale_in.customer_id)
-    elif sale_in.customer_id:
+    if sale_in.customer_id:
         customer = get_customer(db, sale_in.customer_id)
 
     # 2. Prevent deadlocks: Sort product IDs to acquire row-locks in deterministic order
@@ -148,7 +282,6 @@ def create_sale(db: Session, store_id: int, user_id: int, sale_in: SaleCreate) -
                 loose = Decimal(str(item_in.loose_meters or "0.00"))
                 mpr = prod.meters_per_roll or Decimal("100.00")
                 deduct_qty = roll_count_to_meters(rolls, loose, mpr)
-                # If pricing was entered per roll, calculate line total
                 line_total = Decimal(str(item_in.unit_price)) * Decimal(str(rolls + (loose / mpr)))
             elif item_in.unit_sold == "meter":
                 deduct_qty = Decimal(str(item_in.quantity or "0.00"))
@@ -223,6 +356,48 @@ def create_sale(db: Session, store_id: int, user_id: int, sale_in: SaleCreate) -
     discount = Decimal(str(sale_in.discount_amount or "0.00"))
     total_amount = max(Decimal("0.00"), subtotal - discount)
 
+    # 3. Process Payments (Supports split payment lines)
+    payments_to_create = []
+    if sale_in.payments:
+        for p_in in sale_in.payments:
+            payments_to_create.append(Payment(
+                customer_id=sale_in.customer_id,
+                store_id=store_id,
+                amount=p_in.amount,
+                payment_method=p_in.payment_method,
+                reference=p_in.reference,
+                notes=p_in.notes,
+                user_id=user_id
+            ))
+    elif sale_in.payment_method and sale_in.payment_method != "credit":
+        payments_to_create.append(Payment(
+            customer_id=sale_in.customer_id,
+            store_id=store_id,
+            amount=total_amount,
+            payment_method=sale_in.payment_method,
+            reference=sale_in.payment_reference,
+            notes=sale_in.notes,
+            user_id=user_id
+        ))
+
+    total_paid_in_checkout = sum((p.amount for p in payments_to_create), Decimal("0.00"))
+
+    # Enforce Customer Requirement for Credit or Partial Sales
+    if total_paid_in_checkout < total_amount:
+        if not sale_in.customer_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Customer selection is required for credit or partial sales"
+            )
+
+    # Determine primary payment method label
+    if len(payments_to_create) > 1:
+        primary_method = "split"
+    elif len(payments_to_create) == 1:
+        primary_method = payments_to_create[0].payment_method
+    else:
+        primary_method = "credit"
+
     sale = Sale(
         invoice_no=invoice_no,
         customer_id=sale_in.customer_id,
@@ -232,22 +407,56 @@ def create_sale(db: Session, store_id: int, user_id: int, sale_in: SaleCreate) -
         tax_amount=tax_amount,
         discount_amount=discount,
         total_amount=total_amount,
-        payment_method=sale_in.payment_method,
+        payment_method=primary_method,
         payment_reference=sale_in.payment_reference,
-        status="paid" if sale_in.payment_method != "credit" else "unpaid",
+        status="paid" if total_paid_in_checkout >= total_amount else ("partial" if total_paid_in_checkout > 0 else "unpaid"),
         is_etr=sale_in.is_etr,
         notes=sale_in.notes,
-        items=line_items
+        items=line_items,
+        payments=payments_to_create
     )
     db.add(sale)
 
-    # Increase customer balance if credit sale
-    if sale_in.payment_method == "credit" and customer:
-        customer.balance += total_amount
+    # Update customer balance for any unpaid amount
+    if customer and total_paid_in_checkout < total_amount:
+        customer.balance += (total_amount - total_paid_in_checkout)
 
     db.commit()
     db.refresh(sale)
     return sale
+
+
+def record_sale_payment(
+    db: Session, store_id: int, user_id: int, sale_id: int, pay_in: PaymentCreate
+) -> Payment:
+    sale = get_sale(db, store_id, sale_id)
+    if sale.computed_status == "voided":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot record payment on a voided sale")
+
+    pay = Payment(
+        sale_id=sale.id,
+        customer_id=sale.customer_id,
+        store_id=store_id,
+        amount=pay_in.amount,
+        payment_method=pay_in.payment_method,
+        reference=pay_in.reference,
+        notes=pay_in.notes,
+        user_id=user_id
+    )
+    db.add(pay)
+
+    # Update customer balance if attached to sale
+    if sale.customer_id:
+        cust = db.query(Customer).filter(Customer.id == sale.customer_id).first()
+        if cust:
+            cust.balance = max(Decimal("0.00"), cust.balance - pay_in.amount)
+
+    db.commit()
+    db.refresh(pay)
+    # Refresh sale status
+    sale.status = sale.computed_status
+    db.commit()
+    return pay
 
 
 def get_sale(db: Session, store_id: int, sale_id: int) -> Sale:
@@ -264,6 +473,8 @@ def list_sales(
     customer_id: Optional[int] = None,
     is_etr: Optional[bool] = None,
     status_filter: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
     limit: int = 50
 ) -> List[Sale]:
     query = db.query(Sale).filter(Sale.store_id == store_id)
@@ -273,15 +484,19 @@ def list_sales(
         query = query.filter(Sale.customer_id == customer_id)
     if is_etr is not None:
         query = query.filter(Sale.is_etr.is_(is_etr))
-    if status_filter:
+    if status_filter and status_filter != "all":
         query = query.filter(Sale.status == status_filter)
+    if date_from:
+        query = query.filter(Sale.created_at >= date_from)
+    if date_to:
+        query = query.filter(Sale.created_at <= date_to)
 
     return query.order_by(desc(Sale.id)).limit(limit).all()
 
 
 def void_sale(db: Session, store_id: int, user_id: int, sale_id: int, reason: Optional[str] = None) -> Sale:
     sale = get_sale(db, store_id, sale_id)
-    if sale.status == "voided":
+    if sale.computed_status == "voided":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sale is already voided")
 
     # Restore inventory for each item
@@ -310,12 +525,15 @@ def void_sale(db: Session, store_id: int, user_id: int, sale_id: int, reason: Op
             )
             db.add(mov)
 
-    # If credit sale, reverse the customer balance
-    if sale.payment_method == "credit" and sale.customer_id:
+    # If customer owes on this sale, reverse that debt portion
+    if sale.customer_id and sale.balance_due > 0:
         cust = db.query(Customer).filter(Customer.id == sale.customer_id).first()
         if cust:
-            cust.balance -= sale.total_amount
+            cust.balance = max(Decimal("0.00"), cust.balance - sale.balance_due)
 
+    sale.voided_at = datetime.now(timezone.utc)
+    sale.void_reason = reason or "Cancelled by cashier"
+    sale.voided_by_user_id = user_id
     sale.status = "voided"
     if reason:
         sale.notes = f"{sale.notes or ''} [VOIDED: {reason}]".strip()

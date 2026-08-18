@@ -196,6 +196,37 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 KES {Number(sale.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </span>
             </div>
+
+            {/* Payments & Settlement Breakdown */}
+            {sale.payments && sale.payments.length > 0 ? (
+              <div className="pt-2 mt-1 border-t border-dashed border-slate-300 space-y-1 text-[10px]">
+                <div className="font-bold text-slate-700 uppercase tracking-wider text-[9px]">Settlement / Payments:</div>
+                {sale.payments.map((p) => (
+                  <div key={p.id} className="flex justify-between text-slate-700">
+                    <span>
+                      {p.payment_method.toUpperCase()} {p.reference ? `(${p.reference})` : ''}:
+                    </span>
+                    <span className="font-mono font-bold">
+                      KES {Number(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex justify-between text-slate-950 font-bold pt-1 border-t border-slate-200">
+                  <span>TOTAL PAID:</span>
+                  <span className="font-mono">
+                    KES {Number(sale.total_paid || sale.payments.reduce((a, b) => a + Number(b.amount), 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                {Number(sale.balance_due || 0) > 0 && (
+                  <div className="flex justify-between text-rose-700 font-bold">
+                    <span>OUTSTANDING BALANCE:</span>
+                    <span className="font-mono">
+                      KES {Number(sale.balance_due).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
 
           {/* Footer Receipt Disclaimer */}

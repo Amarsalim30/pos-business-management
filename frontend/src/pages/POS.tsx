@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { apiFetch } from '../services/api';
-import type { Product, Customer, Sale } from '../types';
+import type { Product, Customer, Sale, Category } from '../types';
 import { ReceiptModal } from '../components/ReceiptModal';
 import {
   ShoppingCart,
@@ -21,7 +21,13 @@ import {
   Play,
   Clock,
   Keyboard,
-  UserPlus
+  UserPlus,
+  Split,
+  ShieldAlert,
+  Tag,
+  Zap,
+  RotateCcw,
+  Sparkles
 } from 'lucide-react';
 
 interface CartItem {
@@ -47,21 +53,44 @@ interface ParkedCart {
   total: number;
 }
 
+interface SplitPaymentLine {
+  id: string;
+  payment_method: 'cash' | 'mpesa' | 'card' | 'bank';
+  amount: string;
+  reference: string;
+}
+
 const LOCAL_STORAGE_PARKED_KEY = 'pos_parked_carts';
 
 export const POSPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Customer & Fiscal Controls
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | ''>('');
   const [isWalkIn, setIsWalkIn] = useState(true);
   const [isETR, setIsETR] = useState(false);
+  
+  // Cart & Pricing
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discountAmount, setDiscountAmount] = useState<string>('0');
+  const [discountType, setDiscountType] = useState<'fixed' | 'percent'>('fixed');
+  
+  // Single Payment Method State
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card' | 'bank' | 'credit'>('cash');
   const [paymentReference, setPaymentReference] = useState('');
-  const [notes, setNotes] = useState('');
   const [amountTendered, setAmountTendered] = useState('');
+
+  // Split Payment Mode State
+  const [isSplitMode, setIsSplitMode] = useState(false);
+  const [splitLines, setSplitLines] = useState<SplitPaymentLine[]>([
+    { id: 'split_1', payment_method: 'mpesa', amount: '', reference: '' }
+  ]);
+
+  const [notes, setNotes] = useState('');
   
   // Parked Carts State
   const [parkedCarts, setParkedCarts] = useState<ParkedCart[]>([]);
@@ -81,9 +110,9 @@ export const POSPage: React.FC = () => {
   // Search Input Ref for quick autofocus & hotkeys
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Initial Load only (no dependencies to prevent refocus bugs on state edits)
   useEffect(() => {
     loadProducts();
+    loadCategories();
     loadCustomers();
     loadParkedCartsFromStorage();
     searchInputRef.current?.focus();
@@ -108,6 +137,15 @@ export const POSPage: React.FC = () => {
     try {
       const data = await apiFetch<Product[]>('/api/v1/products/');
       setProducts(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const data = await apiFetch<Category[]>('/api/v1/categories/');
+      setCategories(data);
     } catch (e) {
       console.error(e);
     }
@@ -142,15 +180,22 @@ export const POSPage: React.FC = () => {
     }
   };
 
-  // Filter products by search
-  const filteredProducts = products.filter(p => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(q) ||
-      (p.sku && p.sku.toLowerCase().includes(q))
-    );
-  }).slice(0, 8);
+  // Filter products by category and search
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => {
+      // Category filter
+      if (selectedCategory !== 'all' && p.category_id !== selectedCategory) {
+        return false;
+      }
+      // Search filter
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        p.name.toLowerCase().includes(q) ||
+        (p.sku && p.sku.toLowerCase().includes(q))
+      );
+    });
+  }, [products, selectedCategory, searchQuery]);
 
   // Calculate line item total
   const computeLineTotal = (item: CartItem): number => {
@@ -166,7 +211,7 @@ export const POSPage: React.FC = () => {
     return item.quantity * item.unit_price;
   };
 
-  // Strict 1-row per product: Add to Cart always finds by product.id
+  // Add to cart (Single row per product guaranteed)
   const handleAddToCart = (product: Product, sellAsMeter: boolean = false) => {
     setCart(prev => {
       const existingIndex = prev.findIndex(i => i.product.id === product.id);
@@ -254,7 +299,7 @@ export const POSPage: React.FC = () => {
     setCart(prev => prev.filter(i => i.product.id !== productId));
   };
 
-  // Switch selling mode between Roll and Loose Meters directly in the cart
+  // Switch selling mode between Roll and Loose Meters
   const handleSwitchUnitSold = (item: CartItem, newUnitSold: 'roll' | 'meter') => {
     const mpr = Number(item.product.meters_per_roll) || 100;
     const defaultRollPrice = Number(item.product.selling_price);
@@ -312,12 +357,81 @@ export const POSPage: React.FC = () => {
     }
   };
 
-  // Cart Totals
+  // Split payment helpers
+  const handleAddSplitLine = () => {
+    setSplitLines(prev => [
+      ...prev,
+      { id: `split_${Date.now()}`, payment_method: 'cash', amount: '', reference: '' }
+    ]);
+  };
+
+  const handleUpdateSplitLine = (id: string, field: keyof SplitPaymentLine, value: string) => {
+    setSplitLines(prev => prev.map(l => l.id === id ? { ...l, [field]: value } : l));
+  };
+
+  const handleRemoveSplitLine = (id: string) => {
+    if (splitLines.length <= 1) return;
+    setSplitLines(prev => prev.filter(l => l.id !== id));
+  };
+
+  // Stock status pill helper
+  const renderStockBadge = (p: Product) => {
+    const stock = Number(p.current_stock) || 0;
+    const reorder = Number(p.reorder_level) || 0;
+    if (stock <= 0) {
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+          Out of Stock
+        </span>
+      );
+    }
+    if (stock <= reorder) {
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+          Low: {p.formatted_stock || `${stock} ${p.unit}`}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        {p.formatted_stock || `${stock} ${p.unit}`}
+      </span>
+    );
+  };
+
+  // Cart Calculations
   const subtotal = cart.reduce((acc, item) => acc + item.line_total, 0);
-  const discount = Math.max(0, parseFloat(discountAmount) || 0);
-  const total = Math.max(0, subtotal - discount);
-  const tendered = parseFloat(amountTendered) || 0;
-  const change = paymentMethod === 'cash' && tendered > total ? tendered - total : 0;
+  const rawDiscount = Math.max(0, parseFloat(discountAmount) || 0);
+  const calculatedDiscount = discountType === 'percent'
+    ? (subtotal * rawDiscount) / 100
+    : rawDiscount;
+  const total = Math.max(0, subtotal - calculatedDiscount);
+
+  // Split payment totals
+  const totalSplitTendered = splitLines.reduce((acc, l) => acc + (parseFloat(l.amount) || 0), 0);
+  const splitBalanceDue = Math.max(0, total - totalSplitTendered);
+  const splitExcessCash = splitLines.some(l => l.payment_method === 'cash') && totalSplitTendered > total
+    ? totalSplitTendered - total
+    : 0;
+
+  // Single payment cash change & quick cash helpers
+  const singleTendered = parseFloat(amountTendered) || 0;
+  const singleCashChange = paymentMethod === 'cash' && singleTendered > total ? singleTendered - total : 0;
+
+  const handleQuickCash = (amt: number | 'exact' | 'round1000' | 'round500') => {
+    if (amt === 'exact') {
+      setAmountTendered(String(total));
+    } else if (amt === 'round1000') {
+      const rounded = Math.ceil(total / 1000) * 1000;
+      setAmountTendered(String(rounded));
+    } else if (amt === 'round500') {
+      const rounded = Math.ceil(total / 500) * 500;
+      setAmountTendered(String(rounded));
+    } else {
+      const curr = parseFloat(amountTendered) || 0;
+      setAmountTendered(String(curr + amt));
+    }
+  };
 
   // Park Current Cart
   const handleParkCart = () => {
@@ -334,7 +448,7 @@ export const POSPage: React.FC = () => {
       customer_id: !isWalkIn && selectedCustomerId ? Number(selectedCustomerId) : null,
       customer_name: cust ? cust.name : null,
       items: cart,
-      discount_amount: discountAmount,
+      discount_amount: String(calculatedDiscount),
       is_etr: isETR,
       notes: notes,
       total: total
@@ -380,8 +494,14 @@ export const POSPage: React.FC = () => {
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
-    if (paymentMethod === 'credit' && (!selectedCustomerId || isWalkIn)) {
-      setCheckoutError('Please select or register a customer for credit sales');
+
+    // Check if customer is needed for credit / partial sales
+    const isCreditOrPartial = isSplitMode 
+      ? splitBalanceDue > 0 
+      : paymentMethod === 'credit';
+
+    if (isCreditOrPartial && (!selectedCustomerId || isWalkIn)) {
+      setCheckoutError('Customer account selection is required for credit or partial sales');
       return;
     }
 
@@ -397,11 +517,9 @@ export const POSPage: React.FC = () => {
     setCheckingOut(true);
     setCheckoutError(null);
 
-    const payload = {
+    let payload: any = {
       customer_id: !isWalkIn && selectedCustomerId ? Number(selectedCustomerId) : null,
-      payment_method: paymentMethod,
-      payment_reference: paymentReference.trim() || null,
-      discount_amount: discount,
+      discount_amount: calculatedDiscount,
       is_etr: isETR,
       notes: notes.trim() || null,
       items: cart.map(item => ({
@@ -415,6 +533,21 @@ export const POSPage: React.FC = () => {
       }))
     };
 
+    if (isSplitMode) {
+      const validPayments = splitLines
+        .filter(l => (parseFloat(l.amount) || 0) > 0)
+        .map(l => ({
+          payment_method: l.payment_method,
+          amount: parseFloat(l.amount),
+          reference: l.reference.trim() || null
+        }));
+      payload.payments = validPayments;
+      payload.payment_method = validPayments.length > 1 ? 'split' : (validPayments[0]?.payment_method || 'credit');
+    } else {
+      payload.payment_method = paymentMethod;
+      payload.payment_reference = paymentReference.trim() || null;
+    }
+
     try {
       const sale = await apiFetch<Sale>('/api/v1/sales/', {
         method: 'POST',
@@ -426,6 +559,7 @@ export const POSPage: React.FC = () => {
       setPaymentReference('');
       setNotes('');
       setAmountTendered('');
+      setSplitLines([{ id: 'split_1', payment_method: 'mpesa', amount: '', reference: '' }]);
       loadProducts();
     } catch (err: any) {
       setCheckoutError(err.message || 'Checkout failed');
@@ -434,54 +568,52 @@ export const POSPage: React.FC = () => {
     }
   };
 
+  const selectedCustomerObj = customers.find(c => c.id === selectedCustomerId);
+
   return (
-    <div className="space-y-6">
-      {/* Top Banner & Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+    <div className="space-y-4">
+      {/* Top Ergonomic Action Bar */}
+      <div className="bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        {/* Left: Terminal Title & Cashier Hotkey Indicator */}
         <div className="flex items-center space-x-3">
-          <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600">
-            <ShoppingCart className="h-5 w-5" />
+          <div className="h-9 w-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 shrink-0">
+            <Zap className="h-4 w-4 fill-amber-500" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-base font-bold text-slate-900 tracking-tight">
-                Cashier POS Terminal
-              </h1>
+              <span className="font-bold text-sm text-slate-900 tracking-tight">
+                Cashier Point of Sale
+              </span>
               <span className="hidden sm:inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-mono border border-slate-200">
-                <Keyboard className="h-3 w-3" />
+                <Keyboard className="h-3 w-3 text-slate-400" />
                 <span>F2: Search • F4: Park</span>
               </span>
-              {parkedCarts.length > 0 && (
-                <button
-                  onClick={() => setShowParkedDrawer(true)}
-                  className="flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 font-bold text-[10px] hover:bg-amber-200 transition-colors cursor-pointer"
-                >
-                  <Bookmark className="h-3 w-3 text-amber-700" />
-                  <span>{parkedCarts.length} Parked</span>
-                </button>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {cart.length > 0 ? (
+                <span className="text-emerald-600 font-medium">Cart Active • {cart.length} line items ready</span>
+              ) : (
+                <span>Ready for scan or barcode search</span>
               )}
             </div>
-            <p className="text-xs text-slate-500">
-              High-speed checkout with smart stock deduction and 80mm thermal receipts
-            </p>
           </div>
         </div>
 
-        {/* Customer & ETR Controls */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center space-x-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
+        {/* Right: Walk-In / Account Selector & Controls */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs">
             <button
               onClick={() => setIsWalkIn(true)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                isWalkIn ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                isWalkIn ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               Walk-in
             </button>
             <button
               onClick={() => setIsWalkIn(false)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                !isWalkIn ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                !isWalkIn ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               Account
@@ -489,44 +621,55 @@ export const POSPage: React.FC = () => {
           </div>
 
           {!isWalkIn && (
-            <div className="flex items-center space-x-1.5">
+            <div className="flex items-center space-x-1">
               <select
                 value={selectedCustomerId}
                 onChange={(e) => setSelectedCustomerId(e.target.value === '' ? '' : Number(e.target.value))}
-                className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-xs max-w-[200px]"
+                className="rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs max-w-[180px] font-medium"
               >
-                <option value="">-- Select Customer --</option>
+                <option value="">-- Customer --</option>
                 {customers.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.name} {c.phone ? `(${c.phone})` : ''} — Debt: KES {Number(c.balance).toLocaleString()}
+                    {c.name} {Number(c.balance) > 0 ? `(Debt: KES ${Number(c.balance).toLocaleString()})` : ''}
                   </option>
                 ))}
               </select>
+
+              {selectedCustomerObj && Number(selectedCustomerObj.balance) > 0 && (
+                <span className="px-2 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 font-mono font-bold text-[11px] whitespace-nowrap">
+                  Debt: KES {Number(selectedCustomerObj.balance).toLocaleString()}
+                </span>
+              )}
+
               <button
                 type="button"
                 onClick={() => setShowQuickCustomerModal(true)}
-                className="p-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-xs cursor-pointer"
-                title="Quick Register New Customer"
+                className="p-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs cursor-pointer"
+                title="Quick Register Customer"
               >
                 <UserPlus className="h-4 w-4" />
               </button>
             </div>
           )}
 
-          <label className="flex items-center space-x-2 bg-amber-50/60 border border-amber-200/80 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-900 cursor-pointer">
+          <label className="flex items-center space-x-1.5 bg-amber-50/70 border border-amber-200/80 px-2.5 py-1.5 rounded-xl text-xs font-bold text-amber-900 cursor-pointer shadow-2xs">
             <input
               type="checkbox"
               checked={isETR}
               onChange={(e) => setIsETR(e.target.checked)}
               className="rounded text-amber-600 focus:ring-amber-500"
             />
-            <span>ETR Fiscal</span>
+            <span>ETR</span>
           </label>
 
-          {/* Parked Carts Button */}
+          {/* Parked Carts Trigger */}
           <button
             onClick={() => setShowParkedDrawer(true)}
-            className="flex items-center space-x-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-xs cursor-pointer"
+            className={`flex items-center space-x-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer ${
+              parkedCarts.length > 0
+                ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100'
+                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+            }`}
           >
             <Bookmark className="h-3.5 w-3.5 text-amber-600" />
             <span>Parked ({parkedCarts.length})</span>
@@ -534,10 +677,11 @@ export const POSPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Cashier Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Side: Search & Catalog */}
-        <div className="lg:col-span-7 space-y-4">
+      {/* Main Cashier Workspace Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Left: Product Search, Category Pills & Catalog Grid (7 Cols) */}
+        <div className="lg:col-span-7 space-y-3">
+          {/* Quick Search Bar */}
           <div className="relative">
             <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
             <input
@@ -551,132 +695,153 @@ export const POSPage: React.FC = () => {
                   handleAddToCart(filteredProducts[0]);
                 }
               }}
-              className="w-full rounded-xl border border-slate-300 bg-white pl-10 pr-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-xs"
+              className="w-full rounded-2xl border border-slate-300 bg-white pl-10 pr-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs font-medium"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-2.5 p-0.5 rounded-full text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
-          {/* Search Dropdown */}
-          {searchQuery && (
-            <div className="rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden divide-y divide-slate-100">
-              {filteredProducts.length === 0 ? (
-                <div className="p-4 text-center text-xs text-slate-400">
-                  No products matching "{searchQuery}"
-                </div>
-              ) : (
-                filteredProducts.map(p => (
-                  <div
-                    key={p.id}
-                    className="p-3 flex items-center justify-between hover:bg-amber-50/50 transition-colors"
-                  >
-                    <div>
-                      <div className="font-bold text-xs text-slate-900">{p.name}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">
-                        {p.sku ? `SKU: ${p.sku} • ` : ''}Stock: {p.formatted_stock || `${p.current_stock} ${p.unit}`}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {p.unit_type === 'roll' ? (
-                        <>
-                          <button
-                            onClick={() => handleAddToCart(p, false)}
-                            className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs cursor-pointer shadow-2xs"
-                          >
-                            + Roll (KES {Number(p.selling_price).toLocaleString()})
-                          </button>
-                          <button
-                            onClick={() => handleAddToCart(p, true)}
-                            className="px-2.5 py-1 rounded-lg bg-sky-100 hover:bg-sky-200 text-sky-900 font-bold text-xs cursor-pointer shadow-2xs"
-                          >
-                            + Meters
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => handleAddToCart(p)}
-                          className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs cursor-pointer shadow-2xs"
-                        >
-                          + Add (KES {Number(p.selling_price).toLocaleString()})
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* Catalog Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {products.slice(0, 12).map(p => {
-              const inCart = cart.find(i => i.product.id === p.id);
-              const isRoll = p.unit_type === 'roll';
+          {/* Category Filter Pills */}
+          <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
+                selectedCategory === 'all'
+                  ? 'bg-slate-900 text-white shadow-2xs'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              All Items ({products.length})
+            </button>
+            {categories.map(cat => {
+              const count = products.filter(p => p.category_id === cat.id).length;
               return (
-                <div
-                  key={p.id}
-                  className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all shadow-2xs ${
-                    inCart
-                      ? 'border-amber-500 bg-amber-50/40 ring-1 ring-amber-500'
-                      : 'border-slate-200 bg-white'
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    selectedCategory === cat.id
+                      ? 'bg-amber-600 text-white shadow-2xs border border-amber-600'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-start justify-between gap-1">
-                      <h4 className="font-bold text-xs text-slate-900 line-clamp-2 leading-tight">
-                        {p.name}
-                      </h4>
-                      {isRoll && (
-                        <span className="shrink-0 p-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 text-[9px] font-bold">
-                          <Layers className="h-3 w-3" />
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-1 font-mono">
-                      {p.formatted_stock || `${p.current_stock} in stock`}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 pt-2 border-t border-slate-100">
-                    <div className="font-extrabold text-xs text-slate-900 font-mono mb-2">
-                      KES {Number(p.selling_price).toLocaleString()}
-                    </div>
-                    
-                    {isRoll ? (
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          onClick={() => handleAddToCart(p, false)}
-                          className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold cursor-pointer"
-                        >
-                          + Roll
-                        </button>
-                        <button
-                          onClick={() => handleAddToCart(p, true)}
-                          className="px-2 py-1 rounded bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 text-[10px] font-bold cursor-pointer"
-                        >
-                          + Meter
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleAddToCart(p)}
-                        className="w-full py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold cursor-pointer transition-colors"
-                      >
-                        Add to Cart
-                      </button>
-                    )}
-                  </div>
-                </div>
+                  {cat.name} ({count})
+                </button>
               );
             })}
           </div>
+
+          {/* Product Cards Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {filteredProducts.length === 0 ? (
+              <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-400 space-y-2">
+                <Search className="h-8 w-8 mx-auto text-slate-300" />
+                <p className="text-xs font-medium">No products found matching your search</p>
+                <p className="text-[11px] text-slate-400">Try changing categories or clearing search keywords</p>
+              </div>
+            ) : (
+              filteredProducts.slice(0, 15).map(p => {
+                const cartItem = cart.find(i => i.product.id === p.id);
+                const isRoll = p.unit_type === 'roll';
+                const isOutOfStock = (Number(p.current_stock) || 0) <= 0;
+
+                return (
+                  <div
+                    key={p.id}
+                    className={`rounded-2xl border p-3.5 flex flex-col justify-between transition-all duration-150 shadow-2xs ${
+                      cartItem
+                        ? 'border-amber-500 bg-amber-50/30 ring-1 ring-amber-400'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div>
+                      {/* Card Header: Product Name + Cart Counter */}
+                      <div className="flex items-start justify-between gap-1">
+                        <h4 className="font-bold text-xs text-slate-900 line-clamp-2 leading-snug">
+                          {p.name}
+                        </h4>
+                        {cartItem && (
+                          <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-600 text-white text-[10px] font-black">
+                            {cartItem.unit_sold === 'roll' ? `${cartItem.rolls_qty}r` : `${cartItem.quantity}`}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Stock & Cost Meta Row */}
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-1">
+                        {renderStockBadge(p)}
+                        <span className="text-[10px] text-slate-400 font-mono tracking-tight" title="Buying Price Margin Floor">
+                          BP: {Number(p.cost_price).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Price & Action Buttons */}
+                    <div className="mt-3 pt-2.5 border-t border-slate-100">
+                      <div className="flex items-baseline justify-between mb-2">
+                        <span className="text-[10px] text-slate-500 uppercase font-semibold">Selling:</span>
+                        <span className="font-extrabold text-xs text-slate-950 font-mono">
+                          KES {Number(p.selling_price).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {isRoll ? (
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            disabled={isOutOfStock}
+                            onClick={() => handleAddToCart(p, false)}
+                            className="py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-[11px] font-bold cursor-pointer transition-colors shadow-2xs active:scale-95"
+                          >
+                            + Roll
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isOutOfStock}
+                            onClick={() => handleAddToCart(p, true)}
+                            className="py-1.5 rounded-xl border border-sky-300 bg-sky-50 hover:bg-sky-100 disabled:opacity-40 text-sky-800 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs active:scale-95"
+                          >
+                            + Meters
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isOutOfStock}
+                          onClick={() => handleAddToCart(p)}
+                          className="w-full py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-[11px] font-bold cursor-pointer transition-colors shadow-2xs flex items-center justify-center space-x-1.5 active:scale-95"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Add to Cart</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
 
-        {/* Right Side: Cart & Checkout Panel */}
-        <div className="lg:col-span-5 space-y-4">
+        {/* Right: Cart & Tender Settlement Console (5 Cols) */}
+        <div className="lg:col-span-5 space-y-3">
           <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden flex flex-col">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+            {/* Dark Slate Cart Header */}
+            <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <ShoppingCart className="h-4 w-4 text-amber-400" />
-                <span className="font-bold text-xs tracking-tight">Active Cart ({cart.length} items)</span>
+                <div className="h-6 w-6 rounded-lg bg-amber-500 flex items-center justify-center text-slate-950">
+                  <ShoppingCart className="h-3.5 w-3.5 fill-slate-950" />
+                </div>
+                <span className="font-bold text-xs">Active Cart</span>
+                <span className="px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 text-[10px] font-mono font-bold">
+                  {cart.length} {cart.length === 1 ? 'item' : 'items'}
+                </span>
               </div>
               
               <div className="flex items-center space-x-2">
@@ -684,15 +849,15 @@ export const POSPage: React.FC = () => {
                   <>
                     <button
                       onClick={handleParkCart}
-                      className="flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-[11px] transition-colors cursor-pointer border border-slate-700"
-                      title="Save cart (F4)"
+                      className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-[11px] transition-colors cursor-pointer border border-slate-700"
+                      title="Save cart on hold (F4)"
                     >
                       <Bookmark className="h-3 w-3" />
-                      <span>Park (F4)</span>
+                      <span>Park</span>
                     </button>
                     <button
                       onClick={() => setCart([])}
-                      className="text-[11px] text-rose-300 hover:text-rose-100 font-bold transition-colors cursor-pointer p-1"
+                      className="text-[11px] text-rose-300 hover:text-rose-100 font-bold transition-colors cursor-pointer px-1.5 py-0.5"
                     >
                       Clear
                     </button>
@@ -702,12 +867,12 @@ export const POSPage: React.FC = () => {
             </div>
 
             {/* Cart Items List */}
-            <div className="p-4 divide-y divide-slate-100 max-h-[380px] overflow-y-auto space-y-3">
+            <div className="p-3.5 divide-y divide-slate-100 max-h-[300px] overflow-y-auto space-y-2.5">
               {cart.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 space-y-2">
+                <div className="py-10 text-center text-slate-400 space-y-2">
                   <ShoppingCart className="h-8 w-8 mx-auto text-slate-300" />
                   <p className="text-xs font-medium">Your cashier cart is empty</p>
-                  <p className="text-[10px] text-slate-400">Click products or press F2 to search items</p>
+                  <p className="text-[10px] text-slate-400">Click products or press F2 to scan and add items</p>
                 </div>
               ) : (
                 cart.map(item => {
@@ -717,19 +882,19 @@ export const POSPage: React.FC = () => {
                   const isOverStock = item.quantity > Number(item.product.current_stock || 0);
 
                   return (
-                    <div key={item.product.id} className="pt-3 first:pt-0 space-y-2">
+                    <div key={item.product.id} className="pt-2.5 first:pt-0 space-y-1.5">
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="font-bold text-xs text-slate-900 flex items-center space-x-1.5">
                             <span>{item.product.name}</span>
                             {isRoll && (
                               <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-sky-50 text-sky-700 border border-sky-200">
-                                {item.unit_sold === 'meter' ? 'Loose Meters' : 'Full Roll'}
+                                {item.unit_sold === 'meter' ? 'Loose Meters' : 'Roll'}
                               </span>
                             )}
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono">
-                            Stock: {item.product.formatted_stock}
+                            Available: {item.product.formatted_stock}
                           </div>
                         </div>
                         <button
@@ -740,12 +905,12 @@ export const POSPage: React.FC = () => {
                         </button>
                       </div>
 
-                      {/* Quantity & Unit Controls */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      {/* Controls: Quantity Stepper & Price Input */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
                         {isRoll ? (
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-1.5">
                             {/* Segmented Switcher */}
-                            <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-[10px] font-bold">
+                            <div className="flex items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-[10px] font-bold">
                               <button
                                 type="button"
                                 onClick={() => handleSwitchUnitSold(item, 'roll')}
@@ -803,7 +968,7 @@ export const POSPage: React.FC = () => {
                                       quantity: r * mpr
                                     }));
                                   }}
-                                  className="w-12 rounded border border-slate-300 px-1 py-0.5 text-center font-mono text-xs focus:outline-none focus:border-amber-600 font-bold"
+                                  className="w-10 rounded border border-slate-300 px-1 py-0.5 text-center font-mono text-xs focus:outline-none focus:border-amber-600 font-bold"
                                 />
                                 <button
                                   type="button"
@@ -835,9 +1000,9 @@ export const POSPage: React.FC = () => {
                                       rolls_qty: 0
                                     }));
                                   }}
-                                  className="w-16 rounded border border-slate-300 px-1.5 py-0.5 text-center font-mono text-xs focus:outline-none focus:border-amber-600 font-bold"
+                                  className="w-14 rounded border border-slate-300 px-1 py-0.5 text-center font-mono text-xs focus:outline-none focus:border-amber-600 font-bold"
                                 />
-                                <span className="text-[11px] text-slate-500 font-medium">m</span>
+                                <span className="text-[10px] text-slate-500 font-medium">m</span>
                               </div>
                             )}
                           </div>
@@ -876,27 +1041,25 @@ export const POSPage: React.FC = () => {
                           </div>
                         )}
 
-                        {/* Editable Selling Price */}
+                        {/* Unit Price & Line Total */}
                         <div className="flex items-center space-x-1.5">
-                          <div className="relative">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={item.unit_price === 0 ? '' : item.unit_price}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const p = val === '' ? 0 : parseFloat(val) || 0;
-                                handleUpdateItem(item.product.id, i => ({ ...i, unit_price: p }));
-                              }}
-                              className={`w-20 rounded border px-1.5 py-1 text-right font-mono text-xs focus:outline-none ${
-                                isBelowBP
-                                  ? 'border-rose-400 bg-rose-50/50 text-rose-800 focus:border-rose-600'
-                                  : 'border-slate-300 focus:border-amber-600'
-                              }`}
-                              title={item.unit_sold === 'roll' ? "Selling price per roll" : `Selling price per ${item.unit_sold}`}
-                            />
-                          </div>
-                          <span className="font-extrabold text-xs text-slate-900 font-mono w-20 text-right">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={item.unit_price === 0 ? '' : item.unit_price}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const p = val === '' ? 0 : parseFloat(val) || 0;
+                              handleUpdateItem(item.product.id, i => ({ ...i, unit_price: p }));
+                            }}
+                            className={`w-18 rounded border px-1.5 py-0.5 text-right font-mono text-xs focus:outline-none ${
+                              isBelowBP
+                                ? 'border-rose-400 bg-rose-50/50 text-rose-800'
+                                : 'border-slate-300 focus:border-amber-600'
+                            }`}
+                            title={item.unit_sold === 'roll' ? "Price per roll" : `Price per ${item.unit_sold}`}
+                          />
+                          <span className="font-black text-xs text-slate-950 font-mono w-20 text-right">
                             KES {Number(item.line_total).toLocaleString()}
                           </span>
                         </div>
@@ -905,7 +1068,7 @@ export const POSPage: React.FC = () => {
                       {isOverStock && (
                         <div className="flex items-center space-x-1 text-[10px] text-rose-600 font-bold">
                           <AlertTriangle className="h-3 w-3" />
-                          <span>Exceeds available stock ({item.product.formatted_stock})</span>
+                          <span>Exceeds stock ({item.product.formatted_stock})</span>
                         </div>
                       )}
 
@@ -921,94 +1084,286 @@ export const POSPage: React.FC = () => {
               )}
             </div>
 
-            {/* Payment Drawer */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-4">
+            {/* Financial Summary & Settlement Box */}
+            <div className="p-3.5 bg-slate-50 border-t border-slate-200 space-y-3">
               <div className="space-y-1.5 text-xs text-slate-600">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span className="font-mono font-bold text-slate-900">KES {subtotal.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center space-x-1">
-                    <Percent className="h-3 w-3 text-slate-400" />
-                    <span>Overall Discount:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    KES {subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>
+                </div>
+
+                {/* Discount Control */}
+                <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-1">
-                    <span className="text-[10px] text-slate-400">KES</span>
+                    <Percent className="h-3 w-3 text-slate-400" />
+                    <span>Discount:</span>
+                    <div className="flex items-center rounded border border-slate-300 bg-white text-[10px] ml-1 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType('fixed')}
+                        className={`px-1.5 py-0.2 font-bold cursor-pointer ${discountType === 'fixed' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}
+                      >
+                        KES
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType('percent')}
+                        className={`px-1.5 py-0.2 font-bold cursor-pointer ${discountType === 'percent' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}
+                      >
+                        %
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-1">
                     <input
                       type="text"
                       inputMode="decimal"
                       value={discountAmount}
                       onChange={(e) => setDiscountAmount(e.target.value)}
-                      className="w-20 rounded border border-slate-300 bg-white px-2 py-0.5 text-right font-mono text-xs focus:outline-none focus:border-amber-600"
+                      className="w-16 rounded border border-slate-300 bg-white px-2 py-0.5 text-right font-mono text-xs focus:outline-none focus:border-amber-600"
                     />
                   </div>
                 </div>
-                <div className="flex justify-between text-base font-extrabold text-slate-900 pt-2 border-t border-slate-200">
+
+                <div className="flex justify-between text-base font-black text-slate-950 pt-2 border-t border-slate-200">
                   <span>NET TOTAL:</span>
-                  <span className="font-mono text-amber-700">KES {total.toLocaleString()}</span>
+                  <span className="font-mono text-amber-700">
+                    KES {total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
                 </div>
               </div>
 
-              {/* Payment Methods */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-slate-700">Payment Method:</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[
-                    { id: 'cash', label: 'Cash', icon: Banknote },
-                    { id: 'mpesa', label: 'M-Pesa', icon: Smartphone },
-                    { id: 'bank', label: 'Bank', icon: Landmark },
-                    { id: 'credit', label: 'Credit', icon: FileText },
-                    { id: 'card', label: 'Card', icon: CreditCard },
-                  ].map(m => {
-                    const Icon = m.icon;
-                    const isSelected = paymentMethod === m.id;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setPaymentMethod(m.id as any)}
-                        className={`flex items-center justify-center space-x-1.5 p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                        <span>{m.label}</span>
-                      </button>
-                    );
-                  })}
+              {/* Payment Mode Selector */}
+              <div className="flex items-center justify-between pt-1 border-t border-slate-200">
+                <span className="text-[11px] font-bold text-slate-700">Tender Method:</span>
+                <div className="flex items-center space-x-1 bg-white p-0.5 rounded-lg border border-slate-200 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setIsSplitMode(false)}
+                    className={`px-2 py-1 rounded font-bold cursor-pointer transition-all ${
+                      !isSplitMode ? 'bg-slate-900 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Single
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsSplitMode(true)}
+                    className={`px-2 py-1 rounded font-bold cursor-pointer flex items-center space-x-1 transition-all ${
+                      isSplitMode ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    <Split className="h-3 w-3" />
+                    <span>Split Payment</span>
+                  </button>
                 </div>
               </div>
 
-              {paymentMethod === 'cash' ? (
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="text-slate-600 font-medium">Tendered Cash:</span>
-                  <div className="flex items-center space-x-2">
+              {/* Single Mode Controls */}
+              {!isSplitMode ? (
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-5 gap-1">
+                    {[
+                      { id: 'cash', label: 'Cash', icon: Banknote },
+                      { id: 'mpesa', label: 'M-Pesa', icon: Smartphone },
+                      { id: 'bank', label: 'Bank', icon: Landmark },
+                      { id: 'credit', label: 'Credit', icon: FileText },
+                      { id: 'card', label: 'Card', icon: CreditCard },
+                    ].map(m => {
+                      const Icon = m.icon;
+                      const isSelected = paymentMethod === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setPaymentMethod(m.id as any)}
+                          className={`flex flex-col items-center justify-center p-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <Icon className="h-4 w-4 mb-0.5" />
+                          <span>{m.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {paymentMethod === 'cash' ? (
+                    <div className="space-y-2 pt-1">
+                      {/* Cash Input & Change */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 font-medium">Tendered Cash:</span>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Amount"
+                            value={amountTendered}
+                            onChange={(e) => setAmountTendered(e.target.value)}
+                            className="w-28 rounded-lg border border-slate-300 bg-white px-2 py-1 text-right font-mono text-xs focus:outline-none focus:border-amber-600 font-bold"
+                          />
+                          {singleCashChange > 0 && (
+                            <span className="text-emerald-700 font-black font-mono text-xs">
+                              Change: KES {singleCashChange.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Ergonomic Quick Cash Tender Buttons */}
+                      <div className="flex flex-wrap items-center gap-1 text-[10px] font-mono">
+                        <button
+                          type="button"
+                          onClick={() => handleQuickCash('exact')}
+                          className="px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold hover:bg-emerald-100 cursor-pointer"
+                        >
+                          Exact (KES {total.toLocaleString()})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickCash('round500')}
+                          className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                        >
+                          Round 500
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickCash('round1000')}
+                          className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                        >
+                          Round 1K
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickCash(1000)}
+                          className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                        >
+                          +1,000
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickCash(5000)}
+                          className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                        >
+                          +5,000
+                        </button>
+                      </div>
+                    </div>
+                  ) : paymentMethod === 'credit' ? (
+                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-medium flex items-center space-x-1.5">
+                      <ShieldAlert className="h-4 w-4 text-amber-700 shrink-0" />
+                      <span>Full sale billed to selected customer's account receivable balance.</span>
+                    </div>
+                  ) : (
                     <input
                       type="text"
-                      inputMode="decimal"
-                      placeholder="Amount"
-                      value={amountTendered}
-                      onChange={(e) => setAmountTendered(e.target.value)}
-                      className="w-24 rounded-lg border border-slate-300 bg-white px-2 py-1 text-right font-mono text-xs focus:outline-none focus:border-amber-600"
+                      placeholder="Payment Reference (M-Pesa code, EFT ref, Card Auth)"
+                      value={paymentReference}
+                      onChange={(e) => setPaymentReference(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
                     />
-                    {change > 0 && (
-                      <span className="text-emerald-700 font-bold font-mono text-[11px]">
-                        Change: KES {change.toLocaleString()}
-                      </span>
+                  )}
+                </div>
+              ) : (
+                /* Split Mode Rows */
+                <div className="space-y-2">
+                  <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                    {splitLines.map((line) => (
+                      <div key={line.id} className="p-2 bg-white rounded-xl border border-slate-200 space-y-1">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <select
+                            value={line.payment_method}
+                            onChange={(e) => handleUpdateSplitLine(line.id, 'payment_method', e.target.value)}
+                            className="rounded-lg border border-slate-300 bg-slate-50 p-1 text-xs font-bold text-slate-800"
+                          >
+                            <option value="mpesa">M-Pesa</option>
+                            <option value="cash">Cash</option>
+                            <option value="bank">Bank / EFT</option>
+                            <option value="card">Card</option>
+                          </select>
+
+                          <div className="flex items-center space-x-1 flex-1">
+                            <span className="text-[10px] text-slate-400 font-mono">KES</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="Amount"
+                              value={line.amount}
+                              onChange={(e) => handleUpdateSplitLine(line.id, 'amount', e.target.value)}
+                              className="w-full rounded-lg border border-slate-300 px-2 py-1 text-right font-mono text-xs font-bold focus:outline-none focus:border-amber-600"
+                            />
+                          </div>
+
+                          {splitLines.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSplitLine(line.id)}
+                              className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {line.payment_method !== 'cash' && (
+                          <input
+                            type="text"
+                            placeholder="Ref code (e.g. QKH7129JK)"
+                            value={line.reference}
+                            onChange={(e) => handleUpdateSplitLine(line.id, 'reference', e.target.value)}
+                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] focus:outline-none focus:border-amber-600"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddSplitLine}
+                    className="flex items-center space-x-1 text-xs font-bold text-amber-700 hover:text-amber-800 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>+ Add Payment Tender Line</span>
+                  </button>
+
+                  {/* Split Totals */}
+                  <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-200 space-y-1 text-xs font-mono">
+                    <div className="flex justify-between text-slate-700">
+                      <span>Total Tendered:</span>
+                      <span className="font-bold">KES {totalSplitTendered.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {splitBalanceDue > 0 ? (
+                      <div className="flex justify-between text-rose-700 font-bold">
+                        <span>Balance to Credit Debt:</span>
+                        <span>KES {splitBalanceDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    ) : splitExcessCash > 0 ? (
+                      <div className="flex justify-between text-emerald-700 font-bold">
+                        <span>Cash Change:</span>
+                        <span>KES {splitExcessCash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between text-emerald-700 font-bold">
+                        <span>Fully Settled</span>
+                        <span>KES 0.00</span>
+                      </div>
                     )}
                   </div>
                 </div>
-              ) : (
-                <input
-                  type="text"
-                  placeholder="Payment Reference (Mpesa Code, Cheque #, etc.)"
-                  value={paymentReference}
-                  onChange={(e) => setPaymentReference(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
-                />
+              )}
+
+              {/* Credit Guardrail Notice */}
+              {((isSplitMode && splitBalanceDue > 0) || (!isSplitMode && paymentMethod === 'credit')) && isWalkIn && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 font-medium flex items-center space-x-1.5">
+                  <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0" />
+                  <span>Credit or partial sales require selecting an Account Customer above.</span>
+                </div>
               )}
 
               {checkoutError && (
@@ -1018,13 +1373,18 @@ export const POSPage: React.FC = () => {
                 </div>
               )}
 
+              {/* High-Impact Checkout Button */}
               <button
                 onClick={handleCheckout}
-                disabled={checkingOut || cart.length === 0}
-                className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-extrabold text-xs transition-all shadow-md cursor-pointer active:scale-[0.98]"
+                disabled={
+                  checkingOut || 
+                  cart.length === 0 || 
+                  (((isSplitMode && splitBalanceDue > 0) || (!isSplitMode && paymentMethod === 'credit')) && isWalkIn)
+                }
+                className="w-full flex items-center justify-center space-x-2 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-black text-sm transition-all shadow-md cursor-pointer active:scale-[0.98]"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                <span>{checkingOut ? 'Processing Checkout...' : `Complete Checkout (KES ${total.toLocaleString()})`}</span>
+                <span>{checkingOut ? 'Completing Transaction...' : `Complete Checkout (KES ${total.toLocaleString(undefined, { minimumFractionDigits: 2 })})`}</span>
               </button>
             </div>
           </div>
@@ -1101,7 +1461,7 @@ export const POSPage: React.FC = () => {
             <div className="max-h-[350px] overflow-y-auto divide-y divide-slate-100">
               {parkedCarts.length === 0 ? (
                 <div className="py-8 text-center text-slate-400 text-xs">
-                  No parked carts stored. Click "Park Cart" to hold a sale.
+                  No parked carts stored. Click "Park" to hold a sale.
                 </div>
               ) : (
                 parkedCarts.map(c => (
@@ -1114,7 +1474,7 @@ export const POSPage: React.FC = () => {
                           <span>{new Date(c.parked_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </span>
                         <span>•</span>
-                        <span className="font-mono font-bold text-amber-700">KES {c.total.toLocaleString()}</span>
+                        <span className="font-mono font-bold text-amber-700">KES {c.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                       </div>
                     </div>
 
@@ -1149,3 +1509,5 @@ export const POSPage: React.FC = () => {
     </div>
   );
 };
+
+

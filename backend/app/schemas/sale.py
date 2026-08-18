@@ -5,6 +5,37 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 # =========================================================================
+# Payment Schemas
+# =========================================================================
+
+class PaymentCreate(BaseModel):
+    amount: Decimal = Field(..., gt=0)
+    payment_method: str = Field("cash", max_length=30)  # 'cash', 'mpesa', 'card', 'bank', 'cheque'
+    reference: Optional[str] = Field(None, max_length=100)
+    notes: Optional[str] = None
+    sale_id: Optional[int] = None
+
+
+class PaymentResponse(BaseModel):
+    id: int
+    sale_id: Optional[int] = None
+    customer_id: Optional[int] = None
+    amount: Decimal
+    payment_method: str
+    reference: Optional[str] = None
+    notes: Optional[str] = None
+    user_id: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Backwards-compatible aliases
+CustomerPaymentCreate = PaymentCreate
+CustomerPaymentResponse = PaymentResponse
+
+
+# =========================================================================
 # Customer Schemas
 # =========================================================================
 
@@ -36,24 +67,23 @@ class CustomerResponse(CustomerBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CustomerPaymentCreate(BaseModel):
-    amount: Decimal = Field(..., gt=0)
-    payment_method: str = Field("cash", max_length=30)  # 'cash', 'mpesa', 'bank', 'cheque'
-    reference: Optional[str] = Field(None, max_length=100)
+class CustomerLedgerEntry(BaseModel):
+    id: str  # e.g. "sale-1" or "pay-2" or "void-1"
+    date: datetime
+    entry_type: str  # 'sale', 'payment', 'void'
+    reference: str  # e.g. "INV-20260819-0041" or "Payment (M-Pesa)"
     notes: Optional[str] = None
+    debit: Optional[Decimal] = None
+    credit: Optional[Decimal] = None
+    running_balance: Decimal
 
 
-class CustomerPaymentResponse(BaseModel):
-    id: int
+class CustomerLedgerResponse(BaseModel):
     customer_id: int
-    amount: Decimal
-    payment_method: str
-    reference: Optional[str] = None
-    notes: Optional[str] = None
-    user_id: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
+    customer_name: str
+    phone: Optional[str] = None
+    total_debt: Decimal
+    entries: List[CustomerLedgerEntry] = []
 
 
 # =========================================================================
@@ -90,8 +120,9 @@ class SaleItemResponse(BaseModel):
 
 class SaleCreate(BaseModel):
     customer_id: Optional[int] = None
-    payment_method: str = Field("cash")  # 'cash', 'mpesa', 'card', 'bank', 'credit'
+    payment_method: Optional[str] = "cash"  # 'cash', 'mpesa', 'card', 'bank', 'credit', 'split'
     payment_reference: Optional[str] = None
+    payments: Optional[List[PaymentCreate]] = None  # Multiple split payments at checkout
     discount_amount: Decimal = Field(Decimal("0.00"), ge=0)
     is_etr: bool = False
     notes: Optional[str] = None
@@ -110,13 +141,18 @@ class SaleResponse(BaseModel):
     tax_amount: Decimal
     discount_amount: Decimal
     total_amount: Decimal
+    total_paid: Decimal = Decimal("0.00")
+    balance_due: Decimal = Decimal("0.00")
     payment_method: str
     payment_reference: Optional[str] = None
-    status: str
+    status: str  # computed status ('paid', 'partial', 'unpaid', 'voided')
     is_etr: bool
     notes: Optional[str] = None
+    voided_at: Optional[datetime] = None
+    void_reason: Optional[str] = None
     created_at: datetime
     items: List[SaleItemResponse] = []
+    payments: List[PaymentResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 

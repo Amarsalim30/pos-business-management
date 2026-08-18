@@ -94,3 +94,97 @@ export interface StockMovement {
   user_id: number;
   created_at: string;
 }
+
+export interface Customer {
+  id: number;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  balance: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface CustomerPayment {
+  id: number;
+  customer_id: number;
+  amount: number;
+  payment_method: string;
+  reference: string | null;
+  notes: string | null;
+  user_id: number;
+  created_at: string;
+}
+
+export interface SaleItem {
+  id: number;
+  product_id: number;
+  product_name: string;
+  sku: string | null;
+  unit_type: 'piece' | 'roll';
+  unit_sold: string;
+  quantity: number;
+  rolls_qty?: number | null;
+  loose_meters?: number | null;
+  unit_price: number;
+  cost_price: number;
+  tax_rate: number;
+  total: number;
+}
+
+export interface Sale {
+  id: number;
+  invoice_no: string;
+  customer_id: number | null;
+  customer_name: string | null;
+  store_id: number;
+  user_id: number;
+  cashier_name: string | null;
+  subtotal: number;
+  tax_amount: number;
+  discount_amount: number;
+  total_amount: number;
+  payment_method: 'cash' | 'mpesa' | 'card' | 'bank' | 'credit';
+  payment_reference: string | null;
+  status: 'paid' | 'unpaid' | 'partial' | 'voided';
+  is_etr: boolean;
+  notes: string | null;
+  created_at: string;
+  items: SaleItem[];
+}
+
+export interface PreSaleItem {
+  id: number;
+  product_id: number;
+  product_name: string;
+  sku: string | null;
+  unit_type: 'piece' | 'roll';
+  unit_sold: string;
+  quantity: number;
+  rolls_qty?: number | null;
+  loose_meters?: number | null;
+  unit_price: number;
+  tax_rate: number;
+  total: number;
+}
+
+export interface PreSaleDocument {
+  id: number;
+  document_no: string;
+  type: 'quotation' | 'proforma';
+  customer_id: number | null;
+  customer_name: string | null;
+  store_id: number;
+  user_id: number;
+  subtotal: number;
+  tax_amount: number;
+  discount_amount: number;
+  total_amount: number;
+  status: 'draft' | 'accepted' | 'converted' | 'expired';
+  valid_until: string | null;
+  notes: string | null;
+  converted_sale_id: number | null;
+  created_at: string;
+  items: PreSaleItem[];
+}

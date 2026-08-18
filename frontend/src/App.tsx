@@ -3,11 +3,19 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
+import { POSPage } from './pages/POS';
+import { SalesListPage } from './pages/SalesList';
+import { PreSalesPage } from './pages/PreSales';
+import { CustomersPage } from './pages/Customers';
 import { ProductsPage } from './pages/Products';
 import { InventoryPage } from './pages/Inventory';
 import { StockTakePage } from './pages/StockTake';
 import {
   LayoutDashboard,
+  ShoppingCart,
+  Receipt,
+  FileCheck2,
+  Users,
   Package,
   Boxes,
   ClipboardCheck,
@@ -20,17 +28,21 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-    { label: 'Products ', path: '/products', icon: Package },
-    { label: 'Inventory Levels', path: '/inventory', icon: Boxes },
-    { label: 'Stock Take Audit', path: '/stock-take', icon: ClipboardCheck },
+    { label: 'POS Terminal', path: '/pos', icon: ShoppingCart },
+    { label: 'Sales & Invoices', path: '/sales', icon: Receipt },
+    { label: 'Quotations', path: '/pre-sales', icon: FileCheck2 },
+    { label: 'Customers', path: '/customers', icon: Users },
+    { label: 'Products', path: '/products', icon: Package },
+    { label: 'Inventory', path: '/inventory', icon: Boxes },
+    { label: 'Stock Take', path: '/stock-take', icon: ClipboardCheck },
   ];
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
       {/* Top Header */}
       <header className="border-b border-slate-200 bg-white px-6 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs">
-        <div className="flex items-center space-x-8">
-          <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-2.5">
             <div className="h-8 w-8 rounded-lg bg-amber-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
               POS
             </div>
@@ -45,7 +57,7 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Navigation Links */}
-          <nav className="hidden md:flex items-center space-x-1">
+          <nav className="hidden lg:flex items-center space-x-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
@@ -53,7 +65,7 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isActive
+                  className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${isActive
                       ? 'bg-amber-50 text-amber-800 border border-amber-200/80 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
@@ -104,6 +116,10 @@ export function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<NavigationLayout><Dashboard /></NavigationLayout>} />
+            <Route path="/pos" element={<NavigationLayout><POSPage /></NavigationLayout>} />
+            <Route path="/sales" element={<NavigationLayout><SalesListPage /></NavigationLayout>} />
+            <Route path="/pre-sales" element={<NavigationLayout><PreSalesPage /></NavigationLayout>} />
+            <Route path="/customers" element={<NavigationLayout><CustomersPage /></NavigationLayout>} />
             <Route path="/products" element={<NavigationLayout><ProductsPage /></NavigationLayout>} />
             <Route path="/inventory" element={<NavigationLayout><InventoryPage /></NavigationLayout>} />
             <Route path="/stock-take" element={<NavigationLayout><StockTakePage /></NavigationLayout>} />

@@ -4,6 +4,7 @@ from app.models.store import Store, RecurringExpense
 from app.models.audit import Session, AuditLog
 from app.models.product import Category, Product
 from app.models.inventory import Inventory, StockMovement, StockTake, StockTakeItem
+from app.models.sale import Customer, Sale, SaleItem, CustomerPayment, PreSaleDocument, PreSaleItem
 
 __all__ = [
     "Base",
@@ -17,5 +18,11 @@ __all__ = [
     "Inventory",
     "StockMovement",
     "StockTake",
-    "StockTakeItem"
+    "StockTakeItem",
+    "Customer",
+    "Sale",
+    "SaleItem",
+    "CustomerPayment",
+    "PreSaleDocument",
+    "PreSaleItem"
 ]

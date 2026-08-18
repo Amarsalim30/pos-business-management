@@ -234,6 +234,15 @@ def start_stock_take(db: Session, store_id: int, user_id: int, notes: Optional[s
     return stock_take
 
 
+def list_stock_takes(db: Session, store_id: int) -> List[StockTake]:
+    return (
+        db.query(StockTake)
+        .filter(StockTake.store_id == store_id)
+        .order_by(StockTake.created_at.desc())
+        .all()
+    )
+
+
 def get_stock_take(db: Session, store_id: int, stock_take_id: int) -> StockTake:
     st = db.query(StockTake).filter(StockTake.id == stock_take_id, StockTake.store_id == store_id).first()
     if not st:

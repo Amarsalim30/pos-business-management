@@ -10,7 +10,8 @@ import {
   Layers, 
   RefreshCw,
   PlusCircle,
-  MinusCircle
+  MinusCircle,
+  Download
 } from 'lucide-react';
 
 export const InventoryPage: React.FC = () => {
@@ -28,12 +29,14 @@ export const InventoryPage: React.FC = () => {
   const [adjustNote, setAdjustNote] = useState('');
   const [adjustError, setAdjustError] = useState<string | null>(null);
 
+  const [movementProductFilter, setMovementProductFilter] = useState<number | 'all'>('all');
+
   useEffect(() => {
     loadInventory();
     if (activeTab === 'history') {
       loadMovements();
     }
-  }, [lowStockOnly, activeTab]);
+  }, [lowStockOnly, activeTab, movementProductFilter]);
 
   const loadInventory = async () => {
     setLoading(true);
@@ -49,11 +52,39 @@ export const InventoryPage: React.FC = () => {
 
   const loadMovements = async () => {
     try {
-      const data = await apiFetch<StockMovement[]>('/api/v1/inventory/movements?limit=100');
+      let url = '/api/v1/inventory/movements?limit=200';
+      if (movementProductFilter !== 'all') {
+        url += `&product_id=${movementProductFilter}`;
+      }
+      const data = await apiFetch<StockMovement[]>(url);
       setMovements(data);
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const exportMovementsCSV = () => {
+    if (movements.length === 0) return;
+    const headers = ['ID', 'Timestamp', 'Product ID', 'Type', 'Reference', 'Quantity Delta', 'New Balance', 'Note'];
+    const rows = movements.map(m => [
+      m.id,
+      `"${new Date(m.created_at).toLocaleString()}"`,
+      m.product_id,
+      m.type,
+      `"${m.reference_id || ''}"`,
+      m.quantity,
+      m.new_quantity,
+      `"${(m.note || '').replace(/"/g, '""')}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `inventory_movements_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleAdjustSubmit = async (e: React.FormEvent) => {
@@ -241,56 +272,84 @@ export const InventoryPage: React.FC = () => {
         </div>
       ) : (
         /* Movement Audit Log */
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-slate-200 bg-slate-50 text-slate-500 font-bold uppercase tracking-wider">
-              <tr>
-                <th className="p-3.5">Timestamp</th>
-                <th className="p-3.5">Type</th>
-                <th className="p-3.5">Reference</th>
-                <th className="p-3.5 text-right">Quantity Delta</th>
-                <th className="p-3.5 text-right">New Balance</th>
-                <th className="p-3.5">Notes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium">
-              {movements.length === 0 ? (
+        <div className="space-y-3">
+          {/* Movement Audit Toolbar */}
+          <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              <span className="text-xs font-bold text-slate-700">Filter by Product:</span>
+              <select
+                value={movementProductFilter}
+                onChange={(e) => setMovementProductFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                className="rounded-lg bg-white border border-slate-300 px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-amber-600"
+              >
+                <option value="all">All Products</option>
+                {items.map((i) => (
+                  <option key={i.product_id} value={i.product_id}>{i.product_name}</option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={exportMovementsCSV}
+              disabled={movements.length === 0}
+              className="flex items-center space-x-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-xs cursor-pointer active:scale-[0.98] disabled:opacity-50"
+            >
+              <Download className="h-3.5 w-3.5 text-slate-500" />
+              <span>Export CSV</span>
+            </button>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-slate-200 bg-slate-50 text-slate-500 font-bold uppercase tracking-wider">
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400">
-                    No stock movements recorded yet.
-                  </td>
+                  <th className="p-3.5">Timestamp</th>
+                  <th className="p-3.5">Type</th>
+                  <th className="p-3.5">Reference</th>
+                  <th className="p-3.5 text-right">Quantity Delta</th>
+                  <th className="p-3.5 text-right">New Balance</th>
+                  <th className="p-3.5">Notes</th>
                 </tr>
-              ) : (
-                movements.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="p-3.5 font-mono text-slate-500">
-                      {new Date(m.created_at).toLocaleString()}
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {movements.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-slate-400">
+                      No stock movements recorded yet.
                     </td>
-                    <td className="p-3.5">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        m.type === 'in' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                        m.type === 'sale' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                        m.type === 'adjust' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                        'bg-purple-50 text-purple-700 border border-purple-200'
-                      }`}>
-                        {m.type}
-                      </span>
-                    </td>
-                    <td className="p-3.5 font-mono text-slate-600">{m.reference_id || '---'}</td>
-                    <td className={`p-3.5 text-right font-mono font-bold ${
-                      Number(m.quantity) >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                    }`}>
-                      {Number(m.quantity) > 0 ? `+${Number(m.quantity)}` : Number(m.quantity)}
-                    </td>
-                    <td className="p-3.5 text-right font-mono text-slate-900 font-bold">
-                      {Number(m.new_quantity)}
-                    </td>
-                    <td className="p-3.5 text-slate-500 max-w-xs truncate">{m.note || '---'}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  movements.map((m) => (
+                    <tr key={m.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="p-3.5 font-mono text-slate-500">
+                        {new Date(m.created_at).toLocaleString()}
+                      </td>
+                      <td className="p-3.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          m.type === 'in' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          m.type === 'sale' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                          m.type === 'adjust' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                          'bg-purple-50 text-purple-700 border border-purple-200'
+                        }`}>
+                          {m.type}
+                        </span>
+                      </td>
+                      <td className="p-3.5 font-mono text-slate-600">{m.reference_id || '---'}</td>
+                      <td className={`p-3.5 text-right font-mono font-bold ${
+                        Number(m.quantity) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                      }`}>
+                        {Number(m.quantity) > 0 ? `+${Number(m.quantity)}` : Number(m.quantity)}
+                      </td>
+                      <td className="p-3.5 text-right font-mono text-slate-900 font-bold">
+                        {Number(m.new_quantity)}
+                      </td>
+                      <td className="p-3.5 text-slate-500 max-w-xs truncate">{m.note || '---'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -419,12 +478,11 @@ export const InventoryPage: React.FC = () => {
 
               <div>
                 <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
-                  Reason Note
+                  Reason Note <span className="text-slate-400 font-normal text-[10px] lowercase">(optional)</span>
                 </label>
                 <input
                   type="text"
-                  required
-                  placeholder="e.g. Broken packaging, Found inventory, Physical count correction"
+                  placeholder="e.g. Broken packaging, Found inventory (optional)"
                   value={adjustNote}
                   onChange={(e) => setAdjustNote(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600"

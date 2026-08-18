@@ -67,6 +67,44 @@ def get_stock_movements(
 # Stock Take Endpoints
 # =========================================================================
 
+@stock_takes_router.get("/", response_model=List[StockTakeResponse])
+def get_stock_takes(
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    target_store_id = store_id or current_user.store_id or 1
+    sessions = inventory_service.list_stock_takes(db, target_store_id)
+    result = []
+    for st in sessions:
+        items = [
+            StockTakeItemResponse(
+                id=item.id,
+                product_id=item.product_id,
+                product_name=item.product.name if item.product else f"Product #{item.product_id}",
+                expected_quantity=item.expected_quantity,
+                counted_quantity=item.counted_quantity,
+                variance=item.variance,
+                rolls_counted=item.rolls_counted,
+                loose_meters_counted=item.loose_meters_counted
+            )
+            for item in st.items
+        ]
+        result.append(
+            StockTakeResponse(
+                id=st.id,
+                store_id=st.store_id,
+                user_id=st.user_id,
+                status=st.status,
+                notes=st.notes,
+                created_at=st.created_at,
+                completed_at=st.completed_at,
+                items=items
+            )
+        )
+    return result
+
+
 @stock_takes_router.post("/", response_model=StockTakeResponse, status_code=status.HTTP_201_CREATED)
 def post_stock_take(
     st_in: StockTakeCreate,

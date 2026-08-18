@@ -24,7 +24,7 @@ class StockMovementResponse(BaseModel):
 class StockAdjustmentCreate(BaseModel):
     product_id: int
     adjusted_quantity: Decimal = Field(..., description="Quantity to add or subtract (signed)")
-    note: str = Field(..., min_length=2, description="Reason for adjustment (e.g. Broken item, Found stock)")
+    note: Optional[str] = Field(None, description="Reason for adjustment (optional)")
 
 
 class InventoryItemResponse(BaseModel):

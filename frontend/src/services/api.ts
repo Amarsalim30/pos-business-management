@@ -9,11 +9,31 @@ export async function apiFetch<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     ...options,
     headers,
     credentials: 'include', // send cookies automatically
   });
+
+  // If 401 Unauthorized, attempt transparent token refresh (unless already refreshing or logging in)
+  if (response.status === 401 && !url.includes('/api/v1/auth/refresh') && !url.includes('/api/v1/auth/login')) {
+    try {
+      const refreshRes = await fetch('/api/v1/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (refreshRes.ok) {
+        // Retry the original request
+        response = await fetch(url, {
+          ...options,
+          headers,
+          credentials: 'include',
+        });
+      }
+    } catch {
+      // Ignore refresh error and fall through to standard error handling
+    }
+  }
 
   if (!response.ok) {
     let errorMessage = 'An error occurred';

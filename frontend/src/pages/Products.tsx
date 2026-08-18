@@ -10,7 +10,8 @@ import {
   RefreshCw,
   Layers,
   Edit3,
-  Trash2
+  Trash2,
+  FolderPlus
 } from 'lucide-react';
 
 export const ProductsPage: React.FC = () => {
@@ -34,7 +35,18 @@ export const ProductsPage: React.FC = () => {
   const [pricePerMeter, setPricePerMeter] = useState('');
   const [initialStock, setInitialStock] = useState('0');
   const [reorderLevel, setReorderLevel] = useState('5');
+  const [taxPercent, setTaxPercent] = useState('0'); // percentage number e.g. 0, 16, 8 (defaults to 0)
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Quick Inline Category State
+  const [isCreatingInlineCat, setIsCreatingInlineCat] = useState(false);
+  const [inlineCategoryName, setInlineCategoryName] = useState('');
+  const [inlineCatLoading, setInlineCatLoading] = useState(false);
+
+  // Category Modal State
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState<string | null>(null);
 
   useEffect(() => {
     loadCategories();
@@ -65,6 +77,53 @@ export const ProductsPage: React.FC = () => {
     }
   };
 
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    setCategoryError(null);
+    try {
+      await apiFetch('/api/v1/categories/', {
+        method: 'POST',
+        body: JSON.stringify({ name: newCategoryName.trim() }),
+      });
+      setNewCategoryName('');
+      loadCategories();
+    } catch (err: any) {
+      setCategoryError(err.message || 'Failed to create category');
+    }
+  };
+
+  const handleDeleteCategory = async (catId: number, catName: string) => {
+    if (!window.confirm(`Delete category "${catName}"?`)) return;
+    try {
+      await apiFetch(`/api/v1/categories/${catId}`, { method: 'DELETE' });
+      if (selectedCategory === catId) setSelectedCategory('all');
+      loadCategories();
+      loadProducts();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete category');
+    }
+  };
+
+  const handleCreateInlineCategory = async () => {
+    if (!inlineCategoryName.trim()) return;
+    setInlineCatLoading(true);
+    try {
+      const newCat = await apiFetch<Category>('/api/v1/categories/', {
+        method: 'POST',
+        body: JSON.stringify({ name: inlineCategoryName.trim() }),
+      });
+      await loadCategories();
+      setCategoryId(newCat.id);
+      setInlineCategoryName('');
+      setIsCreatingInlineCat(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to create category');
+    } finally {
+      setInlineCatLoading(false);
+    }
+  };
+
   const handleOpenCreateModal = () => {
     setEditingProduct(null);
     resetForm();
@@ -82,7 +141,13 @@ export const ProductsPage: React.FC = () => {
     setSellingPrice(String(p.selling_price));
     setPricePerMeter(p.price_per_meter ? String(p.price_per_meter) : '');
     setReorderLevel(String(p.reorder_level || '5'));
+    
+    // Set percentage number (e.g. 0.16 -> 16, 0.08 -> 8, 0 -> 0)
+    const rate = p.tax_rate !== undefined ? Number(p.tax_rate) : (p.is_taxable ? 0.16 : 0.0);
+    setTaxPercent(String(rate * 100));
+    
     setFormError(null);
+    setIsCreatingInlineCat(false);
     setIsModalOpen(true);
   };
 
@@ -102,6 +167,10 @@ export const ProductsPage: React.FC = () => {
     e.preventDefault();
     setFormError(null);
 
+    const parsedPercent = parseFloat(taxPercent || '0');
+    const decimalTaxRate = Math.max(0, parsedPercent) / 100;
+    const isTaxableItem = decimalTaxRate > 0;
+
     try {
       if (editingProduct) {
         // Update existing product
@@ -118,6 +187,8 @@ export const ProductsPage: React.FC = () => {
             selling_price: parseFloat(sellingPrice),
             price_per_meter: unitType === 'roll' && pricePerMeter ? parseFloat(pricePerMeter) : null,
             reorder_level: parseFloat(reorderLevel || '5'),
+            is_taxable: isTaxableItem,
+            tax_rate: decimalTaxRate,
           }),
         });
       } else {
@@ -136,7 +207,8 @@ export const ProductsPage: React.FC = () => {
             price_per_meter: unitType === 'roll' && pricePerMeter ? parseFloat(pricePerMeter) : null,
             initial_stock: parseFloat(initialStock || '0'),
             reorder_level: parseFloat(reorderLevel || '5'),
-            is_taxable: true,
+            is_taxable: isTaxableItem,
+            tax_rate: decimalTaxRate,
           }),
         });
       }
@@ -159,6 +231,9 @@ export const ProductsPage: React.FC = () => {
     setPricePerMeter('');
     setInitialStock('0');
     setReorderLevel('5');
+    setTaxPercent('0');
+    setIsCreatingInlineCat(false);
+    setInlineCategoryName('');
     setFormError(null);
   };
 
@@ -176,13 +251,23 @@ export const ProductsPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenCreateModal}
-          className="flex items-center space-x-1.5 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-500 transition-all shadow-xs active:scale-[0.98] cursor-pointer"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Product</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setIsCategoryModalOpen(true)}
+            className="flex items-center space-x-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-xs cursor-pointer active:scale-[0.98]"
+          >
+            <FolderPlus className="h-4 w-4 text-slate-500" />
+            <span>Manage Categories</span>
+          </button>
+
+          <button
+            onClick={handleOpenCreateModal}
+            className="flex items-center space-x-1.5 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-500 transition-all shadow-xs active:scale-[0.98] cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Product</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter & Search Bar */}
@@ -290,15 +375,24 @@ export const ProductsPage: React.FC = () => {
                     )}
                   </td>
                   <td className="p-3.5 text-center">
-                    {p.is_low_stock ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                        Low Stock
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        In Stock
-                      </span>
-                    )}
+                    <div className="flex flex-col items-center gap-1">
+                      {p.is_low_stock ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          Low Stock
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          In Stock
+                        </span>
+                      )}
+                      {p.is_taxable ? (
+                        <span className="text-[9px] font-bold text-slate-500 font-mono">
+                          {p.tax_rate !== undefined ? `${(Number(p.tax_rate) * 100).toFixed(0)}% VAT` : '16% VAT'}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-medium text-slate-400">Exempt</span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-3.5 text-right">
                     <div className="flex items-center justify-end space-x-1.5">
@@ -367,17 +461,55 @@ export const ProductsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">Category</label>
-                  <select
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-amber-600"
-                  >
-                    <option value="">Uncategorized</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold uppercase text-slate-700">Category</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingInlineCat(!isCreatingInlineCat)}
+                      className="text-[11px] font-bold text-amber-600 hover:text-amber-700 cursor-pointer flex items-center space-x-1"
+                    >
+                      <Plus className="h-3 w-3" />
+                      <span>{isCreatingInlineCat ? 'Select Existing' : 'New Category'}</span>
+                    </button>
+                  </div>
+
+                  {isCreatingInlineCat ? (
+                    <div className="flex space-x-1.5">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="New category name..."
+                        value={inlineCategoryName}
+                        onChange={(e) => setInlineCategoryName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleCreateInlineCategory();
+                          }
+                        }}
+                        className="w-full rounded-lg border border-amber-400 bg-amber-50/40 px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateInlineCategory}
+                        disabled={inlineCatLoading || !inlineCategoryName.trim()}
+                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 cursor-pointer shrink-0"
+                      >
+                        {inlineCatLoading ? '...' : 'Add'}
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={categoryId}
+                      onChange={(e) => setCategoryId(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-amber-600"
+                    >
+                      <option value="">Uncategorized</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -490,6 +622,35 @@ export const ProductsPage: React.FC = () => {
                     className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 font-mono"
                   />
                 </div>
+
+                {/* VAT Rate Input */}
+                <div className="col-span-2 pt-1">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-900">
+                        VAT / Tax Rate (%)
+                      </label>
+                      <span className="text-[11px] text-slate-500">
+                        Enter tax percentage (e.g. 16 for 16% VAT, 8 for 8% VAT, or 0 for Zero/Exempt)
+                      </span>
+                    </div>
+                    <div className="relative w-28 shrink-0">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        placeholder="0"
+                        value={taxPercent}
+                        onChange={(e) => setTaxPercent(e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 pr-7 text-right text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-600 font-mono"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
+                        %
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center justify-end space-x-2.5 pt-3 border-t border-slate-100">
@@ -509,6 +670,79 @@ export const ProductsPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Category Management Modal */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+                <FolderPlus className="h-4 w-4 text-amber-600" />
+                <span>Manage Product Categories</span>
+              </h3>
+              <button
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            {categoryError && (
+              <div className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-700">
+                {categoryError}
+              </div>
+            )}
+
+            {/* Add Category Form */}
+            <form onSubmit={handleCreateCategory} className="flex space-x-2">
+              <input
+                type="text"
+                placeholder="New Category Name (e.g. Solar Cables)"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+              />
+              <button
+                type="submit"
+                className="rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-amber-500 transition-all shadow-xs cursor-pointer"
+              >
+                Add
+              </button>
+            </form>
+
+            {/* Category List */}
+            <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 max-h-60 overflow-y-auto">
+              {categories.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-400">No categories created yet.</div>
+              ) : (
+                categories.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between p-3 bg-white hover:bg-slate-50 transition-colors">
+                    <span className="text-xs font-bold text-slate-800">{c.name}</span>
+                    <button
+                      onClick={() => handleDeleteCategory(c.id, c.name)}
+                      className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1 rounded transition-colors cursor-pointer"
+                      title="Delete Category"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

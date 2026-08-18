@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+.pytest_cache/
+.coverage
+htmlcov/
+node_modules/
+.gstack/

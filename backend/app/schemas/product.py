@@ -34,6 +34,7 @@ class ProductBase(BaseModel):
     cost_per_meter: Optional[Decimal] = Field(None, ge=0)
     reorder_level: Decimal = Field(default=Decimal("5.00"), ge=0)
     is_taxable: bool = True
+    tax_rate: Decimal = Field(default=Decimal("0.1600"), ge=0, le=1)  # 0.16, 0.08, 0.00
     is_active: bool = True
 
 
@@ -54,6 +55,7 @@ class ProductUpdate(BaseModel):
     cost_per_meter: Optional[Decimal] = Field(None, ge=0)
     reorder_level: Optional[Decimal] = Field(None, ge=0)
     is_taxable: Optional[bool] = None
+    tax_rate: Optional[Decimal] = Field(None, ge=0, le=1)
     is_active: Optional[bool] = None
 
 

@@ -267,3 +267,43 @@ def test_roll_product_fractional_meter_edge_cases(owner_auth_client):
         "initial_stock": 105.5
     }).json()
     assert "1 rolls + 5.5m loose" in prod_frac["formatted_stock"]
+
+
+def test_product_flexible_tax_rates(owner_auth_client):
+    # 1. Reduced rate item (e.g., 8% fuel/special items)
+    p_8 = owner_auth_client.post("/api/v1/products/", json={
+        "name": "Special Lubricant",
+        "cost_price": 500.0,
+        "selling_price": 750.0,
+        "is_taxable": True,
+        "tax_rate": 0.08
+    }).json()
+    assert p_8["is_taxable"] is True
+    assert float(p_8["tax_rate"]) == 0.08
+
+    # 2. Zero-rated item (0% VAT)
+    p_0 = owner_auth_client.post("/api/v1/products/", json={
+        "name": "Agricultural Solar Pump Kit",
+        "cost_price": 45000.0,
+        "selling_price": 55000.0,
+        "is_taxable": True,
+        "tax_rate": 0.00
+    }).json()
+    assert p_0["is_taxable"] is True
+    assert float(p_0["tax_rate"]) == 0.00
+
+    # 3. Exempt item (is_taxable: False)
+    p_exempt = owner_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Training Handbook",
+        "cost_price": 300.0,
+        "selling_price": 500.0,
+        "is_taxable": False,
+        "tax_rate": 0.00
+    }).json()
+    assert p_exempt["is_taxable"] is False
+
+    # 4. Update tax rate via PATCH
+    update_res = owner_auth_client.patch(f"/api/v1/products/{p_8['id']}", json={
+        "tax_rate": 0.16
+    }).json()
+    assert float(update_res["tax_rate"]) == 0.16

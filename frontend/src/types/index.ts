@@ -52,6 +52,7 @@ export interface Product {
   cost_per_meter: number | null;
   reorder_level: number;
   is_taxable: boolean;
+  tax_rate?: number;
   is_active: boolean;
   current_stock: number;
   formatted_stock?: string;

@@ -34,6 +34,7 @@ class Product(Base):
     cost_per_meter = Column(Numeric(12, 2), nullable=True)  # BP per loose meter
     reorder_level = Column(Numeric(10, 2), default=5.00, nullable=False)
     is_taxable = Column(Boolean, default=True, nullable=False)
+    tax_rate = Column(Numeric(5, 4), default=0.1600, nullable=False)  # 0.16 (16%), 0.08 (8%), 0.00 (Zero-rated / Exempt)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

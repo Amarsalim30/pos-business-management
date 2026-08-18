@@ -124,6 +124,7 @@ def create_product(db: Session, store_id: int, user_id: int, product_in: Product
         cost_per_meter=product_in.cost_per_meter,
         reorder_level=product_in.reorder_level,
         is_taxable=product_in.is_taxable,
+        tax_rate=product_in.tax_rate,
         is_active=product_in.is_active
     )
     db.add(product)
@@ -194,6 +195,8 @@ def update_product(db: Session, store_id: int, product_id: int, product_in: Prod
         prod.reorder_level = product_in.reorder_level
     if product_in.is_taxable is not None:
         prod.is_taxable = product_in.is_taxable
+    if product_in.tax_rate is not None:
+        prod.tax_rate = product_in.tax_rate
     if product_in.is_active is not None:
         prod.is_active = product_in.is_active
 

@@ -114,6 +114,7 @@ def test_manual_stock_adjustment(owner_auth_client):
         "initial_stock": 20.0
     }).json()
 
+    # Adjustment with note
     res = owner_auth_client.post("/api/v1/inventory/adjust", json={
         "product_id": prod["id"],
         "adjusted_quantity": -2.0,
@@ -121,6 +122,15 @@ def test_manual_stock_adjustment(owner_auth_client):
     })
     assert res.status_code == 200
     assert float(res.json()["new_quantity"]) == 18.0
+
+    # Adjustment without note (optional note)
+    res2 = owner_auth_client.post("/api/v1/inventory/adjust", json={
+        "product_id": prod["id"],
+        "adjusted_quantity": 5.0,
+        "note": None
+    })
+    assert res2.status_code == 200
+    assert float(res2.json()["new_quantity"]) == 23.0
 
 
 def test_stock_take_lifecycle_and_variance(owner_auth_client):

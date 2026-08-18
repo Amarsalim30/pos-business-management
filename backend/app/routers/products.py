@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.schemas.product import CategoryCreate, CategoryResponse, ProductCreate, ProductUpdate, ProductResponse
 from backend.app.services import product as product_service
-from backend.app.dependencies import get_current_user, require_owner
+from backend.app.dependencies import get_current_user, require_owner, require_staff
 from backend.app.models.user import User
 
 categories_router = APIRouter(prefix="/categories", tags=["categories"])
@@ -31,7 +31,7 @@ def post_category(
     category_in: CategoryCreate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner)
+    current_user: User = Depends(require_staff)
 ):
     target_store_id = store_id or current_user.store_id or 1
     category = product_service.create_category(db, target_store_id, category_in)
@@ -43,7 +43,7 @@ def delete_category(
     category_id: int,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner)
+    current_user: User = Depends(require_staff)
 ):
     target_store_id = store_id or current_user.store_id or 1
     product_service.delete_category(db, target_store_id, category_id)
@@ -87,7 +87,7 @@ def post_product(
     product_in: ProductCreate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner)
+    current_user: User = Depends(require_staff)
 ):
     target_store_id = store_id or current_user.store_id or 1
     prod, qty, formatted, is_low = product_service.create_product(
@@ -125,7 +125,7 @@ def patch_product(
     product_in: ProductUpdate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner)
+    current_user: User = Depends(require_staff)
 ):
     target_store_id = store_id or current_user.store_id or 1
     prod, qty, formatted, is_low = product_service.update_product(
@@ -146,7 +146,7 @@ def delete_product(
     product_id: int,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner)
+    current_user: User = Depends(require_staff)
 ):
     target_store_id = store_id or current_user.store_id or 1
     product_service.delete_product(db, target_store_id, product_id)

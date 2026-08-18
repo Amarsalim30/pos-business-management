@@ -12,7 +12,7 @@ from backend.app.schemas.inventory import (
     StockTakeItemResponse
 )
 from backend.app.services import inventory as inventory_service
-from backend.app.dependencies import get_current_user, require_owner
+from backend.app.dependencies import get_current_user, require_owner, require_staff
 from backend.app.models.user import User
 
 inventory_router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -39,7 +39,7 @@ def post_stock_adjustment(
     adj_in: StockAdjustmentCreate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner)
+    current_user: User = Depends(require_staff)
 ):
     target_store_id = store_id or current_user.store_id or 1
     prev_qty, new_qty = inventory_service.adjust_stock(db, target_store_id, current_user.id, adj_in)
@@ -72,7 +72,7 @@ def post_stock_take(
     st_in: StockTakeCreate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner)
+    current_user: User = Depends(require_staff)
 ):
     target_store_id = store_id or current_user.store_id or 1
     st = inventory_service.start_stock_take(db, target_store_id, current_user.id, notes=st_in.notes)
@@ -163,7 +163,7 @@ def post_reconcile_stock_take(
     stock_take_id: int,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner)
+    current_user: User = Depends(require_staff)
 ):
     target_store_id = store_id or current_user.store_id or 1
     st = inventory_service.reconcile_stock_take(db, target_store_id, current_user.id, stock_take_id)

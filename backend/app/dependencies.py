@@ -69,12 +69,19 @@ def get_current_user(
 
 def require_role(allowed_role: str):
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != allowed_role and current_user.role != "owner":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Operation not permitted. Required role: {allowed_role}"
-            )
-        return current_user
+        # Staff and Owner can perform staff-level tasks; Owner has full access to all tasks
+        if allowed_role == "staff":
+            # Both 'staff' and 'owner' have staff permissions
+            if current_user.role in ("staff", "owner", "admin", "cashier"):
+                return current_user
+        elif allowed_role == "owner":
+            if current_user.role in ("owner", "admin"):
+                return current_user
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Operation not permitted. Required role: {allowed_role}"
+        )
     return role_checker
 
 

@@ -202,7 +202,7 @@ Printing: Browser print (Ctrl+P), receipt layout sized for 80mm
 ├── auth/           POST /login, POST /logout, POST /refresh
 ├── users/          CRUD (owner only)
 ├── stores/         settings, recurring expenses (owner only)
-├── products/       CRUD + stock levels + search + /{id}/purchase-history
+├── products/       CRUD + Stock Balances + search + /{id}/purchase-history
 ├── inventory/      stock adjustments, stock-takes
 ├── sales/          create, list, void + /etr-filter
 ├── pre-sales/      CRUD (quotation/proforma) + convert-to-sale
@@ -231,7 +231,7 @@ Printing: Browser print (Ctrl+P), receipt layout sized for 80mm
 | **Pre-Sales** | `/pre-sales` | Quotations & proformas (unified), convert to sale |
 | **Purchases** | `/purchases` | PO creation, GRN, purchase expenses (fare/labour), ETR toggle |
 | **Suppliers** | `/suppliers` | Supplier management + balances + payments |
-| **Inventory** | `/inventory` | Stock levels, adjustments |
+| **Inventory** | `/inventory` | Stock Balances, adjustments |
 | **Stock Take** | `/stock-take` | Physical count entry with variance |
 | **Products** | `/products` | Product catalog, categories, pricing, taxable toggle |
 | **Product Detail** | `/products/:id` | Purchase history — who bought it, quantities, dates |

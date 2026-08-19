@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { apiFetch } from '../services/api';
 import type { InventoryItem, StockMovement } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
-import { 
-  Boxes, 
-  Search, 
-  AlertTriangle, 
-  ArrowDownUp, 
-  History, 
-  RefreshCw, 
-  Download, 
-  Truck, 
+import {
+  Boxes,
+  Search,
+  AlertTriangle,
+  ArrowDownUp,
+  History,
+  RefreshCw,
+  Download,
+  Truck,
   Check,
   Loader2
 } from 'lucide-react';
@@ -297,7 +297,7 @@ export const InventoryPage: React.FC = () => {
     }
   };
 
-  const filteredItems = items.filter(i => 
+  const filteredItems = items.filter(i =>
     i.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (i.sku && i.sku.toLowerCase().includes(searchQuery.toLowerCase()))
   );
@@ -329,22 +329,20 @@ export const InventoryPage: React.FC = () => {
           <div className="flex space-x-1 rounded-lg bg-slate-200/70 p-1">
             <button
               onClick={() => setActiveTab('levels')}
-              className={`flex items-center space-x-1 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'levels'
+              className={`flex items-center space-x-1 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${activeTab === 'levels'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
-              }`}
+                }`}
             >
               <ArrowDownUp className="h-3.5 w-3.5" />
               <span>Levels</span>
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`flex items-center space-x-1 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'history'
+              className={`flex items-center space-x-1 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${activeTab === 'history'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
-              }`}
+                }`}
             >
               <History className="h-3.5 w-3.5" />
               <span>Audit</span>
@@ -371,11 +369,10 @@ export const InventoryPage: React.FC = () => {
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setLowStockOnly(!lowStockOnly)}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
-                  lowStockOnly
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${lowStockOnly
                     ? 'bg-rose-50 border-rose-200 text-rose-700 font-bold'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
                 <span>Low Stock Only</span>
@@ -412,7 +409,7 @@ export const InventoryPage: React.FC = () => {
                     <tr>
                       <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                         <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-amber-600" />
-                        Loading stock levels...
+                        Loading Stock Balances...
                       </td>
                     </tr>
                   ) : filteredItems.length === 0 ? (
@@ -432,11 +429,10 @@ export const InventoryPage: React.FC = () => {
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              item.unit_type === 'roll'
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${item.unit_type === 'roll'
                                 ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                                 : 'bg-slate-100 text-slate-700'
-                            }`}
+                              }`}
                           >
                             {item.unit_type === 'roll' ? `Roll (${item.meters_per_roll}m)` : 'Piece'}
                           </span>
@@ -611,17 +607,16 @@ export const InventoryPage: React.FC = () => {
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              m.type === 'in'
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${m.type === 'in'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                 : m.type === 'sale'
-                                ? 'bg-sky-50 text-sky-700 border border-sky-200'
-                                : m.type === 'adjust'
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                : m.type === 'stock_take'
-                                ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}
+                                  ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                  : m.type === 'adjust'
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : m.type === 'stock_take'
+                                      ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                      : 'bg-slate-100 text-slate-700'
+                              }`}
                           >
                             {m.type}
                           </span>
@@ -705,18 +700,16 @@ export const InventoryPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setAdjustType('add')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
-                    adjustType === 'add' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600'
-                  }`}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${adjustType === 'add' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600'
+                    }`}
                 >
                   + Add Stock
                 </button>
                 <button
                   type="button"
                   onClick={() => setAdjustType('subtract')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
-                    adjustType === 'subtract' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-600'
-                  }`}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${adjustType === 'subtract' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-600'
+                    }`}
                 >
                   - Subtract Stock
                 </button>

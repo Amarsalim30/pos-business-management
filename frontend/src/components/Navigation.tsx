@@ -126,7 +126,7 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
         description: 'Product SKUs, buying/selling prices, taxable status & roll parameters'
       },
       {
-        label: 'Stock Levels',
+        label: 'Stock Balances',
         path: '/inventory',
         icon: Boxes,
         description: 'Live store stock quantities & manual adjustments'
@@ -232,10 +232,10 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const filteredCommandItems = searchQuery.trim()
     ? allItems.filter(
-        (item) =>
-          item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          item.group.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      (item) =>
+        item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.group.toLowerCase().includes(searchQuery.toLowerCase())
+    )
     : allItems;
 
   return (
@@ -243,7 +243,7 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
       {/* Top Main Bar */}
       <header className="border-b border-slate-200 bg-white sticky top-0 z-30 shadow-xs">
         <div className="w-full max-w-[1700px] mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
-          
+
           {/* Left Section: Brand & Desktop Nav */}
           <div className="flex items-center space-x-3 xl:space-x-5 min-w-0" ref={dropdownRef}>
             {/* Brand Logo */}
@@ -266,11 +266,10 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
               {/* Dashboard Direct Link */}
               <Link
                 to="/"
-                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap ${
-                  isPathActive('/')
-                    ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                }`}
+                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap ${isPathActive('/')
+                  ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
               >
                 <LayoutDashboard className={`h-4 w-4 shrink-0 ${isPathActive('/') ? 'text-amber-600' : 'text-slate-400'}`} />
                 <span>Dashboard</span>
@@ -287,13 +286,12 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
                     <button
                       onClick={() => setOpenDropdown(isOpen ? null : group.id)}
                       onMouseEnter={() => setOpenDropdown(group.id)}
-                      className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                        active
-                          ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
-                          : isOpen
+                      className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer whitespace-nowrap ${active
+                        ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
+                        : isOpen
                           ? 'bg-slate-100 text-slate-900'
                           : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                      }`}
+                        }`}
                     >
                       <GroupIcon className={`h-4 w-4 shrink-0 ${active ? 'text-amber-600' : 'text-slate-400'}`} />
                       <span>{group.label}</span>
@@ -326,11 +324,10 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
                                 key={item.path}
                                 to={item.path}
                                 onClick={() => setOpenDropdown(null)}
-                                className={`flex items-start space-x-2.5 p-2 rounded-xl text-xs transition-colors ${
-                                  itemActive
-                                    ? 'bg-amber-50/80 text-amber-950 font-bold border border-amber-200/60'
-                                    : 'hover:bg-slate-50 text-slate-700 hover:text-slate-900 font-medium'
-                                }`}
+                                className={`flex items-start space-x-2.5 p-2 rounded-xl text-xs transition-colors ${itemActive
+                                  ? 'bg-amber-50/80 text-amber-950 font-bold border border-amber-200/60'
+                                  : 'hover:bg-slate-50 text-slate-700 hover:text-slate-900 font-medium'
+                                  }`}
                               >
                                 <div className={`p-1.5 rounded-lg mt-0.5 shrink-0 ${itemActive ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
                                   <ItemIcon className="h-4 w-4" />
@@ -361,11 +358,10 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
               {/* Finance Direct Link */}
               <Link
                 to="/accounts"
-                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap ${
-                  isPathActive('/accounts') && !location.search.includes('tab=mpesa')
-                    ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                }`}
+                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap ${isPathActive('/accounts') && !location.search.includes('tab=mpesa')
+                  ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
               >
                 <Wallet className={`h-4 w-4 shrink-0 ${isPathActive('/accounts') && !location.search.includes('tab=mpesa') ? 'text-amber-600' : 'text-slate-400'}`} />
                 <span>Finance</span>
@@ -374,11 +370,10 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
               {/* Reports Direct Link */}
               <Link
                 to="/reports"
-                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap ${
-                  isPathActive('/reports')
-                    ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                }`}
+                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap ${isPathActive('/reports')
+                  ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
               >
                 <BarChart3 className={`h-4 w-4 shrink-0 ${isPathActive('/reports') ? 'text-amber-600' : 'text-slate-400'}`} />
                 <span>Reports</span>
@@ -532,9 +527,8 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
               <Link
                 to="/"
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center space-x-3 p-3 rounded-2xl text-xs font-bold transition-colors ${
-                  isPathActive('/') ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-50 text-slate-700'
-                }`}
+                className={`flex items-center space-x-3 p-3 rounded-2xl text-xs font-bold transition-colors ${isPathActive('/') ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-50 text-slate-700'
+                  }`}
               >
                 <LayoutDashboard className="h-4 w-4 text-amber-600" />
                 <span>Dashboard</span>
@@ -572,9 +566,8 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
                               key={item.path}
                               to={item.path}
                               onClick={() => setMobileMenuOpen(false)}
-                              className={`flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold ${
-                                active ? 'bg-amber-50 text-amber-950 font-bold border border-amber-200' : 'text-slate-700 hover:bg-slate-50'
-                              }`}
+                              className={`flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold ${active ? 'bg-amber-50 text-amber-950 font-bold border border-amber-200' : 'text-slate-700 hover:bg-slate-50'
+                                }`}
                             >
                               <div className="flex items-center space-x-2.5">
                                 <ItemIcon className={`h-4 w-4 ${active ? 'text-amber-600' : 'text-slate-400'}`} />
@@ -599,9 +592,8 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
                 <Link
                   to="/accounts"
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center space-x-3 p-3 rounded-2xl text-xs font-bold ${
-                    isPathActive('/accounts') && !location.search.includes('tab=mpesa') ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-50 text-slate-700'
-                  }`}
+                  className={`flex items-center space-x-3 p-3 rounded-2xl text-xs font-bold ${isPathActive('/accounts') && !location.search.includes('tab=mpesa') ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-50 text-slate-700'
+                    }`}
                 >
                   <Wallet className="h-4 w-4 text-indigo-600" />
                   <span>Finance & Accounts</span>
@@ -610,9 +602,8 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
                 <Link
                   to="/reports"
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center space-x-3 p-3 rounded-2xl text-xs font-bold ${
-                    isPathActive('/reports') ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-50 text-slate-700'
-                  }`}
+                  className={`flex items-center space-x-3 p-3 rounded-2xl text-xs font-bold ${isPathActive('/reports') ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-50 text-slate-700'
+                    }`}
                 >
                   <BarChart3 className="h-4 w-4 text-sky-600" />
                   <span>Reports & Analytics</span>
@@ -646,9 +637,8 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
       <div className="sm:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-slate-200 px-3 py-1.5 flex items-center justify-around shadow-lg">
         <Link
           to="/"
-          className={`flex flex-col items-center py-1 px-2 rounded-xl text-[10px] font-bold ${
-            isPathActive('/') ? 'text-amber-600' : 'text-slate-500'
-          }`}
+          className={`flex flex-col items-center py-1 px-2 rounded-xl text-[10px] font-bold ${isPathActive('/') ? 'text-amber-600' : 'text-slate-500'
+            }`}
         >
           <LayoutDashboard className="h-4 w-4" />
           <span>Dash</span>
@@ -656,9 +646,8 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
 
         <Link
           to="/pos"
-          className={`flex flex-col items-center py-1 px-2.5 rounded-xl text-[10px] font-extrabold ${
-            isPathActive('/pos') ? 'bg-amber-600 text-white shadow-2xs' : 'text-amber-700 bg-amber-50'
-          }`}
+          className={`flex flex-col items-center py-1 px-2.5 rounded-xl text-[10px] font-extrabold ${isPathActive('/pos') ? 'bg-amber-600 text-white shadow-2xs' : 'text-amber-700 bg-amber-50'
+            }`}
         >
           <ShoppingCart className="h-4 w-4" />
           <span>POS</span>
@@ -666,9 +655,8 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
 
         <Link
           to="/projects"
-          className={`flex flex-col items-center py-1 px-2 rounded-xl text-[10px] font-bold ${
-            isPathActive('/projects') ? 'text-amber-600' : 'text-slate-500'
-          }`}
+          className={`flex flex-col items-center py-1 px-2 rounded-xl text-[10px] font-bold ${isPathActive('/projects') ? 'text-amber-600' : 'text-slate-500'
+            }`}
         >
           <Sun className="h-4 w-4" />
           <span>Projects</span>
@@ -676,9 +664,8 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
 
         <Link
           to="/accounts?tab=mpesa"
-          className={`flex flex-col items-center py-1 px-2 rounded-xl text-[10px] font-bold ${
-            location.search.includes('tab=mpesa') ? 'text-emerald-600 font-extrabold' : 'text-slate-500'
-          }`}
+          className={`flex flex-col items-center py-1 px-2 rounded-xl text-[10px] font-bold ${location.search.includes('tab=mpesa') ? 'text-emerald-600 font-extrabold' : 'text-slate-500'
+            }`}
         >
           <Smartphone className="h-4 w-4" />
           <span>M-Pesa</span>

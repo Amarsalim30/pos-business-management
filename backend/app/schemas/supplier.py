@@ -41,8 +41,10 @@ class SupplierPaymentResponse(BaseModel):
     id: int
     store_id: int
     supplier_id: int
+    supplier_name: Optional[str] = None
     po_id: Optional[int] = None
     user_id: int
+    authorizer_name: Optional[str] = None
     amount: Decimal
     payment_method: str
     reference: Optional[str] = None
@@ -61,6 +63,7 @@ class SupplierResponse(SupplierBase):
 
 
 class SupplierLedgerEntry(BaseModel):
+    id: str  # e.g. 'grn-2', 'payment-5'
     date: datetime
     type: str  # 'po', 'grn', 'payment', 'expense'
     reference: str
@@ -68,6 +71,14 @@ class SupplierLedgerEntry(BaseModel):
     credit: Decimal  # Inbound GRNs increase liability (Credit in vendor ledger)
     running_balance: Decimal
     notes: Optional[str] = None
+    grn_id: Optional[int] = None
+    grn_no: Optional[str] = None
+    payment_id: Optional[int] = None
+    payment_method: Optional[str] = None
+    po_id: Optional[int] = None
+    po_no: Optional[str] = None
+    items_count: Optional[int] = None
+    items_summary: Optional[str] = None
 
 
 class SupplierLedgerResponse(BaseModel):
@@ -75,7 +86,11 @@ class SupplierLedgerResponse(BaseModel):
     supplier_name: str
     contact_person: Optional[str] = None
     phone: Optional[str] = None
+    email: Optional[str] = None
+    tax_pin: Optional[str] = None
     current_balance: Decimal
+    total_invoiced: Decimal = Decimal("0.00")
+    total_paid: Decimal = Decimal("0.00")
     entries: List[SupplierLedgerEntry]
 
 

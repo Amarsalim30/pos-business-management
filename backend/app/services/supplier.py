@@ -102,6 +102,16 @@ def record_supplier_payment(db: Session, store_id: int, user_id: int, supplier_i
     return payment
 
 
+def get_supplier_payment_by_id(db: Session, store_id: int, payment_id: int) -> SupplierPayment:
+    payment = db.query(SupplierPayment).filter(
+        SupplierPayment.id == payment_id,
+        SupplierPayment.store_id == store_id
+    ).first()
+    if not payment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier payment not found")
+    return payment
+
+
 def get_supplier_ledger(db: Session, store_id: int, supplier_id: int) -> SupplierLedgerResponse:
     supplier = get_supplier_by_id(db, store_id, supplier_id)
 
@@ -117,25 +127,61 @@ def get_supplier_ledger(db: Session, store_id: int, supplier_id: int) -> Supplie
         SupplierPayment.supplier_id == supplier_id
     ).all()
 
+    total_invoiced = Decimal("0.00")
+    total_paid = Decimal("0.00")
+
     timeline = []
     for g in grns:
+        total_invoiced += Decimal(str(g.total_amount or "0.00"))
+        
+        # Build item summary string
+        item_names = []
+        for it in g.items:
+            if it.product and it.product.name:
+                item_names.append(it.product.name)
+        
+        items_summary = None
+        if item_names:
+            items_summary = ", ".join(item_names[:3])
+            if len(item_names) > 3:
+                items_summary += f" (+{len(item_names) - 3} more)"
+
         timeline.append({
+            "id": f"grn-{g.id}",
             "date": g.created_at,
             "type": "grn",
             "reference": g.grn_no + (f" (Inv: {g.invoice_number})" if g.invoice_number else ""),
             "debit": Decimal("0.00"),
             "credit": Decimal(str(g.total_amount)),
-            "notes": g.notes or "Goods Received Note"
+            "notes": g.notes or "Goods Received Note",
+            "grn_id": g.id,
+            "grn_no": g.grn_no,
+            "payment_id": None,
+            "payment_method": None,
+            "po_id": g.po_id,
+            "po_no": g.purchase_order.po_no if g.purchase_order else None,
+            "items_count": len(g.items),
+            "items_summary": items_summary
         })
 
     for p in payments:
+        total_paid += Decimal(str(p.amount or "0.00"))
         timeline.append({
+            "id": f"payment-{p.id}",
             "date": p.created_at,
             "type": "payment",
             "reference": f"Payment ({p.payment_method.upper()})" + (f": {p.reference}" if p.reference else ""),
             "debit": Decimal(str(p.amount)),
             "credit": Decimal("0.00"),
-            "notes": p.notes or f"Paid via {p.payment_method.upper()}"
+            "notes": p.notes or f"Paid via {p.payment_method.upper()}",
+            "grn_id": None,
+            "grn_no": None,
+            "payment_id": p.id,
+            "payment_method": p.payment_method,
+            "po_id": p.po_id,
+            "po_no": None,
+            "items_count": None,
+            "items_summary": None
         })
 
     # Sort chronologically
@@ -150,13 +196,22 @@ def get_supplier_ledger(db: Session, store_id: int, supplier_id: int) -> Supplie
             running_bal = Decimal("0.00")
 
         entries.append(SupplierLedgerEntry(
+            id=item["id"],
             date=item["date"],
             type=item["type"],
             reference=item["reference"],
             debit=item["debit"],
             credit=item["credit"],
             running_balance=running_bal,
-            notes=item["notes"]
+            notes=item["notes"],
+            grn_id=item["grn_id"],
+            grn_no=item["grn_no"],
+            payment_id=item["payment_id"],
+            payment_method=item["payment_method"],
+            po_id=item["po_id"],
+            po_no=item["po_no"],
+            items_count=item["items_count"],
+            items_summary=item["items_summary"]
         ))
 
     return SupplierLedgerResponse(
@@ -164,7 +219,11 @@ def get_supplier_ledger(db: Session, store_id: int, supplier_id: int) -> Supplie
         supplier_name=supplier.name,
         contact_person=supplier.contact_person,
         phone=supplier.phone,
+        email=supplier.email,
+        tax_pin=supplier.tax_pin,
         current_balance=supplier.balance,
+        total_invoiced=total_invoiced,
+        total_paid=total_paid,
         entries=entries
     )
 

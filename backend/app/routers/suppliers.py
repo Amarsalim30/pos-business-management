@@ -87,7 +87,28 @@ def post_supplier_payment(
 ):
     target_store_id = current_user.store_id or 1
     payment = supplier_service.record_supplier_payment(db, target_store_id, current_user.id, supplier_id, payment_in)
-    return SupplierPaymentResponse.model_validate(payment)
+    resp = SupplierPaymentResponse.model_validate(payment)
+    if payment.supplier:
+        resp.supplier_name = payment.supplier.name
+    if payment.user:
+        resp.authorizer_name = payment.user.full_name
+    return resp
+
+
+@router.get("/payments/{payment_id}", response_model=SupplierPaymentResponse)
+def get_supplier_payment_detail(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    target_store_id = current_user.store_id or 1
+    payment = supplier_service.get_supplier_payment_by_id(db, target_store_id, payment_id)
+    resp = SupplierPaymentResponse.model_validate(payment)
+    if payment.supplier:
+        resp.supplier_name = payment.supplier.name
+    if payment.user:
+        resp.authorizer_name = payment.user.full_name
+    return resp
 
 
 @router.get("/{supplier_id}/ledger", response_model=SupplierLedgerResponse)

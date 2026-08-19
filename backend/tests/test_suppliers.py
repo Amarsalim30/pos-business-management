@@ -76,11 +76,16 @@ def test_supplier_payment_and_ledger(staff_auth_client):
     assert ledger_res.status_code == 200
     ledger = ledger_res.json()
     assert float(ledger["current_balance"]) == 140000.0
+    assert float(ledger["total_invoiced"]) == 240000.0
+    assert float(ledger["total_paid"]) == 100000.0
     assert len(ledger["entries"]) == 2
 
     # Entry 1: GRN Credit of 240,000 -> Running Bal 240,000
     e1 = ledger["entries"][0]
     assert e1["type"] == "grn"
+    assert e1["grn_id"] is not None
+    assert "DN-88192" in e1["reference"]
+    assert "Felicity Solar Battery" in (e1["items_summary"] or "")
     assert float(e1["credit"]) == 240000.0
     assert float(e1["debit"]) == 0.0
     assert float(e1["running_balance"]) == 240000.0
@@ -88,9 +93,19 @@ def test_supplier_payment_and_ledger(staff_auth_client):
     # Entry 2: Payment Debit of 100,000 -> Running Bal 140,000
     e2 = ledger["entries"][1]
     assert e2["type"] == "payment"
+    assert e2["payment_id"] is not None
     assert float(e2["credit"]) == 0.0
     assert float(e2["debit"]) == 100000.0
     assert float(e2["running_balance"]) == 140000.0
+
+    # 5. Fetch single payment voucher detail
+    voucher_res = staff_auth_client.get(f"/api/v1/suppliers/payments/{e2['payment_id']}")
+    assert voucher_res.status_code == 200
+    voucher = voucher_res.json()
+    assert voucher["id"] == e2["payment_id"]
+    assert float(voucher["amount"]) == 100000.0
+    assert voucher["supplier_name"] == "Kenya Solar Wholesalers"
+    assert voucher["payment_method"] == "bank"
 
 
 def test_update_supplier(staff_auth_client):

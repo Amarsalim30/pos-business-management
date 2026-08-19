@@ -246,8 +246,10 @@ export interface SupplierPayment {
   id: number;
   store_id: number;
   supplier_id: number;
+  supplier_name?: string | null;
   po_id: number | null;
   user_id: number;
+  authorizer_name?: string | null;
   amount: number;
   payment_method: string;
   reference: string | null;
@@ -256,13 +258,22 @@ export interface SupplierPayment {
 }
 
 export interface SupplierLedgerEntry {
+  id: string;
   date: string;
   type: string;
   reference: string;
   debit: number;
   credit: number;
   running_balance: number;
-  notes: string | null;
+  notes?: string | null;
+  grn_id?: number | null;
+  grn_no?: string | null;
+  payment_id?: number | null;
+  payment_method?: string | null;
+  po_id?: number | null;
+  po_no?: string | null;
+  items_count?: number | null;
+  items_summary?: string | null;
 }
 
 export interface SupplierLedgerResponse {
@@ -270,7 +281,11 @@ export interface SupplierLedgerResponse {
   supplier_name: string;
   contact_person: string | null;
   phone: string | null;
+  email?: string | null;
+  tax_pin?: string | null;
   current_balance: number;
+  total_invoiced?: number;
+  total_paid?: number;
   entries: SupplierLedgerEntry[];
 }
 
@@ -334,6 +349,9 @@ export interface GRNItem {
   grn_id: number;
   product_id: number;
   product_name: string | null;
+  product_sku?: string | null;
+  unit?: string | null;
+  meters_per_roll?: number | null;
   unit_type: 'piece' | 'roll';
   quantity_received: number;
   rolls_received: number;

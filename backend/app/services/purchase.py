@@ -327,3 +327,14 @@ def get_grn_by_id(db: Session, store_id: int, grn_id: int) -> GoodsReceivedNote:
     if not grn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goods Received Note not found")
     return grn
+
+
+def get_grn_by_id_or_no(db: Session, store_id: int, identifier: str) -> GoodsReceivedNote:
+    query = db.query(GoodsReceivedNote).filter(GoodsReceivedNote.store_id == store_id)
+    if identifier.isdigit():
+        grn = query.filter((GoodsReceivedNote.id == int(identifier)) | (GoodsReceivedNote.grn_no == identifier)).first()
+    else:
+        grn = query.filter(GoodsReceivedNote.grn_no == identifier).first()
+    if not grn:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Goods Received Note '{identifier}' not found")
+    return grn

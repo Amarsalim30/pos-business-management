@@ -91,6 +91,9 @@ def _format_grn(grn) -> GRNResponse:
                 "grn_id": it.grn_id,
                 "product_id": it.product_id,
                 "product_name": it.product.name if it.product else None,
+                "product_sku": it.product.sku if it.product else None,
+                "unit": it.product.unit if it.product else "pcs",
+                "meters_per_roll": it.product.meters_per_roll if it.product else None,
                 "unit_type": it.unit_type,
                 "quantity_received": it.quantity_received,
                 "rolls_received": it.rolls_received,
@@ -205,10 +208,10 @@ def post_grn(
 
 @router.get("/grn/{grn_id}", response_model=GRNResponse)
 def get_grn_detail(
-    grn_id: int,
+    grn_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     target_store_id = current_user.store_id or 1
-    grn = purchase_service.get_grn_by_id(db, target_store_id, grn_id)
+    grn = purchase_service.get_grn_by_id_or_no(db, target_store_id, grn_id)
     return _format_grn(grn)

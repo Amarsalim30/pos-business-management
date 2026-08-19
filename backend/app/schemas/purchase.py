@@ -100,6 +100,9 @@ class GRNItemResponse(BaseModel):
     grn_id: int
     product_id: int
     product_name: Optional[str] = None
+    product_sku: Optional[str] = None
+    unit: Optional[str] = None
+    meters_per_roll: Optional[Decimal] = None
     unit_type: str
     quantity_received: Decimal
     rolls_received: int

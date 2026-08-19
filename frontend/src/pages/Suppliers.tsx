@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { apiFetch } from '../services/api';
 import type { Supplier, SupplierLedgerResponse, SupplierSummaryResponse, GoodsReceivedNote, SupplierPayment } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
+import { GRNDocumentDrawer } from '../components/GRNDocumentDrawer';
+import { SupplierPaymentVoucherDrawer } from '../components/SupplierPaymentVoucherDrawer';
 import {
   Truck,
   Plus,
@@ -25,7 +27,6 @@ import {
   ChevronDown,
   ExternalLink,
   Package,
-  Layers,
   Building2,
   Receipt
 } from 'lucide-react';
@@ -1017,277 +1018,40 @@ export const SuppliersPage: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* Universal Goods Received Note (GRN) Document Viewer Drawer / Modal */}
+      {/* Universal Goods Received Note (GRN) Document Viewer Drawer */}
       {/* ========================================================================= */}
-      {isGRNDrawerOpen && selectedGRNForDrawer && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[70] flex items-center justify-center p-4 print:p-0 print:bg-white print:static overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 my-6">
-            {/* Header */}
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between print:hidden shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-50 text-amber-800 rounded-2xl border border-amber-200">
-                  <Truck className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <span>Goods Received Note (GRN)</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-100 text-amber-900">
-                      {selectedGRNForDrawer.grn_no}
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Official Inbound Stock Delivery Consignment Slip
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                  <span>Print Slip</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsGRNDrawerOpen(false);
-                    setSelectedGRNForDrawer(null);
-                  }}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* GRN Document Body */}
-            <div className="p-6 overflow-y-auto flex-1 space-y-5 text-xs">
-              {/* Delivery Meta Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80">
-                <div className="space-y-1.5">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Supplier / Vendor Details</div>
-                  <div className="font-bold text-slate-900 text-sm">{selectedGRNForDrawer.supplier_name || 'Direct / Walk-in Vendor'}</div>
-                  {selectedGRNForDrawer.invoice_number && (
-                    <div className="text-slate-600 font-mono text-xs">
-                      Delivery Note / Inv: <strong className="text-slate-900">{selectedGRNForDrawer.invoice_number}</strong>
-                    </div>
-                  )}
-                  {selectedGRNForDrawer.po_no && (
-                    <div className="text-slate-600 font-mono text-xs">
-                      Purchase Order: <strong className="text-slate-900">{selectedGRNForDrawer.po_no}</strong>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-1.5 sm:text-right">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Consignment Meta</div>
-                  <div className="font-mono text-slate-700">
-                    Received Date: <strong className="text-slate-900">{new Date(selectedGRNForDrawer.delivery_date || selectedGRNForDrawer.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong>
-                  </div>
-                  {selectedGRNForDrawer.receiver_name && (
-                    <div className="text-slate-600">
-                      Received By: <strong className="text-slate-900">{selectedGRNForDrawer.receiver_name}</strong>
-                    </div>
-                  )}
-                  {selectedGRNForDrawer.notes && (
-                    <div className="text-slate-500 italic text-[11px]">
-                      Remarks: "{selectedGRNForDrawer.notes}"
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Itemized Consignment Table */}
-              <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-2xs">
-                <div className="px-4 py-2.5 bg-slate-100/75 border-b border-slate-200 flex items-center justify-between">
-                  <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                    <Package className="h-4 w-4 text-emerald-600" />
-                    <span>Delivered Items ({selectedGRNForDrawer.items.length})</span>
-                  </div>
-                  <span className="text-[11px] text-slate-500 font-mono font-medium">Physical Stock Verified</span>
-                </div>
-
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      <th className="px-3.5 py-2.5">Delivered Product</th>
-                      <th className="px-3.5 py-2.5">Packaging / Breakdown</th>
-                      <th className="px-3.5 py-2.5 text-right">Received Qty</th>
-                      <th className="px-3.5 py-2.5 text-right">Buying Cost (BP)</th>
-                      <th className="px-3.5 py-2.5 text-right">Line Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs text-slate-800 font-mono">
-                    {selectedGRNForDrawer.items.map((it) => (
-                      <tr key={it.id} className="hover:bg-slate-50/50">
-                        <td className="px-3.5 py-3 font-sans">
-                          <div className="font-bold text-slate-900">{it.product_name || `Product #${it.product_id}`}</div>
-                          {it.product_sku && <div className="text-[11px] text-slate-400 font-mono">SKU: {it.product_sku}</div>}
-                        </td>
-
-                        <td className="px-3.5 py-3 font-sans">
-                          {it.unit_type === 'roll' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200 text-[11px] font-semibold">
-                              <Layers className="h-3 w-3 text-sky-600" />
-                              {it.rolls_received || 0} rolls + {Number(it.loose_meters_received || 0).toFixed(1)}m loose
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-medium">
-                              Piece Unit ({it.unit || 'pcs'})
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="px-3.5 py-3 text-right font-bold text-slate-900">
-                          {it.unit_type === 'roll'
-                            ? `${Number(it.quantity_received).toFixed(1)}m`
-                            : `${Number(it.quantity_received)} ${it.unit || 'pcs'}`}
-                        </td>
-
-                        <td className="px-3.5 py-3 text-right text-slate-700">
-                          KES {Number(it.unit_cost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          <span className="text-[10px] text-slate-400 block font-sans">
-                            {it.unit_type === 'roll' ? 'per roll' : `per ${it.unit || 'pc'}`}
-                          </span>
-                        </td>
-
-                        <td className="px-3.5 py-3 text-right font-bold text-emerald-700">
-                          KES {Number(it.total_cost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Consignment Valuation Summary */}
-              <div className="flex justify-between items-center bg-slate-900 text-white p-4 rounded-2xl shadow-lg">
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Total Consignment Value</span>
-                  <span className="text-xs text-slate-300 font-medium">Recorded on Supplier Statement Ledger</span>
-                </div>
-                <div className="font-mono font-black text-emerald-400 text-lg">
-                  KES {Number(selectedGRNForDrawer.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50/80 rounded-b-3xl flex justify-end print:hidden shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsGRNDrawerOpen(false);
-                  setSelectedGRNForDrawer(null);
-                }}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs"
-              >
-                Close GRN Note
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <GRNDocumentDrawer
+        grn={selectedGRNForDrawer}
+        isOpen={isGRNDrawerOpen}
+        onClose={() => {
+          setIsGRNDrawerOpen(false);
+          setSelectedGRNForDrawer(null);
+        }}
+        onViewSupplierStatement={(suppId) => {
+          setIsGRNDrawerOpen(false);
+          setSelectedGRNForDrawer(null);
+          const supp = suppliers.find(s => s.id === suppId);
+          if (supp) loadLedger(supp);
+        }}
+      />
 
       {/* ========================================================================= */}
-      {/* Universal Supplier Payment Voucher Modal */}
+      {/* Universal Supplier Payment Voucher Drawer */}
       {/* ========================================================================= */}
-      {isPaymentVoucherOpen && selectedPaymentForModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[70] flex items-center justify-center p-4 print:p-0 print:bg-white print:static overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150 my-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 print:hidden">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100">
-                  <Receipt className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Supplier Payment Voucher</h3>
-                  <p className="text-[11px] text-slate-500 font-mono">Voucher #{selectedPaymentForModal.id}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="p-1.5 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 cursor-pointer"
-                  title="Print Voucher"
-                >
-                  <Printer className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPaymentVoucherOpen(false);
-                    setSelectedPaymentForModal(null);
-                  }}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Voucher Details */}
-            <div className="space-y-3 text-xs">
-              <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 text-center">
-                <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider block">Payment Settled</span>
-                <span className="text-2xl font-black text-emerald-700 font-mono mt-0.5 block">
-                  KES {Number(selectedPaymentForModal.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span className="text-[11px] text-emerald-800 font-semibold mt-1 inline-block uppercase">
-                  Method: {selectedPaymentForModal.payment_method}
-                </span>
-              </div>
-
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 text-[11px]">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Payee / Supplier:</span>
-                  <span className="font-bold text-slate-900">{selectedPaymentForModal.supplier_name || ledgerSupplier?.name || `Supplier #${selectedPaymentForModal.supplier_id}`}</span>
-                </div>
-                {selectedPaymentForModal.reference && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Transaction Reference:</span>
-                    <span className="font-mono font-bold text-slate-900">{selectedPaymentForModal.reference}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Date Paid:</span>
-                  <span className="font-mono text-slate-800">
-                    {new Date(selectedPaymentForModal.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                {selectedPaymentForModal.authorizer_name && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Authorized By:</span>
-                    <span className="font-medium text-slate-800">{selectedPaymentForModal.authorizer_name}</span>
-                  </div>
-                )}
-                {selectedPaymentForModal.notes && (
-                  <div className="pt-1.5 border-t border-slate-200 text-slate-600 italic">
-                    Note: "{selectedPaymentForModal.notes}"
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2 print:hidden">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPaymentVoucherOpen(false);
-                  setSelectedPaymentForModal(null);
-                }}
-                className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs"
-              >
-                Close Voucher
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SupplierPaymentVoucherDrawer
+        payment={selectedPaymentForModal}
+        isOpen={isPaymentVoucherOpen}
+        onClose={() => {
+          setIsPaymentVoucherOpen(false);
+          setSelectedPaymentForModal(null);
+        }}
+        onViewSupplierStatement={(suppId) => {
+          setIsPaymentVoucherOpen(false);
+          setSelectedPaymentForModal(null);
+          const supp = suppliers.find(s => s.id === suppId);
+          if (supp) loadLedger(supp);
+        }}
+      />
 
       {/* ========================================================================= */}
       {/* Create / Edit Supplier Modal */}

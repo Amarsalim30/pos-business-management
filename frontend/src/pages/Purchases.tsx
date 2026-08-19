@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
 import type { PurchaseOrder, GoodsReceivedNote, Supplier, Product } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
+import { GRNDocumentDrawer } from '../components/GRNDocumentDrawer';
 import {
   ShoppingBag,
   Plus,
@@ -14,7 +15,9 @@ import {
   CheckCircle2,
   Clock,
   Ban,
-  Loader2
+  Loader2,
+  Eye,
+  Truck
 } from 'lucide-react';
 
 export const PurchasesPage: React.FC = () => {
@@ -100,6 +103,24 @@ export const PurchasesPage: React.FC = () => {
   const [expReference, setExpReference] = useState('');
   const [savingExp, setSavingExp] = useState(false);
   const [expError, setExpError] = useState<string | null>(null);
+
+  // Universal GRN Document Drawer State
+  const [selectedGRNForDrawer, setSelectedGRNForDrawer] = useState<GoodsReceivedNote | null>(null);
+  const [isGRNDrawerOpen, setIsGRNDrawerOpen] = useState(false);
+  const [loadingGRNId, setLoadingGRNId] = useState<string | null>(null);
+
+  const handleViewGRNDocument = async (grnIdOrNo: number | string) => {
+    setLoadingGRNId(String(grnIdOrNo));
+    try {
+      const data = await apiFetch<GoodsReceivedNote>(`/api/v1/purchases/grn/${grnIdOrNo}`);
+      setSelectedGRNForDrawer(data);
+      setIsGRNDrawerOpen(true);
+    } catch (e) {
+      console.error('Failed to load GRN document details', e);
+    } finally {
+      setLoadingGRNId(null);
+    }
+  };
 
   useEffect(() => {
     loadPrerequisites();
@@ -549,12 +570,13 @@ export const PurchasesPage: React.FC = () => {
                   <th className="py-3.5 px-4">Items Received</th>
                   <th className="py-3.5 px-4 text-right">Value (KES)</th>
                   <th className="py-3.5 px-4">Received By</th>
+                  <th className="py-3.5 px-4 text-center">Document</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
                 {grnsLoading && grns.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400 font-normal">
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-normal">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
                         <span>Loading goods received notes...</span>
@@ -563,15 +585,22 @@ export const PurchasesPage: React.FC = () => {
                   </tr>
                 ) : grns.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400 font-normal">
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-normal">
                       No Goods Received Notes on record.
                     </td>
                   </tr>
                 ) : (
                   grns.map((g) => (
-                    <tr key={g.id} className="hover:bg-slate-50/75 transition-colors">
+                    <tr
+                      key={g.id}
+                      onClick={() => handleViewGRNDocument(g.id)}
+                      className="hover:bg-amber-50/40 transition-colors cursor-pointer group"
+                    >
                       <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                        {g.grn_no}
+                        <div className="flex items-center gap-1.5 text-slate-900 group-hover:text-amber-700 underline decoration-transparent group-hover:decoration-amber-400 underline-offset-2 transition-colors">
+                          <Truck className="h-3.5 w-3.5 text-slate-400 group-hover:text-amber-600" />
+                          <span>{g.grn_no}</span>
+                        </div>
                         <div className="text-xs text-slate-400 font-normal mt-0.5">
                           {new Date(g.created_at).toLocaleDateString()}
                         </div>
@@ -590,7 +619,7 @@ export const PurchasesPage: React.FC = () => {
                       <td className="py-3.5 px-4 text-xs text-slate-700">
                         {g.items.map(it => (
                           <div key={it.id} className="truncate max-w-xs">
-                            • {it.product_name} ({it.quantity_received} {it.unit_type === 'roll' ? 'm' : 'units'})
+                            • {it.product_name} ({it.quantity_received} {it.unit_type === 'roll' ? 'm' : (it.unit || 'pcs')})
                           </div>
                         ))}
                       </td>
@@ -600,6 +629,25 @@ export const PurchasesPage: React.FC = () => {
                       <td className="py-3.5 px-4 text-xs text-slate-600">
                         {g.receiver_name || 'Staff'}
                       </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewGRNDocument(g.id);
+                          }}
+                          disabled={loadingGRNId === String(g.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                          title="View Delivery GRN Slip"
+                        >
+                          {loadingGRNId === String(g.id) ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-700" />
+                          ) : (
+                            <Eye className="h-3.5 w-3.5 text-amber-700" />
+                          )}
+                          <span>View Doc</span>
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -607,7 +655,7 @@ export const PurchasesPage: React.FC = () => {
                 {/* Loading More GRNs */}
                 {grnsLoadingMore && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/40 text-xs font-bold">
+                    <td colSpan={7} className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/40 text-xs font-bold">
                       <div className="flex items-center justify-center space-x-2">
                         <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
                         <span>Loading more GRNs...</span>
@@ -1073,6 +1121,16 @@ export const PurchasesPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Universal Goods Received Note (GRN) Document Viewer Drawer */}
+      <GRNDocumentDrawer
+        grn={selectedGRNForDrawer}
+        isOpen={isGRNDrawerOpen}
+        onClose={() => {
+          setIsGRNDrawerOpen(false);
+          setSelectedGRNForDrawer(null);
+        }}
+      />
     </div>
   );
 };

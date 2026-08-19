@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../services/api';
-import type { InventoryItem, StockMovement, Supplier } from '../types';
+import type { InventoryItem, StockMovement, Supplier, GoodsReceivedNote } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
+import { GRNDocumentDrawer } from '../components/GRNDocumentDrawer';
 import {
   Boxes,
   Search,
@@ -119,6 +120,21 @@ export const InventoryPage: React.FC = () => {
   const [grnLines, setGrnLines] = useState<GRNLineItem[]>([]);
   const [receiveError, setReceiveError] = useState<string | null>(null);
   const [submittingGRN, setSubmittingGRN] = useState(false);
+
+  // Universal GRN Document Drawer State
+  const [selectedGRNForDrawer, setSelectedGRNForDrawer] = useState<GoodsReceivedNote | null>(null);
+  const [isGRNDrawerOpen, setIsGRNDrawerOpen] = useState(false);
+  const [postedGRN, setPostedGRN] = useState<GoodsReceivedNote | null>(null);
+
+  const handleOpenGRNDrawer = async (grnIdOrNo: number | string) => {
+    try {
+      const data = await apiFetch<GoodsReceivedNote>(`/api/v1/purchases/grn/${grnIdOrNo}`);
+      setSelectedGRNForDrawer(data);
+      setIsGRNDrawerOpen(true);
+    } catch (e) {
+      console.error('Failed to load GRN document', e);
+    }
+  };
 
   // Load suppliers
   const fetchSuppliers = async () => {
@@ -391,8 +407,9 @@ export const InventoryPage: React.FC = () => {
       reloadItems();
       reloadMovements();
       fetchSuppliers();
+      setPostedGRN(res);
       setGrnSuccessMsg(`Successfully posted ${res?.grn_no || 'Goods Received Note'} (${payloadItems.length} products received). Stock balances & supplier ledger updated.`);
-      setTimeout(() => setGrnSuccessMsg(null), 7000);
+      setTimeout(() => setGrnSuccessMsg(null), 10000);
     } catch (err: any) {
       setReceiveError(err.message || 'Failed to post Goods Received Note');
     } finally {
@@ -747,8 +764,20 @@ export const InventoryPage: React.FC = () => {
                         <td className="px-4 py-3 font-mono font-bold text-slate-900">
                           {m.new_quantity}
                         </td>
-                        <td className="px-4 py-3 font-mono text-[11px] text-slate-600">
-                          {m.reference_id || '—'}
+                        <td className="px-4 py-3 font-mono text-[11px]">
+                          {m.reference_id && (m.reference_id.startsWith('GRN') || m.reference_id.startsWith('DN')) ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenGRNDrawer(m.reference_id!)}
+                              className="text-amber-700 hover:text-amber-900 font-bold underline decoration-slate-300 hover:decoration-amber-500 cursor-pointer flex items-center gap-1"
+                              title="Inspect Delivery GRN Document"
+                            >
+                              <Truck className="h-3 w-3 text-amber-600" />
+                              <span>{m.reference_id}</span>
+                            </button>
+                          ) : (
+                            <span className="text-slate-600">{m.reference_id || '—'}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-slate-500">
                           {m.note || '—'}
@@ -944,12 +973,29 @@ export const InventoryPage: React.FC = () => {
 
       {/* Success Notification Banner */}
       {grnSuccessMsg && (
-        <div className="fixed top-5 right-5 z-50 flex items-center space-x-2.5 rounded-xl bg-emerald-900 text-white px-4 py-3 shadow-2xl border border-emerald-700 animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="fixed top-5 right-5 z-50 flex items-center space-x-3 rounded-2xl bg-slate-900 text-white px-4 py-3 shadow-2xl border border-emerald-500/60 animate-in fade-in slide-in-from-top-4 duration-200">
           <ShieldCheck className="h-5 w-5 text-emerald-400 shrink-0" />
-          <span className="text-xs font-semibold">{grnSuccessMsg}</span>
+          <div className="text-xs">
+            <span className="font-semibold text-slate-100">{grnSuccessMsg}</span>
+          </div>
+          {postedGRN && (
+            <button
+              onClick={() => {
+                setSelectedGRNForDrawer(postedGRN);
+                setIsGRNDrawerOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-xs shrink-0 active:scale-95"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              <span>View GRN Slip</span>
+            </button>
+          )}
           <button
-            onClick={() => setGrnSuccessMsg(null)}
-            className="text-emerald-300 hover:text-white ml-2 cursor-pointer p-0.5"
+            onClick={() => {
+              setGrnSuccessMsg(null);
+              setPostedGRN(null);
+            }}
+            className="text-slate-400 hover:text-white cursor-pointer p-1 rounded-lg hover:bg-slate-800"
           >
             <X className="h-4 w-4" />
           </button>
@@ -1558,6 +1604,16 @@ export const InventoryPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Universal Goods Received Note (GRN) Document Viewer Drawer */}
+      <GRNDocumentDrawer
+        grn={selectedGRNForDrawer}
+        isOpen={isGRNDrawerOpen}
+        onClose={() => {
+          setIsGRNDrawerOpen(false);
+          setSelectedGRNForDrawer(null);
+        }}
+      />
     </div>
   );
 };

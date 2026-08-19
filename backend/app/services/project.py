@@ -11,7 +11,7 @@ from app.models.sale import Customer
 from app.models.inventory import Inventory, StockMovement
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectExpenseCreate,
-    ProjectMaterialAllocationCreate, ProjectIncomeCreate,
+    ProjectMaterialAllocationCreate, ProjectMaterialBatchAllocationCreate, ProjectIncomeCreate,
     ProjectResponse, ProjectDetailResponse, ProjectExpenseResponse,
     ProjectIncomeResponse, ProjectSummaryResponse
 )
@@ -215,6 +215,131 @@ def allocate_project_material(
     db.commit()
     db.refresh(expense)
     return expense
+
+
+def allocate_project_materials_batch(
+    db: Session, store_id: int, user_id: int, project_id: int, batch_in: ProjectMaterialBatchAllocationCreate
+) -> List[ProjectExpense]:
+    project = get_project_by_id(db, store_id, project_id)
+
+    # 1. Pre-validate all products and inventory sufficiency
+    product_demands = {}  # product_id -> total base units required
+    validated_items = []
+
+    for item in batch_in.items:
+        product = db.query(Product).filter(Product.id == item.product_id, Product.store_id == store_id).first()
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product with ID #{item.product_id} not found in this store"
+            )
+
+        inv = db.query(Inventory).filter(
+            Inventory.product_id == product.id,
+            Inventory.store_id == store_id
+        ).first()
+
+        current_stock = inv.quantity if inv else Decimal("0.00")
+
+        # Determine base stock deduction
+        if product.unit_type == "roll":
+            meters_per_roll = Decimal(str(product.meters_per_roll or 100))
+            if item.unit_sold == "roll":
+                base_qty = item.quantity * meters_per_roll
+            else:
+                base_qty = item.quantity
+        else:
+            base_qty = item.quantity
+
+        product_demands[product.id] = product_demands.get(product.id, Decimal("0.00")) + base_qty
+        validated_items.append((product, inv, current_stock, item, base_qty))
+
+    # Check aggregated stock sufficiency
+    for product_id, total_needed in product_demands.items():
+        inv = db.query(Inventory).filter(
+            Inventory.product_id == product_id,
+            Inventory.store_id == store_id
+        ).first()
+        current_stock = inv.quantity if inv else Decimal("0.00")
+        if current_stock < total_needed:
+            prod_name = db.query(Product.name).filter(Product.id == product_id).scalar() or f"#{product_id}"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Insufficient inventory for {prod_name}. Available: {current_stock}, Required: {total_needed}"
+            )
+
+    # 2. Deduct inventory, log stock movement, create ProjectExpense and ProjectIncome atomically
+    created_expenses = []
+
+    for product, inv, _, item, base_qty in validated_items:
+        if not inv:
+            inv = Inventory(product_id=product.id, store_id=store_id, quantity=Decimal("0.00"))
+            db.add(inv)
+
+        prev_qty = inv.quantity
+        inv.quantity -= base_qty
+        new_qty = inv.quantity
+
+        movement = StockMovement(
+            product_id=product.id,
+            store_id=store_id,
+            type="project_out",
+            quantity=base_qty,
+            unit_sold=item.unit_sold,
+            previous_quantity=prev_qty,
+            new_quantity=new_qty,
+            reference_id=f"PROJ-{project.id}",
+            note=f"Batch allocation to project #{project.id} ({project.name})",
+            user_id=user_id
+        )
+        db.add(movement)
+
+        # Calculate cost price per unit
+        if product.unit_type == "roll":
+            meters_per_roll = Decimal(str(product.meters_per_roll or 100))
+            if item.unit_sold == "roll":
+                unit_cost = product.cost_price or (product.cost_per_meter * meters_per_roll if product.cost_per_meter else Decimal("0.00"))
+            else:
+                unit_cost = product.cost_per_meter or (product.cost_price / meters_per_roll if product.cost_price else Decimal("0.00"))
+        else:
+            unit_cost = product.cost_price or Decimal("0.00")
+
+        total_cost = unit_cost * item.quantity
+        total_billed = item.unit_price * item.quantity
+
+        expense = ProjectExpense(
+            project_id=project.id,
+            source="inventory",
+            category="materials",
+            product_id=product.id,
+            quantity=item.quantity,
+            unit_sold=item.unit_sold,
+            unit_price=item.unit_price,
+            amount=total_billed,
+            cost_price=unit_cost,
+            cost_amount=total_cost,
+            description=item.description or f"Material: {product.name}",
+            date=datetime.now(timezone.utc),
+            created_by=user_id
+        )
+        db.add(expense)
+        created_expenses.append(expense)
+
+        income = ProjectIncome(
+            project_id=project.id,
+            description=f"Materials: {product.name} ({item.quantity} {item.unit_sold})",
+            amount=total_billed,
+            source="materials",
+            date=datetime.now(timezone.utc),
+            created_by=user_id
+        )
+        db.add(income)
+
+    db.commit()
+    for exp in created_expenses:
+        db.refresh(exp)
+
+    return created_expenses
 
 
 def add_project_expense(

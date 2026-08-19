@@ -386,9 +386,8 @@ export const SuppliersPage: React.FC = () => {
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        supp.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
-                      }`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${supp.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
+                        }`}>
                         {supp.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
@@ -399,7 +398,7 @@ export const SuppliersPage: React.FC = () => {
                         title="View Statement Ledger"
                       >
                         <FileText className="h-3.5 w-3.5" />
-                        Ledger
+                        Statement
                       </button>
                       <button
                         onClick={() => {
@@ -874,9 +873,8 @@ export const SuppliersPage: React.FC = () => {
                               {new Date(entry.date).toLocaleDateString()}
                             </td>
                             <td className="py-2 px-2 uppercase font-bold text-slate-700">
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                                entry.type === 'grn' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                              }`}>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${entry.type === 'grn' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                                }`}>
                                 {entry.type}
                               </span>
                             </td>

@@ -76,6 +76,10 @@ class CustomerLedgerEntry(BaseModel):
     debit: Optional[Decimal] = None
     credit: Optional[Decimal] = None
     running_balance: Decimal
+    sale_id: Optional[int] = None
+    items_count: Optional[int] = None
+    items_summary: Optional[str] = None
+    payment_method: Optional[str] = None
 
 
 class CustomerLedgerResponse(BaseModel):

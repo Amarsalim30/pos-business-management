@@ -8,7 +8,7 @@ from app.models.user import User
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse, ProjectDetailResponse,
     ProjectExpenseCreate, ProjectExpenseResponse,
-    ProjectMaterialAllocationCreate,
+    ProjectMaterialAllocationCreate, ProjectMaterialBatchAllocationCreate,
     ProjectIncomeCreate, ProjectIncomeResponse, ProjectSummaryResponse
 )
 from app.services import project as project_service
@@ -117,6 +117,43 @@ def allocate_materials(
         creator_name=current_user.full_name,
         created_at=expense.created_at
     )
+
+
+@router.post("/{project_id}/materials/batch", response_model=List[ProjectExpenseResponse], status_code=status.HTTP_201_CREATED)
+def allocate_materials_batch(
+    project_id: int,
+    batch_in: ProjectMaterialBatchAllocationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    expenses = project_service.allocate_project_materials_batch(
+        db, target_store_id, current_user.id, project_id, batch_in
+    )
+    return [
+        ProjectExpenseResponse(
+            id=exp.id,
+            project_id=exp.project_id,
+            source=exp.source,
+            category=exp.category,
+            product_id=exp.product_id,
+            product_name=exp.product.name if exp.product else None,
+            quantity=exp.quantity,
+            unit_sold=exp.unit_sold,
+            unit_price=exp.unit_price,
+            amount=exp.amount,
+            cost_price=exp.cost_price,
+            cost_amount=exp.cost_amount,
+            description=exp.description,
+            vendor=exp.vendor,
+            receipt_no=exp.receipt_no,
+            date=exp.date,
+            created_by=exp.created_by,
+            creator_name=current_user.full_name,
+            created_at=exp.created_at
+        )
+        for exp in expenses
+    ]
 
 
 @router.post("/{project_id}/expenses", response_model=ProjectExpenseResponse, status_code=status.HTTP_201_CREATED)

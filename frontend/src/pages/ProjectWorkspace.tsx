@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../services/api';
 import type { ProjectDetail, Product, Category, Customer } from '../types';
+import { MaterialAllocationModal } from '../components/MaterialAllocationModal';
 import {
   ArrowLeft,
   Sun,
@@ -19,8 +20,7 @@ import {
   Edit,
   User,
   UserPlus,
-  ExternalLink,
-  CheckCircle2
+  ExternalLink
 } from 'lucide-react';
 
 export const ProjectWorkspacePage: React.FC = () => {
@@ -28,24 +28,15 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'bom' | 'expenses' | 'incomes'>('bom');
+  const [bomSearch, setBomSearch] = useState('');
 
-  // Product Catalog & Allocation State
+  // Product Catalog & Allocation State (for Modal)
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [productSearch, setProductSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-
-  // Allocation Form State
-  const [allocUnitSold, setAllocUnitSold] = useState<'piece' | 'roll' | 'meter'>('piece');
-  const [allocQuantity, setAllocQuantity] = useState('1');
-  const [allocUnitPrice, setAllocUnitPrice] = useState('');
-  const [allocDescription, setAllocDescription] = useState('');
-  const [allocating, setAllocating] = useState(false);
-  const [allocError, setAllocError] = useState<string | null>(null);
-  const [allocSuccess, setAllocSuccess] = useState<string | null>(null);
+  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
 
   // Edit Project Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -59,7 +50,7 @@ export const ProjectWorkspacePage: React.FC = () => {
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  // Quick Customer Creation State in Edit Modal
+  // Quick Customer Creation State
   const [isQuickCustOpen, setIsQuickCustOpen] = useState(false);
   const [quickName, setQuickName] = useState('');
   const [quickPhone, setQuickPhone] = useState('');
@@ -80,12 +71,60 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   // Client Payment Form State
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [payDescription, setPayDescription] = useState('Initial Project Deposit');
+  const [payDescription, setPayDescription] = useState('Payment installment');
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('bank');
   const [payRef, setPayRef] = useState('');
   const [savingPayment, setSavingPayment] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+
+  const [deletingExpenseId, setDeletingExpenseId] = useState<number | null>(null);
+  const [deletingIncomeId, setDeletingIncomeId] = useState<number | null>(null);
+
+  const loadProject = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await apiFetch<ProjectDetail>(`/api/v1/projects/${id}`);
+      setProject(data);
+      if (data) {
+        setEditName(data.name || '');
+        setEditCustomerId(data.customer_id || '');
+        setEditClientName(data.client_name || '');
+        setEditClientPhone(data.client_phone || '');
+        setEditQuotedAmount(String(data.quoted_amount ?? '0'));
+        setEditDescription(data.description || '');
+        setEditStatus(data.status || 'active');
+      }
+    } catch (e: any) {
+      console.error('Failed to load project detail', e);
+      setLoadError(e.message || 'Failed to load project details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadProductsAndCategories = async () => {
+    try {
+      const [prodData, catData] = await Promise.all([
+        apiFetch<Product[]>('/api/v1/products/'),
+        apiFetch<Category[]>('/api/v1/categories/')
+      ]);
+      setProducts(prodData || []);
+      setCategories(catData || []);
+    } catch (e) {
+      console.error('Failed to load products/categories', e);
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const custData = await apiFetch<Customer[]>('/api/v1/customers/');
+      setCustomers(custData || []);
+    } catch (e) {
+      console.error('Failed to load customers', e);
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -95,46 +134,36 @@ export const ProjectWorkspacePage: React.FC = () => {
     }
   }, [id]);
 
-  const loadProject = async () => {
-    setLoading(true);
-    try {
-      const data = await apiFetch<ProjectDetail>(`/api/v1/projects/${id}`);
-      setProject(data);
-      setEditName(data.name);
-      setEditCustomerId(data.customer_id || '');
-      setEditClientName(data.client_name);
-      setEditClientPhone(data.client_phone || '');
-      setEditQuotedAmount(String(data.quoted_amount || '0'));
-      setEditDescription(data.description || '');
-      setEditStatus(data.status);
-    } catch (e) {
-      console.error('Failed to load project detail', e);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ALL HOOKS UNCONDITIONALLY DECLARED AT TOP LEVEL
+  const bomItems = useMemo(() => {
+    return (project?.expenses || []).filter(e => e.source === 'inventory');
+  }, [project?.expenses]);
 
-  const loadProductsAndCategories = async () => {
-    try {
-      const [prodsData, catsData] = await Promise.all([
-        apiFetch<Product[]>('/api/v1/products/'),
-        apiFetch<Category[]>('/api/v1/categories/')
-      ]);
-      setProducts(prodsData || []);
-      setCategories(catsData || []);
-    } catch (e) {
-      console.error('Failed to load products/categories', e);
-    }
-  };
+  const filteredBomItems = useMemo(() => {
+    const q = bomSearch.toLowerCase().trim();
+    if (!q) return bomItems;
+    return bomItems.filter(item =>
+      (item.product_name && item.product_name.toLowerCase().includes(q)) ||
+      (item.description && item.description.toLowerCase().includes(q))
+    );
+  }, [bomItems, bomSearch]);
 
-  const loadCustomers = async () => {
-    try {
-      const data = await apiFetch<Customer[]>('/api/v1/customers/');
-      setCustomers(data);
-    } catch (e) {
-      console.error('Failed to load customers', e);
-    }
-  };
+  const externalExpenses = useMemo(() => {
+    return (project?.expenses || []).filter(e => e.source === 'external');
+  }, [project?.expenses]);
+
+  const clientPayments = useMemo(() => {
+    return (project?.incomes || []).filter(i => i.source === 'client_payment');
+  }, [project?.incomes]);
+
+  const quotedVal = Number(project?.quoted_amount) || 0;
+  const collectedVal = Number(project?.client_payments_total) || 0;
+  const balanceRemaining = Math.max(0, quotedVal - collectedVal);
+  const paymentProgressPct = quotedVal > 0 ? Math.min(100, Math.round((collectedVal / quotedVal) * 100)) : 0;
+
+  const linkedCustomer = useMemo(() => {
+    return customers.find(c => c.id === project?.customer_id);
+  }, [customers, project?.customer_id]);
 
   const handleSelectCustomerInEdit = (custId: number | '') => {
     setEditCustomerId(custId);
@@ -157,17 +186,15 @@ export const ProjectWorkspacePage: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({
           name: quickName.trim(),
-          phone: quickPhone.trim() || null,
-          email: quickEmail.trim() || null,
-          address: quickAddress.trim() || null
+          phone: quickPhone.trim() || undefined,
+          email: quickEmail.trim() || undefined,
+          address: quickAddress.trim() || undefined,
         })
       });
-
-      await loadCustomers();
+      setCustomers(prev => [created, ...prev]);
       setEditCustomerId(created.id);
       setEditClientName(created.name);
       setEditClientPhone(created.phone || '');
-
       setIsQuickCustOpen(false);
       setQuickName('');
       setQuickPhone('');
@@ -182,25 +209,25 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   const handleSaveEditProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!project || !editName.trim() || !editClientName.trim()) return;
+    if (!project) return;
 
     setSavingEdit(true);
     setEditError(null);
     try {
-      await apiFetch(`/api/v1/projects/${project.id}`, {
+      const updated = await apiFetch<ProjectDetail>(`/api/v1/projects/${project.id}`, {
         method: 'PUT',
         body: JSON.stringify({
           name: editName.trim(),
+          customer_id: editCustomerId ? Number(editCustomerId) : null,
           client_name: editClientName.trim(),
           client_phone: editClientPhone.trim() || null,
-          customer_id: editCustomerId ? Number(editCustomerId) : null,
-          quoted_amount: parseFloat(editQuotedAmount) || 0,
           description: editDescription.trim() || null,
+          quoted_amount: parseFloat(editQuotedAmount) || 0,
           status: editStatus
         })
       });
+      setProject(updated);
       setIsEditModalOpen(false);
-      loadProject();
     } catch (err: any) {
       setEditError(err.message || 'Failed to update project details');
     } finally {
@@ -208,112 +235,11 @@ export const ProjectWorkspacePage: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (newStatus: string) => {
-    if (!project) return;
-    try {
-      await apiFetch(`/api/v1/projects/${project.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status: newStatus })
-      });
-      loadProject();
-    } catch (e: any) {
-      alert(e.message || 'Failed to update status');
-    }
-  };
-
-  const handleSelectProduct = (p: Product) => {
-    setSelectedProduct(p);
-    const initialUnit = p.unit_type === 'roll' ? 'meter' : 'piece';
-    setAllocUnitSold(initialUnit);
-    if (p.unit_type === 'roll') {
-      setAllocUnitPrice(String(p.price_per_meter || p.selling_price || ''));
-    } else {
-      setAllocUnitPrice(String(p.selling_price || ''));
-    }
-    setAllocQuantity('1');
-    setAllocDescription('');
-    setAllocError(null);
-    setAllocSuccess(null);
-  };
-
-  const handleAllocateMaterial = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!project || !selectedProduct) return;
-
-    const qty = parseFloat(allocQuantity);
-    const price = parseFloat(allocUnitPrice);
-    if (!qty || qty <= 0 || isNaN(price)) {
-      setAllocError('Please enter a valid quantity and client unit price');
-      return;
-    }
-
-    setAllocating(true);
-    setAllocError(null);
-    setAllocSuccess(null);
-    try {
-      await apiFetch(`/api/v1/projects/${project.id}/materials`, {
-        method: 'POST',
-        body: JSON.stringify({
-          product_id: selectedProduct.id,
-          unit_sold: allocUnitSold,
-          quantity: qty,
-          unit_price: price,
-          description: allocDescription.trim() || null
-        })
-      });
-      setAllocSuccess(`Added ${qty} ${allocUnitSold} of ${selectedProduct.name} to project materials.`);
-      setSelectedProduct(null);
-      setAllocQuantity('1');
-      setAllocUnitPrice('');
-      setAllocDescription('');
-      loadProject();
-      loadProductsAndCategories();
-    } catch (err: any) {
-      setAllocError(err.message || 'Failed to add material');
-    } finally {
-      setAllocating(false);
-    }
-  };
-
-  const handleDeleteExpense = async (expenseId: number, isInventory: boolean) => {
-    if (!project) return;
-    const confirmMsg = isInventory
-      ? 'Remove this item from the project? The physical quantity will be restored back to store inventory.'
-      : 'Delete this expense record?';
-
-    if (!window.confirm(confirmMsg)) return;
-
-    try {
-      await apiFetch(`/api/v1/projects/${project.id}/expenses/${expenseId}`, {
-        method: 'DELETE'
-      });
-      loadProject();
-      loadProductsAndCategories();
-    } catch (e: any) {
-      alert(e.message || 'Failed to delete record');
-    }
-  };
-
-  const handleDeleteIncome = async (incomeId: number) => {
-    if (!project) return;
-    if (!window.confirm('Delete this client payment record?')) return;
-
-    try {
-      await apiFetch(`/api/v1/projects/${project.id}/incomes/${incomeId}`, {
-        method: 'DELETE'
-      });
-      loadProject();
-    } catch (e: any) {
-      alert(e.message || 'Failed to delete payment');
-    }
-  };
-
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!project) return;
-
-    const amt = parseFloat(expAmount);
-    if (!amt || amt <= 0) {
+    const amountVal = parseFloat(expAmount);
+    if (!amountVal || amountVal <= 0) {
       setExpError('Please enter a valid expense amount');
       return;
     }
@@ -324,12 +250,11 @@ export const ProjectWorkspacePage: React.FC = () => {
       await apiFetch(`/api/v1/projects/${project.id}/expenses`, {
         method: 'POST',
         body: JSON.stringify({
-          source: 'external',
           category: expCategory,
-          amount: amt,
-          description: expDescription.trim() || null,
-          vendor: expVendor.trim() || null,
-          receipt_no: expReceiptNo.trim() || null
+          amount: amountVal,
+          description: expDescription.trim() || undefined,
+          vendor: expVendor.trim() || undefined,
+          receipt_no: expReceiptNo.trim() || undefined,
         })
       });
       setIsExpenseModalOpen(false);
@@ -339,7 +264,7 @@ export const ProjectWorkspacePage: React.FC = () => {
       setExpReceiptNo('');
       loadProject();
     } catch (err: any) {
-      setExpError(err.message || 'Failed to save expense');
+      setExpError(err.message || 'Failed to add expense');
     } finally {
       setSavingExpense(false);
     }
@@ -348,9 +273,8 @@ export const ProjectWorkspacePage: React.FC = () => {
   const handleSavePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!project) return;
-
-    const amt = parseFloat(payAmount);
-    if (!amt || amt <= 0) {
+    const amountVal = parseFloat(payAmount);
+    if (!amountVal || amountVal <= 0) {
       setPayError('Please enter a valid payment amount');
       return;
     }
@@ -361,11 +285,11 @@ export const ProjectWorkspacePage: React.FC = () => {
       await apiFetch(`/api/v1/projects/${project.id}/incomes`, {
         method: 'POST',
         body: JSON.stringify({
-          description: payDescription.trim() || 'Client payment',
-          amount: amt,
+          description: payDescription.trim() || 'Client Payment',
+          amount: amountVal,
           source: 'client_payment',
           payment_method: payMethod,
-          reference: payRef.trim() || null
+          reference: payRef.trim() || undefined,
         })
       });
       setIsPaymentModalOpen(false);
@@ -379,160 +303,176 @@ export const ProjectWorkspacePage: React.FC = () => {
     }
   };
 
-  const filteredProducts = products.filter(p => {
-    const matchesCat = selectedCategory === 'all' || p.category_id === selectedCategory;
-    const q = productSearch.toLowerCase().trim();
-    const matchesSearch = !q || p.name.toLowerCase().includes(q) || (p.sku && p.sku.toLowerCase().includes(q));
-    return matchesCat && matchesSearch;
-  });
+  const handleDeleteExpense = async (expenseId: number, isInventory: boolean) => {
+    if (!project) return;
+    const confirmMsg = isInventory
+      ? 'Return this allocated material to store stock and remove from project cost?'
+      : 'Delete this project expense record?';
 
-  if (loading || !project) {
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeletingExpenseId(expenseId);
+    try {
+      await apiFetch(`/api/v1/projects/${project.id}/expenses/${expenseId}`, {
+        method: 'DELETE'
+      });
+      loadProject();
+      if (isInventory) {
+        loadProductsAndCategories();
+      }
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete expense');
+    } finally {
+      setDeletingExpenseId(null);
+    }
+  };
+
+  const handleDeleteIncome = async (incomeId: number) => {
+    if (!project) return;
+    if (!window.confirm('Delete this client payment record?')) return;
+
+    setDeletingIncomeId(incomeId);
+    try {
+      await apiFetch(`/api/v1/projects/${project.id}/incomes/${incomeId}`, {
+        method: 'DELETE'
+      });
+      loadProject();
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete payment');
+    } finally {
+      setDeletingIncomeId(null);
+    }
+  };
+
+  if (loading) {
     return (
       <div className="bg-white p-20 rounded-3xl border border-slate-200 text-center text-slate-400 space-y-3">
         <Loader2 className="h-10 w-10 mx-auto text-amber-600 animate-spin" />
-        <p className="text-sm font-semibold">Opening Project Details...</p>
+        <div className="text-sm font-bold text-slate-700">Loading Solar & Electrical Project...</div>
       </div>
     );
   }
 
-  const bomItems = project.expenses.filter(e => e.source === 'inventory');
-  const externalExpenses = project.expenses.filter(e => e.source === 'external');
-  const clientPayments = project.incomes.filter(i => i.source === 'client_payment');
-
-  const quotedVal = Number(project.quoted_amount) || 0;
-  const collectedVal = Number(project.client_payments_total) || 0;
-  const balanceRemaining = Math.max(0, quotedVal - collectedVal);
-  const paymentProgressPct = quotedVal > 0 ? Math.min(100, Math.round((collectedVal / quotedVal) * 100)) : 0;
-
-  // Margin preview calculation for currently selected product
-  const allocQtyNum = parseFloat(allocQuantity) || 0;
-  const allocPriceNum = parseFloat(allocUnitPrice) || 0;
-  let allocCostUnit = 0;
-  if (selectedProduct) {
-    if (selectedProduct.unit_type === 'roll') {
-      const rollMeters = Number(selectedProduct.meters_per_roll) || 100;
-      if (allocUnitSold === 'roll') {
-        allocCostUnit = Number(selectedProduct.cost_price) || (Number(selectedProduct.cost_per_meter || 0) * rollMeters);
-      } else {
-        allocCostUnit = Number(selectedProduct.cost_per_meter) || (Number(selectedProduct.cost_price || 0) / rollMeters);
-      }
-    } else {
-      allocCostUnit = Number(selectedProduct.cost_price || 0);
-    }
+  if (!project) {
+    return (
+      <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-4 max-w-md mx-auto my-12 shadow-sm">
+        <div className="p-3 bg-amber-50 text-amber-600 w-12 h-12 rounded-2xl mx-auto flex items-center justify-center">
+          <Package className="h-6 w-6" />
+        </div>
+        <div>
+          <h2 className="text-base font-bold text-slate-900">Project Not Found</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            {loadError || 'The requested project could not be found or has been removed.'}
+          </p>
+        </div>
+        <Link
+          to="/projects"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>Back to All Projects</span>
+        </Link>
+      </div>
+    );
   }
-  const allocTotalCost = allocCostUnit * allocQtyNum;
-  const allocTotalBilled = allocPriceNum * allocQtyNum;
-  const allocGrossMargin = allocTotalBilled - allocTotalCost;
-  const allocMarginPct = allocTotalBilled > 0 ? Math.round((allocGrossMargin / allocTotalBilled) * 100) : 0;
-
-  const linkedCustomer = customers.find(c => c.id === project.customer_id);
 
   return (
     <div className="space-y-6">
-      {/* Top Breadcrumb & Status Navigation */}
+      {/* Top Breadcrumb & Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center space-x-3">
           <Link
             to="/projects"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 transition-all shadow-xs cursor-pointer"
+            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
           >
-            <ArrowLeft className="h-4 w-4" />
-            <span>All Projects</span>
+            <ArrowLeft className="h-5 w-5" />
           </Link>
-          <span className="text-slate-300">/</span>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900">{project.name}</h1>
-            <span
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                project.status === 'active'
-                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                  : project.status === 'completed'
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  : project.status === 'draft'
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                  : project.status === 'commissioning'
-                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                  : 'bg-rose-50 text-rose-700 border border-rose-200'
-              }`}
-            >
-              {project.status === 'active'
-                ? 'In Progress'
-                : project.status === 'commissioning'
-                ? 'Testing & Handover'
-                : project.status}
-            </span>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-amber-600 uppercase tracking-wider font-mono">
+                Project #{project.id}
+              </span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                project.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
+                project.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                project.status === 'commissioning' ? 'bg-purple-100 text-purple-800' :
+                project.status === 'cancelled' ? 'bg-rose-100 text-rose-800' :
+                'bg-slate-100 text-slate-700'
+              }`}>
+                {project.status}
+              </span>
+            </div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <span>{project.name}</span>
+              <button
+                onClick={() => setIsEditModalOpen(true)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+                title="Edit Project Details"
+              >
+                <Edit className="h-4 w-4" />
+              </button>
+            </h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsEditModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 transition-all shadow-xs cursor-pointer"
-          >
-            <Edit className="h-3.5 w-3.5 text-slate-500" />
-            <span>Edit Project</span>
-          </button>
-
-          <select
-            value={project.status}
-            onChange={(e) => handleStatusChange(e.target.value)}
-            className="bg-white border border-slate-200 text-xs text-slate-800 px-3 py-2 rounded-xl font-bold focus:outline-none shadow-xs"
-          >
-            <option value="draft">Stage: Draft Proposal</option>
-            <option value="active">Stage: Active (In Progress)</option>
-            <option value="commissioning">Stage: Testing & Commissioning</option>
-            <option value="completed">Stage: Completed & Handed Over</option>
-            <option value="cancelled">Stage: Cancelled</option>
-          </select>
-
+        {/* Global Print & Quick Action Buttons */}
+        <div className="flex items-center space-x-2">
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all shadow-xs cursor-pointer"
           >
-            <Printer className="h-4 w-4 text-slate-300" />
-            <span>Print Job Card</span>
+            <Printer className="h-4 w-4 text-slate-500" />
+            <span>Print Project Summary</span>
+          </button>
+
+          <button
+            onClick={() => setIsPaymentModalOpen(true)}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+          >
+            <Banknote className="h-4 w-4" />
+            <span>+ Record Client Payment</span>
           </button>
         </div>
       </div>
 
-      {/* Client Information Header Card with Direct Link */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
+      {/* Project Meta Card & Financial Health Bar */}
+      <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-2 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Client Details</span>
             {project.customer_id && (
               <Link
-                to="/customers"
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100"
+                to={`/customers?id=${project.customer_id}`}
+                className="text-xs font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1"
               >
-                <span>View Customer Profile</span>
+                <span>View Full Client Account</span>
                 <ExternalLink className="h-3 w-3" />
               </Link>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 text-sm font-semibold text-slate-900">
-            <span className="text-base font-bold text-slate-900 flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-4 text-sm font-semibold text-slate-800">
+            <div className="flex items-center gap-1.5">
               <User className="h-4 w-4 text-slate-400" />
-              {project.client_name}
-            </span>
+              <span>{project.client_name}</span>
+            </div>
 
             {project.client_phone && (
               <div className="flex items-center gap-2">
                 <a
                   href={`tel:${project.client_phone}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium font-mono"
                 >
-                  <Phone className="h-3 w-3" />
+                  <Phone className="h-3 w-3 text-slate-400" />
                   {project.client_phone}
                 </a>
                 <a
-                  href={`https://wa.me/${project.client_phone.replace(/[^0-9]/g, '')}`}
+                  href={`https://wa.me/${String(project.client_phone).replace(/[^0-9]/g, '')}`}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-medium"
                 >
-                  <MessageSquare className="h-3 w-3" />
+                  <MessageSquare className="h-3 w-3 text-emerald-600" />
                   WhatsApp
                 </a>
               </div>
@@ -649,325 +589,169 @@ export const ProjectWorkspacePage: React.FC = () => {
         </button>
       </div>
 
-      {/* Tab 1: Materials & Store Catalog */}
+      {/* Tab 1: Materials & Equipment (BOM) */}
       {activeTab === 'bom' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left / Main Table: Current Project BOM Items (7 cols) */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Installed Materials (BOM)</h3>
-                <p className="text-xs text-slate-500">Items issued from store inventory with tracked cost (Buying Price)</p>
-              </div>
-
-              <div className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl font-mono">
-                Materials Margin: +KES {Number(project.materials_profit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </div>
+        <div className="space-y-4">
+          {/* Action Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-3xl border border-slate-200/80 shadow-xs">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                Installed Materials & Bill of Materials (BOM)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Physical materials issued from store inventory with tracked Buying Price (BP) and project profit margins
+              </p>
             </div>
 
-            <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm">
-              <div className="max-h-[560px] overflow-y-auto">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 sticky top-0">
-                    <tr>
-                      <th className="p-3.5">Item / Material</th>
-                      <th className="p-3.5 text-right">Quantity</th>
-                      <th className="p-3.5 text-right">Store Cost</th>
-                      <th className="p-3.5 text-right">Client Price</th>
-                      <th className="p-3.5 text-right">Margin</th>
-                      <th className="p-3.5 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {bomItems.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="p-12 text-center text-slate-400 space-y-2">
-                          <Package className="h-8 w-8 mx-auto text-slate-300" />
-                          <p className="text-xs">No materials added yet. Select items from store stock on the right.</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      bomItems.map((m) => {
-                        const lineCost = Number(m.cost_amount) || 0;
-                        const lineBilled = Number(m.amount) || 0;
-                        const lineProfit = lineBilled - lineCost;
-                        return (
-                          <tr key={m.id} className="hover:bg-slate-50/80">
-                            <td className="p-3.5 font-bold text-slate-900">
-                              <div>{m.product_name || m.description}</div>
-                              {m.description && m.description !== `Material: ${m.product_name}` && (
-                                <div className="text-[10px] text-slate-400 font-normal">{m.description}</div>
-                              )}
-                            </td>
-                            <td className="p-3.5 text-right font-mono font-bold text-slate-900">
-                              {Number(m.quantity)} {m.unit_sold}
-                            </td>
-                            <td className="p-3.5 text-right font-mono text-slate-500">
-                              KES {lineCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="p-3.5 text-right font-mono font-bold text-slate-900">
-                              KES {lineBilled.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="p-3.5 text-right font-mono font-bold text-emerald-600">
-                              +KES {lineProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="p-3.5 text-center">
-                              <button
-                                onClick={() => handleDeleteExpense(m.id, true)}
-                                title="Return to store inventory & remove"
-                                className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+            <div className="flex flex-wrap items-center gap-2">
+              {bomItems.length > 3 && (
+                <div className="relative min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Filter installed BOM..."
+                    value={bomSearch}
+                    onChange={(e) => setBomSearch(e.target.value)}
+                    className="w-full pl-8.5 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsMaterialModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Materials from Store Stock</span>
+              </button>
+
+              <div className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-2xl font-mono">
+                Materials Margin: +KES {Number(project.materials_profit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
             </div>
           </div>
 
-          {/* Right / Visual Inventory Allocator Panel (5 cols) */}
-          <div className="lg:col-span-5 space-y-4">
-            <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-amber-50 text-amber-600 rounded-xl">
-                    <Sun className="h-4 w-4" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-900">Add Materials from Store Stock</h3>
-                </div>
-                <span className="text-xs text-slate-400 font-semibold">{filteredProducts.length} items</span>
-              </div>
+          {/* Full-Width BOM Items Table */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm">
+            <div className="max-h-[600px] overflow-y-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 sticky top-0">
+                  <tr>
+                    <th className="p-4">Item / Material Specification</th>
+                    <th className="p-4 text-right">Quantity</th>
+                    <th className="p-4 text-right">Unit Store Cost</th>
+                    <th className="p-4 text-right">Unit Client Price</th>
+                    <th className="p-4 text-right">Total Store Cost</th>
+                    <th className="p-4 text-right">Total Billed</th>
+                    <th className="p-4 text-right">Gross Margin</th>
+                    <th className="p-4 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {bomItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-16 text-center text-slate-400 space-y-3">
+                        <Package className="h-10 w-10 mx-auto text-slate-300" />
+                        <div className="text-sm font-bold text-slate-700">No materials issued to this project yet</div>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                          Click below to browse store stock and stage inverters, solar panels, cables, and fittings in batch.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsMaterialModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>Add Materials from Store Stock</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ) : filteredBomItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-10 text-center text-slate-400 space-y-1">
+                        <p className="text-xs font-semibold">No installed materials match "{bomSearch}"</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredBomItems.map((m) => {
+                      const lineCost = Number(m.cost_amount) || 0;
+                      const lineBilled = Number(m.amount) || 0;
+                      const lineProfit = lineBilled - lineCost;
+                      const qty = Number(m.quantity) || 0;
+                      const unitCost = qty > 0 ? lineCost / qty : 0;
+                      const unitPrice = qty > 0 ? lineBilled / qty : 0;
+                      const marginPct = lineBilled > 0 ? Math.round((lineProfit / lineBilled) * 100) : 0;
 
-              {allocSuccess && (
-                <div className="p-3 bg-emerald-50 text-emerald-800 text-xs rounded-2xl border border-emerald-200 flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>{allocSuccess}</span>
-                </div>
-              )}
-
-              {/* Product Search & Category Filter */}
-              <div className="space-y-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search panels, inverters, cables, batteries..."
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
-                  />
-                </div>
-
-                {/* Category Filter Pills */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                  <button
-                    onClick={() => setSelectedCategory('all')}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
-                      selectedCategory === 'all'
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    All
-                  </button>
-                  {categories.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => setSelectedCategory(c.id)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
-                        selectedCategory === c.id
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Product Selection List */}
-              <div className="max-h-[240px] overflow-y-auto space-y-1.5 pr-1">
-                {filteredProducts.length === 0 ? (
-                  <div className="p-6 text-center text-slate-400 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    No matching products found in store inventory.
-                  </div>
-                ) : (
-                  filteredProducts.map((p) => {
-                    const isSelected = selectedProduct?.id === p.id;
-                    const stockQty = Number(p.current_stock ?? 0);
-                    const isOutOfStock = stockQty <= 0;
-                    return (
-                      <button
-                        type="button"
-                        key={p.id}
-                        onClick={() => handleSelectProduct(p)}
-                        className={`w-full text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                          isSelected
-                            ? 'bg-amber-50/80 border-amber-400 ring-2 ring-amber-500/20 shadow-xs'
-                            : 'bg-slate-50/60 border-slate-200/70 hover:bg-slate-50 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-slate-900 leading-snug truncate">{p.name}</div>
-                          <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
-                            <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                              isOutOfStock
-                                ? 'bg-rose-50 text-rose-600 border border-rose-200'
-                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            }`}>
-                              {p.formatted_stock || `${stockQty} in stock`}
+                      return (
+                        <tr key={m.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-4 font-bold text-slate-900">
+                            <div>{m.product_name || m.description}</div>
+                            {m.description && m.description !== `Material: ${m.product_name}` && (
+                              <div className="text-[11px] text-slate-400 font-normal mt-0.5">{m.description}</div>
+                            )}
+                          </td>
+                          <td className="p-4 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                            {qty} <span className="text-[11px] text-slate-500 font-medium">{m.unit_sold}</span>
+                          </td>
+                          <td className="p-4 text-right font-mono text-slate-500 whitespace-nowrap">
+                            KES {unitCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-4 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                            KES {unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-4 text-right font-mono text-slate-500 whitespace-nowrap">
+                            KES {lineCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-4 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                            KES {lineBilled.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-4 text-right font-mono whitespace-nowrap">
+                            <span className="font-bold text-emerald-700">
+                              +KES {lineProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </span>
-                          </div>
-                        </div>
-
-                        <div className="text-right shrink-0">
-                          <div className="text-xs font-bold text-slate-900 font-mono">
-                            KES {Number(p.selling_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            Cost: KES {Number(p.cost_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </div>
-                        </div>
-                      </button>
-                    );
-
-                  })
+                            <span className="text-[10px] text-emerald-600 block font-sans">
+                              ({marginPct}% margin)
+                            </span>
+                          </td>
+                          <td className="p-4 text-center whitespace-nowrap">
+                            <button
+                              onClick={() => handleDeleteExpense(m.id, true)}
+                              disabled={deletingExpenseId === m.id}
+                              title="Return to store inventory & remove from project"
+                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              {deletingExpenseId === m.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+                {bomItems.length > 0 && (
+                  <tfoot className="bg-slate-50 font-bold border-t-2 border-slate-200 text-xs">
+                    <tr>
+                      <td className="p-4 uppercase tracking-wider text-slate-700">Total Materials ({bomItems.length} items)</td>
+                      <td colSpan={3}></td>
+                      <td className="p-4 text-right font-mono text-slate-600">
+                        KES {Number(project.materials_cost).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-right font-mono text-slate-900">
+                        KES {Number(project.materials_billed).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-right font-mono text-emerald-700">
+                        +KES {Number(project.materials_profit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
                 )}
-              </div>
-
-              {/* Allocation Calculator & Action Box */}
-              {selectedProduct ? (
-                <form onSubmit={handleAllocateMaterial} className="pt-3 border-t border-slate-100 space-y-3">
-                  {allocError && (
-                    <div className="p-2.5 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">
-                      {allocError}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-slate-900">Issue Item: {selectedProduct.name}</span>
-                      <div className="text-[11px] text-emerald-700 font-semibold mt-0.5">
-                        Stock Available: {selectedProduct.formatted_stock || `${selectedProduct.current_stock || 0} ${selectedProduct.unit}`}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedProduct(null)}
-                      className="text-slate-400 hover:text-slate-600 p-1"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {selectedProduct.unit_type === 'roll' && (
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Issue Unit</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAllocUnitSold('meter');
-                            setAllocUnitPrice(String(selectedProduct.price_per_meter || ''));
-                          }}
-                          className={`py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-                            allocUnitSold === 'meter'
-                              ? 'bg-amber-100 border-amber-400 text-amber-900'
-                              : 'bg-slate-50 border-slate-200 text-slate-600'
-                          }`}
-                        >
-                          Cut Meters
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAllocUnitSold('roll');
-                            setAllocUnitPrice(String(selectedProduct.price_per_roll || selectedProduct.selling_price || ''));
-                          }}
-                          className={`py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-                            allocUnitSold === 'roll'
-                              ? 'bg-amber-100 border-amber-400 text-amber-900'
-                              : 'bg-slate-50 border-slate-200 text-slate-600'
-                          }`}
-                        >
-                          Whole Rolls ({selectedProduct.meters_per_roll || 100}m)
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Quantity</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        required
-                        value={allocQuantity}
-                        onChange={(e) => setAllocQuantity(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:bg-white focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Client Billed Price (KES)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        required
-                        value={allocUnitPrice}
-                        onChange={(e) => setAllocUnitPrice(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:bg-white focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Usage / Site Location Note</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Inverter AC coupling, roof array mount"
-                      value={allocDescription}
-                      onChange={(e) => setAllocDescription(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Margin & Profit Preview Box */}
-                  <div className="p-3 bg-amber-50/80 rounded-2xl border border-amber-200/80 text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Store Cost (Buying Price):</span>
-                      <span className="font-mono font-medium">KES {allocTotalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Client Price (Selling Price):</span>
-                      <span className="font-mono font-bold text-slate-900">KES {allocTotalBilled.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="flex justify-between border-t border-amber-200 pt-1 font-bold text-emerald-700">
-                      <span>Gross Margin ({allocMarginPct}%):</span>
-                      <span className="font-mono">+KES {allocGrossMargin.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={allocating}
-                    className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {allocating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                    Issue from Stock to Project
-                  </button>
-                </form>
-              ) : (
-                <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 text-xs">
-                  Select an item from store stock above to set quantity and pricing.
-                </div>
-              )}
+              </table>
             </div>
           </div>
         </div>
@@ -977,142 +761,162 @@ export const ProjectWorkspacePage: React.FC = () => {
       {activeTab === 'expenses' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Labor & Site Expenses</h3>
-              <p className="text-xs text-slate-500">Technician installation fees, transportation, subcontracting, and local hardware</p>
-            </div>
+            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
+              Project Labor & External Expenses
+            </h3>
             <button
               onClick={() => setIsExpenseModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
               <Plus className="h-4 w-4" />
-              Log Expense
+              <span>+ Add Labor / Expense</span>
             </button>
           </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm">
-            <div className="max-h-[500px] overflow-y-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 sticky top-0">
+          <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="p-4">Category</th>
+                  <th className="p-4">Description</th>
+                  <th className="p-4">Vendor / Payee</th>
+                  <th className="p-4">Receipt / Voucher</th>
+                  <th className="p-4">Date</th>
+                  <th className="p-4 text-right">Amount (KES)</th>
+                  <th className="p-4 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {externalExpenses.length === 0 ? (
                   <tr>
-                    <th className="p-3.5">Category</th>
-                    <th className="p-3.5">Description</th>
-                    <th className="p-3.5">Vendor / Payee</th>
-                    <th className="p-3.5">Receipt #</th>
-                    <th className="p-3.5 text-right">Amount (KES)</th>
-                    <th className="p-3.5 text-center">Action</th>
+                    <td colSpan={7} className="p-8 text-center text-slate-400">
+                      No labor, transport, or subcontractor expenses logged yet.
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {externalExpenses.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-12 text-center text-slate-400 space-y-2">
-                        <Wrench className="h-8 w-8 mx-auto text-slate-300" />
-                        <p className="text-xs">No external labor or transport expenses logged.</p>
+                ) : (
+                  externalExpenses.map((e) => (
+                    <tr key={e.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-4 font-bold capitalize text-slate-700">
+                        <span className="px-2 py-0.5 bg-slate-100 rounded-md">{e.category}</span>
+                      </td>
+                      <td className="p-4 text-slate-800 font-semibold">{e.description || '-'}</td>
+                      <td className="p-4 text-slate-600">{e.vendor || '-'}</td>
+                      <td className="p-4 font-mono text-slate-500">{e.receipt_no || '-'}</td>
+                      <td className="p-4 text-slate-400">{new Date(e.date).toLocaleDateString()}</td>
+                      <td className="p-4 text-right font-mono font-bold text-rose-600">
+                        KES {Number(e.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => handleDeleteExpense(e.id, false)}
+                          disabled={deletingExpenseId === e.id}
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
-                  ) : (
-                    externalExpenses.map((exp) => (
-                      <tr key={exp.id} className="hover:bg-slate-50/80">
-                        <td className="p-3.5 font-bold capitalize text-slate-900">{exp.category}</td>
-                        <td className="p-3.5 text-slate-700">{exp.description || '—'}</td>
-                        <td className="p-3.5 text-slate-600">{exp.vendor || '—'}</td>
-                        <td className="p-3.5 text-slate-500 font-mono">{exp.receipt_no || '—'}</td>
-                        <td className="p-3.5 text-right font-mono font-bold text-rose-600">
-                          KES {Number(exp.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-3.5 text-center">
-                          <button
-                            onClick={() => handleDeleteExpense(exp.id, false)}
-                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                )}
+              </tbody>
+              {externalExpenses.length > 0 && (
+                <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
+                  <tr>
+                    <td colSpan={5} className="p-4 uppercase text-slate-600">Total External Expenses</td>
+                    <td className="p-4 text-right font-mono text-rose-600">
+                      KES {Number(project.external_expenses_total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           </div>
         </div>
       )}
 
-      {/* Tab 3: Client Payments & Milestones */}
+      {/* Tab 3: Client Payments */}
       {activeTab === 'incomes' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Client Payment Records</h3>
-              <p className="text-xs text-slate-500">Track client deposits, progress payments, and final handover settlements</p>
-            </div>
+            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
+              Client Payments & Project Incomes
+            </h3>
             <button
               onClick={() => setIsPaymentModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
               <Plus className="h-4 w-4" />
-              Record Client Payment
+              <span>+ Record Payment</span>
             </button>
           </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm">
-            <div className="max-h-[500px] overflow-y-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 sticky top-0">
+          <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="p-4">Payment Description</th>
+                  <th className="p-4">Method</th>
+                  <th className="p-4">Reference / Txn #</th>
+                  <th className="p-4">Date</th>
+                  <th className="p-4 text-right">Amount (KES)</th>
+                  <th className="p-4 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {clientPayments.length === 0 ? (
                   <tr>
-                    <th className="p-3.5">Date</th>
-                    <th className="p-3.5">Description</th>
-                    <th className="p-3.5">Payment Method</th>
-                    <th className="p-3.5">Reference / Txn #</th>
-                    <th className="p-3.5 text-right">Amount (KES)</th>
-                    <th className="p-3.5 text-center">Action</th>
+                    <td colSpan={6} className="p-8 text-center text-slate-400">
+                      No client deposit or stage payments recorded yet.
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {clientPayments.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-12 text-center text-slate-400 space-y-2">
-                        <Banknote className="h-8 w-8 mx-auto text-slate-300" />
-                        <p className="text-xs">No client payments recorded yet.</p>
+                ) : (
+                  clientPayments.map((i) => (
+                    <tr key={i.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-4 font-bold text-slate-900">{i.description}</td>
+                      <td className="p-4 font-semibold uppercase text-slate-600">{i.payment_method || 'other'}</td>
+                      <td className="p-4 font-mono text-slate-500">{i.reference || '-'}</td>
+                      <td className="p-4 text-slate-400">{new Date(i.date).toLocaleDateString()}</td>
+                      <td className="p-4 text-right font-mono font-bold text-emerald-700">
+                        KES {Number(i.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => handleDeleteIncome(i.id)}
+                          disabled={deletingIncomeId === i.id}
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
-                  ) : (
-                    clientPayments.map((inc) => (
-                      <tr key={inc.id} className="hover:bg-slate-50/80">
-                        <td className="p-3.5 text-slate-500 font-mono">{new Date(inc.date).toLocaleDateString()}</td>
-                        <td className="p-3.5 font-bold text-slate-900">{inc.description}</td>
-                        <td className="p-3.5 uppercase font-semibold text-slate-700">{inc.payment_method}</td>
-                        <td className="p-3.5 text-slate-500 font-mono">{inc.reference || '—'}</td>
-                        <td className="p-3.5 text-right font-mono font-bold text-emerald-600">
-                          +KES {Number(inc.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="p-3.5 text-center">
-                          <button
-                            onClick={() => handleDeleteIncome(inc.id)}
-                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                )}
+              </tbody>
+              {clientPayments.length > 0 && (
+                <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
+                  <tr>
+                    <td colSpan={4} className="p-4 uppercase text-slate-600">Total Client Payments Collected</td>
+                    <td className="p-4 text-right font-mono text-emerald-700">
+                      KES {Number(project.client_payments_total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           </div>
         </div>
       )}
 
       {/* Edit Project Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Edit className="h-4 w-4 text-amber-600" />
-                <span>Edit Project Details & Scope</span>
+                <Sun className="h-5 w-5 text-amber-600" />
+                <span>Edit Project Details</span>
               </h3>
               <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="h-5 w-5" />
@@ -1228,7 +1032,7 @@ export const ProjectWorkspacePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1316,14 +1120,14 @@ export const ProjectWorkspacePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsQuickCustOpen(false)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingQuickCust}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                 >
                   {savingQuickCust && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Save & Select Customer
@@ -1418,7 +1222,7 @@ export const ProjectWorkspacePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsExpenseModalOpen(false)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1509,7 +1313,7 @@ export const ProjectWorkspacePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsPaymentModalOpen(false)}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1525,6 +1329,22 @@ export const ProjectWorkspacePage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* High-Speed Material Picker & Batch Allocator Modal */}
+      {project && (
+        <MaterialAllocationModal
+          isOpen={isMaterialModalOpen}
+          onClose={() => setIsMaterialModalOpen(false)}
+          projectId={project.id}
+          projectName={project.name}
+          products={products}
+          categories={categories}
+          onMaterialsAllocated={() => {
+            loadProject();
+            loadProductsAndCategories();
+          }}
+        />
       )}
     </div>
   );

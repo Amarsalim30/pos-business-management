@@ -129,6 +129,10 @@ export interface CustomerLedgerEntry {
   debit?: number | null;
   credit?: number | null;
   running_balance: number;
+  sale_id?: number | null;
+  items_count?: number | null;
+  items_summary?: string | null;
+  payment_method?: string | null;
 }
 
 export interface CustomerLedgerResponse {

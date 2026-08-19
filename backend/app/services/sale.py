@@ -233,6 +233,17 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
     events = []
     
     for s in sales:
+        # Build concise items summary
+        items_count = len(s.items) if s.items else 0
+        if s.items:
+            first_few = [f"{int(it.quantity) if it.quantity % 1 == 0 else float(it.quantity)}x {it.product.name if it.product else 'Item'}" for it in s.items[:2]]
+            if items_count > 2:
+                items_summary = ", ".join(first_few) + f" (+{items_count - 2} more)"
+            else:
+                items_summary = ", ".join(first_few)
+        else:
+            items_summary = None
+
         events.append({
             "id": f"sale-{s.id}",
             "date": s.created_at,
@@ -242,7 +253,11 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
             "notes": s.notes,
             "debit": s.total_amount,
             "credit": None,
-            "amount": s.total_amount
+            "amount": s.total_amount,
+            "sale_id": s.id,
+            "items_count": items_count,
+            "items_summary": items_summary,
+            "payment_method": s.payment_method
         })
 
         if s.voided_at:
@@ -255,7 +270,11 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
                 "notes": f"Reason: {s.void_reason or 'Cancelled'}",
                 "debit": None,
                 "credit": s.total_amount,
-                "amount": -s.total_amount
+                "amount": -s.total_amount,
+                "sale_id": s.id,
+                "items_count": items_count,
+                "items_summary": items_summary,
+                "payment_method": s.payment_method
             })
         else:
             # Check for payments attached to this sale
@@ -274,7 +293,11 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
                         "notes": p.notes or f"Paid for {s.invoice_no}",
                         "debit": None,
                         "credit": p.amount,
-                        "amount": -p.amount
+                        "amount": -p.amount,
+                        "sale_id": s.id,
+                        "items_count": None,
+                        "items_summary": None,
+                        "payment_method": p.payment_method
                     })
             elif s.status == "paid" or s.payment_method != "credit":
                 # Legacy / direct cash checkout payment without separate payment row
@@ -288,7 +311,11 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
                     "notes": s.notes or f"Paid at checkout for {s.invoice_no}",
                     "debit": None,
                     "credit": s.total_amount,
-                    "amount": -s.total_amount
+                    "amount": -s.total_amount,
+                    "sale_id": s.id,
+                    "items_count": None,
+                    "items_summary": None,
+                    "payment_method": s.payment_method
                 })
 
     for p in standalone_payments:
@@ -306,7 +333,11 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
             "notes": p.notes or "Account unallocated settlement",
             "debit": None,
             "credit": p.amount,
-            "amount": -p.amount
+            "amount": -p.amount,
+            "sale_id": None,
+            "items_count": None,
+            "items_summary": None,
+            "payment_method": p.payment_method
         })
 
     # Sort chronological
@@ -329,7 +360,11 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
             notes=ev["notes"],
             debit=ev["debit"],
             credit=ev["credit"],
-            running_balance=max(Decimal("0.00"), running)
+            running_balance=max(Decimal("0.00"), running),
+            sale_id=ev.get("sale_id"),
+            items_count=ev.get("items_count"),
+            items_summary=ev.get("items_summary"),
+            payment_method=ev.get("payment_method")
         ))
 
     total_debt = max(Decimal("0.00"), running)

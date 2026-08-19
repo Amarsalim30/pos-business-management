@@ -120,4 +120,87 @@ def test_project_lifecycle_and_inventory_allocation(staff_auth_client):
     assert updated_detail["customer_name"] == "General Solar Estates Ltd"
     assert updated_detail["status"] == "commissioning"
 
+    # 10. Test project deletion
+    del_proj = staff_auth_client.delete(f"/api/v1/projects/{proj_id}")
+    assert del_proj.status_code == 200
+
+
+def test_project_batch_material_allocation(staff_auth_client):
+    # 1. Create two products with stock
+    prod1_res = staff_auth_client.post("/api/v1/products/", json={
+        "name": "6mm Twin PV Cable",
+        "unit": "meter",
+        "unit_type": "roll",
+        "meters_per_roll": 100.0,
+        "selling_price": 22000.0,
+        "price_per_meter": 250.0,
+        "price_per_roll": 22000.0,
+        "cost_price": 16000.0,
+        "cost_per_meter": 160.0,
+        "initial_stock": 500.0  # 5 rolls (500m)
+    })
+    assert prod1_res.status_code == 201
+    prod1 = prod1_res.json()
+
+    prod2_res = staff_auth_client.post("/api/v1/products/", json={
+        "name": "MC4 Connectors Pair",
+        "unit": "pcs",
+        "unit_type": "piece",
+        "cost_price": 150.0,
+        "selling_price": 350.0,
+        "initial_stock": 50.0
+    })
+    assert prod2_res.status_code == 201
+    prod2 = prod2_res.json()
+
+    # 2. Create Project
+    proj_res = staff_auth_client.post("/api/v1/projects/", json={
+        "name": "Watamu Solar Grid-Tie",
+        "client_name": "Dr. Amina",
+        "client_phone": "+254722998877",
+        "quoted_amount": 300000.0,
+        "status": "active"
+    })
+    assert proj_res.status_code == 201
+    proj_id = proj_res.json()["id"]
+
+    # 3. Batch Allocate 80 meters cable + 10 pairs MC4
+    batch_res = staff_auth_client.post(f"/api/v1/projects/{proj_id}/materials/batch", json={
+        "items": [
+            {
+                "product_id": prod1["id"],
+                "unit_sold": "meter",
+                "quantity": 80.0,
+                "unit_price": 250.0,
+                "description": "DC array string cabling"
+            },
+            {
+                "product_id": prod2["id"],
+                "unit_sold": "piece",
+                "quantity": 10.0,
+                "unit_price": 350.0,
+                "description": "Array termination pairs"
+            }
+        ]
+    })
+    assert batch_res.status_code == 201
+    expenses = batch_res.json()
+    assert len(expenses) == 2
+
+    # Check inventory deductions
+    inv_res = staff_auth_client.get("/api/v1/inventory/")
+    inv_map = {i["product_id"]: float(i["quantity"]) for i in inv_res.json()}
+    assert inv_map[prod1["id"]] == 420.0  # 500 - 80
+    assert inv_map[prod2["id"]] == 40.0   # 50 - 10
+
+    # Verify project financial calculations
+    detail_res = staff_auth_client.get(f"/api/v1/projects/{proj_id}")
+    detail = detail_res.json()
+    # Cable billed: 80 * 250 = 20,000, cost: 80 * 160 = 12,800
+    # MC4 billed: 10 * 350 = 3,500, cost: 10 * 150 = 1,500
+    # Total materials billed: 23,500, total cost: 14,300
+    assert float(detail["materials_billed"]) == 23500.0
+    assert float(detail["materials_cost"]) == 14300.0
+    assert float(detail["materials_profit"]) == 9200.0
+
 

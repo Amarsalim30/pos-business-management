@@ -51,6 +51,10 @@ class ProjectMaterialAllocationCreate(BaseModel):
     description: Optional[str] = None
 
 
+class ProjectMaterialBatchAllocationCreate(BaseModel):
+    items: List[ProjectMaterialAllocationCreate] = Field(..., min_length=1)
+
+
 class ProjectExpenseResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

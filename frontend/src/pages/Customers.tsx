@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { apiFetch } from '../services/api';
-import type { Customer, CustomerLedgerResponse, CustomerSummaryResponse } from '../types';
+import type { Customer, CustomerLedgerResponse, CustomerSummaryResponse, Sale } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
+import { InvoiceDrawer } from '../components/InvoiceDrawer';
 import {
   Users,
   UserPlus,
@@ -18,7 +19,17 @@ import {
   Loader2,
   Edit3,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  Share2,
+  Receipt,
+  ExternalLink,
+  Package,
+  CheckCircle2,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 
 export const CustomersPage: React.FC = () => {
@@ -42,11 +53,18 @@ export const CustomersPage: React.FC = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Live Statement Ledger Modal
+  // Live Statement Ledger Modal & Interactive Hub
   const [ledgerCustomer, setLedgerCustomer] = useState<Customer | null>(null);
   const [ledgerData, setLedgerData] = useState<CustomerLedgerResponse | null>(null);
   const [loadingLedger, setLoadingLedger] = useState(false);
+  const [ledgerFilter, setLedgerFilter] = useState<'all' | 'sales' | 'payments'>('all');
+  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const ledgerPrintRef = useRef<HTMLDivElement>(null);
+
+  // Universal Invoice Document Drawer State
+  const [selectedSaleForDrawer, setSelectedSaleForDrawer] = useState<Sale | null>(null);
+  const [isInvoiceDrawerOpen, setIsInvoiceDrawerOpen] = useState(false);
+  const [loadingSaleId, setLoadingSaleId] = useState<number | null>(null);
 
   // Payment Modal
   const [paymentCustomer, setPaymentCustomer] = useState<Customer | null>(null);

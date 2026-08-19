@@ -96,6 +96,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 <span className="font-bold text-slate-900">{sale.customer_name}</span>
               </div>
             )}
+            {sale.site_name && (
+              <div className="flex justify-between text-amber-950 font-bold bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                <span className="text-amber-800 text-[9px]">SITE:</span>
+                <span className="text-right font-black text-[10px]">{sale.site_name}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-slate-500 font-medium">PAYMENT:</span>
               <span className="uppercase font-bold text-slate-900">

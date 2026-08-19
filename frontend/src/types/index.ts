@@ -125,6 +125,7 @@ export interface CustomerLedgerEntry {
   date: string;
   entry_type: 'sale' | 'payment' | 'void';
   reference: string;
+  site_name?: string | null;
   notes?: string | null;
   debit?: number | null;
   credit?: number | null;
@@ -185,6 +186,7 @@ export interface Sale {
   payment_reference: string | null;
   status: 'paid' | 'unpaid' | 'partial' | 'voided';
   is_etr: boolean;
+  site_name?: string | null;
   notes: string | null;
   voided_at?: string | null;
   void_reason?: string | null;
@@ -221,6 +223,7 @@ export interface PreSaleDocument {
   discount_amount: number;
   total_amount: number;
   status: 'draft' | 'accepted' | 'converted' | 'expired';
+  site_name?: string | null;
   valid_until: string | null;
   notes: string | null;
   converted_sale_id: number | null;

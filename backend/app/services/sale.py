@@ -250,6 +250,7 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
             "sort_priority": 1,  # sales first
             "entry_type": "sale",
             "reference": s.invoice_no,
+            "site_name": s.site_name,
             "notes": s.notes,
             "debit": s.total_amount,
             "credit": None,
@@ -357,6 +358,7 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
             date=ev["date"],
             entry_type=ev["entry_type"],
             reference=ev["reference"],
+            site_name=ev.get("site_name"),
             notes=ev["notes"],
             debit=ev["debit"],
             credit=ev["credit"],
@@ -376,6 +378,31 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
         total_debt=total_debt,
         entries=entries
     )
+
+
+def get_customer_sites(db: Session, customer_id: int) -> List[str]:
+    """Get distinct, recent site names used for this customer for instant POS and statement autocomplete."""
+    sale_results = db.query(Sale.site_name).filter(
+        Sale.customer_id == customer_id,
+        Sale.site_name.isnot(None),
+        Sale.site_name != ""
+    ).distinct().all()
+
+    presale_results = db.query(PreSaleDocument.site_name).filter(
+        PreSaleDocument.customer_id == customer_id,
+        PreSaleDocument.site_name.isnot(None),
+        PreSaleDocument.site_name != ""
+    ).distinct().all()
+
+    sites_set = set()
+    for r in sale_results:
+        if r[0] and r[0].strip():
+            sites_set.add(r[0].strip())
+    for r in presale_results:
+        if r[0] and r[0].strip():
+            sites_set.add(r[0].strip())
+
+    return sorted(list(sites_set), key=lambda s: s.lower())
 
 
 # =========================================================================
@@ -547,6 +574,8 @@ def create_sale(db: Session, store_id: int, user_id: int, sale_in: SaleCreate) -
     else:
         primary_method = "credit"
 
+    clean_site_name = sale_in.site_name.strip() if sale_in.site_name else None
+
     sale = Sale(
         invoice_no=invoice_no,
         customer_id=sale_in.customer_id,
@@ -560,6 +589,7 @@ def create_sale(db: Session, store_id: int, user_id: int, sale_in: SaleCreate) -
         payment_reference=sale_in.payment_reference,
         status="paid" if total_paid_in_checkout >= total_amount else ("partial" if total_paid_in_checkout > 0 else "unpaid"),
         is_etr=sale_in.is_etr,
+        site_name=clean_site_name,
         notes=sale_in.notes,
         items=line_items,
         payments=payments_to_create
@@ -638,6 +668,7 @@ def list_sales(
                      .filter(
                          or_(
                              Sale.invoice_no.ilike(term),
+                             Sale.site_name.ilike(term),
                              Sale.notes.ilike(term),
                              Customer.name.ilike(term),
                              Customer.phone.ilike(term),
@@ -802,6 +833,7 @@ def create_pre_sale_document(db: Session, store_id: int, user_id: int, doc_in: P
         discount_amount=discount,
         total_amount=total_amount,
         status="draft",
+        site_name=doc_in.site_name.strip() if doc_in.site_name else None,
         valid_until=doc_in.valid_until,
         notes=doc_in.notes,
         items=line_items
@@ -848,6 +880,7 @@ def convert_pre_sale_to_sale(db: Session, store_id: int, user_id: int, doc_id: i
         customer_id=doc.customer_id,
         payment_method=payment_method,
         discount_amount=doc.discount_amount,
+        site_name=doc.site_name,
         notes=f"Converted from {doc.type.upper()} {doc.document_no}. {doc.notes or ''}".strip(),
         items=sale_items_in
     )

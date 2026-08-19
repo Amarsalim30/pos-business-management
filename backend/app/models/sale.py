@@ -148,6 +148,7 @@ class PreSaleDocument(Base):
     total_amount = Column(Numeric(12, 2), nullable=False)
     
     status = Column(String(20), default="draft", nullable=False)  # 'draft', 'accepted', 'converted', 'expired'
+    site_name = Column(String(200), nullable=True)
     valid_until = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
     converted_sale_id = Column(Integer, ForeignKey("sales.id", ondelete="SET NULL"), nullable=True)

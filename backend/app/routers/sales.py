@@ -66,6 +66,7 @@ def _format_sale_response(s) -> SaleResponse:
         payment_reference=s.payment_reference,
         status=s.computed_status,
         is_etr=s.is_etr,
+        site_name=s.site_name,
         notes=s.notes,
         voided_at=s.voided_at,
         void_reason=s.void_reason,

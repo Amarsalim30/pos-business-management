@@ -64,6 +64,15 @@ def get_customer_account_ledger(
     return sale_service.get_customer_ledger(db, customer_id)
 
 
+@router.get("/{customer_id}/sites", response_model=List[str])
+def get_customer_sites_list(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return sale_service.get_customer_sites(db, customer_id)
+
+
 @router.patch("/{customer_id}", response_model=CustomerResponse)
 def update_customer_details(
     customer_id: int,

@@ -46,6 +46,7 @@ def _format_document_response(doc) -> PreSaleDocumentResponse:
         discount_amount=doc.discount_amount,
         total_amount=doc.total_amount,
         status=doc.status,
+        site_name=doc.site_name,
         valid_until=doc.valid_until,
         notes=doc.notes,
         converted_sale_id=doc.converted_sale_id,

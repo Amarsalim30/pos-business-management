@@ -20,7 +20,8 @@ import {
   User,
   X,
   ChevronDown,
-  Check
+  Check,
+  MapPin
 } from 'lucide-react';
 
 export const SalesListPage: React.FC = () => {
@@ -653,6 +654,12 @@ export const SalesListPage: React.FC = () => {
                               <User className="h-3 w-3 text-slate-400 shrink-0" />
                               <span>{s.customer_name}</span>
                             </div>
+                            {s.site_name && (
+                              <div className="flex items-center gap-1 text-[10px] text-amber-900 font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 w-fit">
+                                <MapPin className="h-2.5 w-2.5 text-amber-700 shrink-0" />
+                                <span className="truncate max-w-[170px]">{s.site_name}</span>
+                              </div>
+                            )}
                             <div className="flex items-center gap-2 text-[10px]">
                               <span className="text-slate-400">Cashier: {s.cashier_name || 'Staff'}</span>
                               <button
@@ -673,6 +680,12 @@ export const SalesListPage: React.FC = () => {
                         ) : (
                           <div className="space-y-0.5">
                             <div className="font-semibold text-slate-500 italic">Walk-in Customer</div>
+                            {s.site_name && (
+                              <div className="flex items-center gap-1 text-[10px] text-amber-900 font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 w-fit">
+                                <MapPin className="h-2.5 w-2.5 text-amber-700 shrink-0" />
+                                <span className="truncate max-w-[170px]">{s.site_name}</span>
+                              </div>
+                            )}
                             <div className="text-[10px] text-slate-400">Cashier: {s.cashier_name || 'Staff'}</div>
                           </div>
                         )}

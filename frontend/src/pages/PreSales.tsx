@@ -9,7 +9,8 @@ import {
   Trash2,
   Sparkles,
   AlertCircle,
-  Eye
+  Eye,
+  MapPin
 } from 'lucide-react';
 
 interface PreSaleLine {
@@ -39,6 +40,7 @@ export const PreSalesPage: React.FC = () => {
   // New Document Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [docCustomerId, setDocCustomerId] = useState<number | ''>('');
+  const [docSiteName, setDocSiteName] = useState('');
   const [docValidDays, setDocValidDays] = useState('14');
   const [docDiscount, setDocDiscount] = useState('0');
   const [docNotes, setDocNotes] = useState('');
@@ -149,6 +151,7 @@ export const PreSalesPage: React.FC = () => {
       customer_id: docCustomerId ? Number(docCustomerId) : null,
       discount_amount: parseFloat(docDiscount) || 0,
       valid_until: validUntilDate.toISOString(),
+      site_name: docSiteName.trim() || null,
       notes: docNotes.trim() || null,
       items: docLines.map(line => ({
         product_id: line.product_id,
@@ -168,6 +171,7 @@ export const PreSalesPage: React.FC = () => {
       });
       setIsModalOpen(false);
       setDocLines([]);
+      setDocSiteName('');
       setDocNotes('');
       setDocDiscount('0');
       loadDocuments();
@@ -288,9 +292,25 @@ export const PreSalesPage: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       {doc.customer_name ? (
-                        <span className="font-bold text-slate-900">{doc.customer_name}</span>
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-slate-900">{doc.customer_name}</div>
+                          {doc.site_name && (
+                            <div className="flex items-center gap-1 text-[10px] text-amber-900 font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 w-fit">
+                              <MapPin className="h-2.5 w-2.5 text-amber-700 shrink-0" />
+                              <span className="truncate max-w-[160px]">{doc.site_name}</span>
+                            </div>
+                          )}
+                        </div>
                       ) : (
-                        <span className="text-slate-400 italic">Unspecified</span>
+                        <div className="space-y-0.5">
+                          <span className="text-slate-400 italic">Unspecified</span>
+                          {doc.site_name && (
+                            <div className="flex items-center gap-1 text-[10px] text-amber-900 font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 w-fit">
+                              <MapPin className="h-2.5 w-2.5 text-amber-700 shrink-0" />
+                              <span className="truncate max-w-[160px]">{doc.site_name}</span>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-600">
@@ -413,7 +433,7 @@ export const PreSalesPage: React.FC = () => {
             )}
 
             {/* Header Info */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-200">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/50 p-4 rounded-xl border border-slate-200">
               <div>
                 <label className="text-xs font-bold text-slate-700">Customer Account:</label>
                 <select
@@ -426,6 +446,20 @@ export const PreSalesPage: React.FC = () => {
                     <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                  <MapPin className="h-3 w-3 text-amber-600" />
+                  <span>Site / Project Narrative:</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Nyali Heights Block B"
+                  value={docSiteName}
+                  onChange={(e) => setDocSiteName(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+                />
               </div>
 
               <div>

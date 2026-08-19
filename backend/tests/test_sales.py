@@ -402,4 +402,62 @@ def test_customers_summary(staff_auth_client):
     assert float(summary["total_receivables_debt"]) >= 0.0
 
 
+def test_site_narrative_and_customer_sites_endpoint(staff_auth_client):
+    # 1. Create a customer
+    cust = staff_auth_client.post("/api/v1/customers/", json={
+        "name": "Eng. Kamau Construction",
+        "phone": "+254711998877"
+    }).json()
+
+    # 2. Create product
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Distribution Board 12 Way",
+        "cost_price": 3000.0,
+        "selling_price": 4500.0,
+        "initial_stock": 20.0
+    }).json()
+
+    # 3. Create Sale 1 with site_name "Kilifi Beach Villa - Main DB"
+    s1_res = staff_auth_client.post("/api/v1/sales/", json={
+        "customer_id": cust["id"],
+        "site_name": "Kilifi Beach Villa - Main DB",
+        "payment_method": "credit",
+        "items": [{"product_id": prod["id"], "unit_type": "piece", "unit_sold": "piece", "quantity": 2.0, "unit_price": 4500.0}]
+    })
+    assert s1_res.status_code == 201
+    assert s1_res.json()["site_name"] == "Kilifi Beach Villa - Main DB"
+
+    # 4. Create Sale 2 with site_name "Nyali Heights Block B"
+    s2_res = staff_auth_client.post("/api/v1/sales/", json={
+        "customer_id": cust["id"],
+        "site_name": "Nyali Heights Block B",
+        "payment_method": "mpesa",
+        "payment_reference": "QWERT12345",
+        "items": [{"product_id": prod["id"], "unit_type": "piece", "unit_sold": "piece", "quantity": 1.0, "unit_price": 4500.0}]
+    })
+    assert s2_res.status_code == 201
+    assert s2_res.json()["site_name"] == "Nyali Heights Block B"
+
+    # 5. Fetch /customers/{id}/sites endpoint
+    sites_res = staff_auth_client.get(f"/api/v1/customers/{cust['id']}/sites")
+    assert sites_res.status_code == 200
+    sites = sites_res.json()
+    assert "Kilifi Beach Villa - Main DB" in sites
+    assert "Nyali Heights Block B" in sites
+
+    # 6. Check customer ledger contains site_name
+    ledger_res = staff_auth_client.get(f"/api/v1/customers/{cust['id']}/ledger")
+    assert ledger_res.status_code == 200
+    ledger_entries = ledger_res.json()["entries"]
+    sale_entries = [e for e in ledger_entries if e["entry_type"] == "sale"]
+    assert any(e["site_name"] == "Kilifi Beach Villa - Main DB" for e in sale_entries)
+    assert any(e["site_name"] == "Nyali Heights Block B" for e in sale_entries)
+
+    # 7. Test sales search by site_name
+    search_res = staff_auth_client.get("/api/v1/sales/?q=Kilifi")
+    assert search_res.status_code == 200
+    search_sales = search_res.json()
+    assert any(s["id"] == s1_res.json()["id"] for s in search_sales)
+
+
 

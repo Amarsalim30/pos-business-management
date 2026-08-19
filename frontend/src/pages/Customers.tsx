@@ -103,10 +103,13 @@ export const CustomersPage: React.FC = () => {
     loadSummary();
   }, []);
 
+  const [ledgerSiteFilter, setLedgerSiteFilter] = useState<string | 'all'>('all');
+
   const loadLedger = async (cust: Customer) => {
     setLedgerCustomer(cust);
     setLoadingLedger(true);
     setLedgerFilter('all');
+    setLedgerSiteFilter('all');
     setExpandedEntries(new Set());
     try {
       const data = await apiFetch<CustomerLedgerResponse>(`/api/v1/customers/${cust.id}/ledger`);
@@ -117,6 +120,17 @@ export const CustomersPage: React.FC = () => {
       setLoadingLedger(false);
     }
   };
+
+  const availableCustomerSites = useMemo(() => {
+    if (!ledgerData) return [];
+    const set = new Set<string>();
+    for (const e of ledgerData.entries) {
+      if (e.site_name && e.site_name.trim()) {
+        set.add(e.site_name.trim());
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [ledgerData]);
 
   const ledgerMetrics = useMemo(() => {
     if (!ledgerData) return { totalInvoiced: 0, totalPaid: 0, currentDebt: 0, salesCount: 0, paymentsCount: 0 };
@@ -147,14 +161,17 @@ export const CustomersPage: React.FC = () => {
 
   const filteredLedgerEntries = useMemo(() => {
     if (!ledgerData) return [];
+    let list = ledgerData.entries;
     if (ledgerFilter === 'sales') {
-      return ledgerData.entries.filter(e => e.entry_type === 'sale' || e.entry_type === 'void');
+      list = list.filter(e => e.entry_type === 'sale' || e.entry_type === 'void');
+    } else if (ledgerFilter === 'payments') {
+      list = list.filter(e => e.entry_type === 'payment');
     }
-    if (ledgerFilter === 'payments') {
-      return ledgerData.entries.filter(e => e.entry_type === 'payment');
+    if (ledgerSiteFilter !== 'all') {
+      list = list.filter(e => e.site_name === ledgerSiteFilter);
     }
-    return ledgerData.entries;
-  }, [ledgerData, ledgerFilter]);
+    return list;
+  }, [ledgerData, ledgerFilter, ledgerSiteFilter]);
 
   const handleViewInvoice = async (saleId: number) => {
     setLoadingSaleId(saleId);
@@ -671,6 +688,49 @@ export const CustomersPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Site / Project Location Quick Filter Pills */}
+              {availableCustomerSites.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 p-2.5 bg-amber-50/70 rounded-xl border border-amber-200/80 text-xs print:hidden">
+                  <span className="text-[10px] font-black text-amber-900 uppercase flex items-center gap-1 mr-1">
+                    <MapPin className="h-3.5 w-3.5 text-amber-700" />
+                    <span>Filter by Site:</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setLedgerSiteFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      ledgerSiteFilter === 'all'
+                        ? 'bg-amber-600 text-white shadow-2xs'
+                        : 'bg-white text-slate-700 border border-amber-200 hover:bg-amber-100/50'
+                    }`}
+                  >
+                    All Sites ({ledgerData?.entries.length || 0})
+                  </button>
+                  {availableCustomerSites.map((site) => {
+                    const count = ledgerData?.entries.filter(e => e.site_name === site).length || 0;
+                    return (
+                      <button
+                        key={site}
+                        type="button"
+                        onClick={() => setLedgerSiteFilter(site)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          ledgerSiteFilter === site
+                            ? 'bg-amber-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-700 border border-amber-200 hover:bg-amber-100/50'
+                        }`}
+                      >
+                        <span>{site}</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${
+                          ledgerSiteFilter === site ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Interactive Statement Ledger Matrix Table */}
               <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-2xs">
                 <table className="w-full text-left border-collapse">
@@ -697,7 +757,7 @@ export const CustomersPage: React.FC = () => {
                     ) : !ledgerData || filteredLedgerEntries.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-4 py-10 text-center text-slate-400 font-medium">
-                          No {ledgerFilter !== 'all' ? ledgerFilter : ''} transactions recorded for this customer.
+                          No {ledgerFilter !== 'all' ? ledgerFilter : ''} {ledgerSiteFilter !== 'all' ? `for "${ledgerSiteFilter}"` : ''} transactions recorded for this customer.
                         </td>
                       </tr>
                     ) : (
@@ -756,6 +816,14 @@ export const CustomersPage: React.FC = () => {
                                       </button>
                                     ) : (
                                       <span className="font-bold text-slate-900 font-mono">{en.reference}</span>
+                                    )}
+
+                                    {/* Site Name Badge */}
+                                    {en.site_name && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100/80 text-amber-900 border border-amber-300 text-[10px] font-bold">
+                                        <MapPin className="h-2.5 w-2.5 text-amber-700" />
+                                        <span>{en.site_name}</span>
+                                      </span>
                                     )}
 
                                     {/* Inline Accordion Expand Button for Invoices with items */}

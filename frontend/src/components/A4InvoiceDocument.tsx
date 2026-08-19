@@ -150,6 +150,15 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
           <div className="text-xs text-slate-500 font-mono">
             Account Type: {customerName ? 'Registered Account' : 'Counter Cash Sale'}
           </div>
+          {(sale?.site_name || preSaleDoc?.site_name) && (
+            <div className="mt-2.5 pt-2 border-t border-slate-200 flex items-start gap-1.5 text-xs text-amber-950 bg-amber-50/90 p-2 rounded-lg border border-amber-200">
+              <MapPin className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-wider text-amber-800 block">Site / Project Location:</span>
+                <span className="font-bold text-slate-900">{sale?.site_name || preSaleDoc?.site_name}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 flex flex-col justify-between">

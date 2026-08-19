@@ -72,6 +72,7 @@ class CustomerLedgerEntry(BaseModel):
     date: datetime
     entry_type: str  # 'sale', 'payment', 'void'
     reference: str  # e.g. "INV-20260819-0041" or "Payment (M-Pesa)"
+    site_name: Optional[str] = None
     notes: Optional[str] = None
     debit: Optional[Decimal] = None
     credit: Optional[Decimal] = None
@@ -137,6 +138,7 @@ class SaleCreate(BaseModel):
     payments: Optional[List[PaymentCreate]] = None  # Multiple split payments at checkout
     discount_amount: Decimal = Field(Decimal("0.00"), ge=0)
     is_etr: bool = False
+    site_name: Optional[str] = None
     notes: Optional[str] = None
     items: List[SaleItemCreate] = Field(..., min_length=1)
 
@@ -159,6 +161,7 @@ class SaleResponse(BaseModel):
     payment_reference: Optional[str] = None
     status: str  # computed status ('paid', 'partial', 'unpaid', 'voided')
     is_etr: bool
+    site_name: Optional[str] = None
     notes: Optional[str] = None
     voided_at: Optional[datetime] = None
     void_reason: Optional[str] = None
@@ -208,6 +211,7 @@ class PreSaleDocumentCreate(BaseModel):
     type: str = Field("quotation")  # 'quotation' or 'proforma'
     customer_id: Optional[int] = None
     discount_amount: Decimal = Field(Decimal("0.00"), ge=0)
+    site_name: Optional[str] = None
     valid_until: Optional[datetime] = None
     notes: Optional[str] = None
     items: List[PreSaleItemCreate] = Field(..., min_length=1)
@@ -226,6 +230,7 @@ class PreSaleDocumentResponse(BaseModel):
     discount_amount: Decimal
     total_amount: Decimal
     status: str
+    site_name: Optional[str] = None
     valid_until: Optional[datetime] = None
     notes: Optional[str] = None
     converted_sale_id: Optional[int] = None

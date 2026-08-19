@@ -11,7 +11,8 @@ import {
   Copy,
   Check,
   Download,
-  Share2
+  Share2,
+  MapPin
 } from 'lucide-react';
 
 export interface InvoiceDrawerProps {
@@ -81,13 +82,14 @@ export const InvoiceDrawer: React.FC<InvoiceDrawerProps> = ({
   };
 
   const handleShareWhatsApp = () => {
+    const siteName = sale?.site_name || preSaleDoc?.site_name;
     const itemsList = (sale?.items || preSaleDoc?.items || []).map((it, idx) => {
       return `${idx + 1}. ${it.product_name} x ${it.quantity} = KES ${Number(it.total).toLocaleString()}`;
     }).join('\n');
 
     const text = `*${storeName}*
 *${preSaleDoc ? (preSaleDoc.type === 'proforma' ? 'PROFORMA INVOICE' : 'QUOTATION') : 'TAX INVOICE'}: #${docNo}*
-Customer: ${customerName || 'Walk-in'}
+Customer: ${customerName || 'Walk-in'}${siteName ? `\n*Site / Project: ${siteName}*` : ''}
 Date: ${new Date().toLocaleDateString('en-GB')}
 ---------------------------------
 ${itemsList}
@@ -101,6 +103,8 @@ Thank you for your business!`;
     const encoded = encodeURIComponent(text);
     window.open(`https://wa.me/?text=${encoded}`, '_blank');
   };
+
+  const currentSiteName = sale?.site_name || preSaleDoc?.site_name;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden print:static print:inset-auto print:overflow-visible">
@@ -127,14 +131,20 @@ Thank you for your business!`;
                   </span>
                   <button
                     onClick={handleCopyDocNo}
-                    className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors"
+                    className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer"
                     title="Copy Document #"
                   >
                     {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
                 </div>
-                <div className="text-[11px] text-slate-400 font-medium">
-                  {customerName || 'Walk-in Customer'} • KES {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
+                  <span>{customerName || 'Walk-in Customer'} • KES {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  {currentSiteName && (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                      <MapPin className="h-2.5 w-2.5" />
+                      {currentSiteName}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -286,6 +296,12 @@ Thank you for your business!`;
                       <div className="flex justify-between">
                         <span className="text-slate-500 font-medium">CUSTOMER:</span>
                         <span className="font-bold text-slate-900">{customerName}</span>
+                      </div>
+                    )}
+                    {(sale?.site_name || preSaleDoc?.site_name) && (
+                      <div className="flex justify-between text-amber-950 font-bold bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                        <span className="text-amber-800 text-[9px]">SITE:</span>
+                        <span className="text-right font-black text-[10px]">{sale?.site_name || preSaleDoc?.site_name}</span>
                       </div>
                     )}
                     {sale && (

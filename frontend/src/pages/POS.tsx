@@ -25,7 +25,8 @@ import {
   Split,
   ShieldAlert,
   Zap,
-  Loader2
+  Loader2,
+  MapPin
 } from 'lucide-react';
 
 interface CartItem {
@@ -47,6 +48,7 @@ interface ParkedCart {
   items: CartItem[];
   discount_amount: string;
   is_etr: boolean;
+  site_name?: string;
   notes: string;
   total: number;
 }
@@ -109,6 +111,9 @@ export const POSPage: React.FC = () => {
   ]);
 
   const [notes, setNotes] = useState('');
+  const [siteName, setSiteName] = useState('');
+  const [customerSites, setCustomerSites] = useState<string[]>([]);
+  const [showNotesField, setShowNotesField] = useState(false);
   
   // Parked Carts State
   const [parkedCarts, setParkedCarts] = useState<ParkedCart[]>([]);
@@ -127,6 +132,17 @@ export const POSPage: React.FC = () => {
 
   // Search Input Ref for quick autofocus & hotkeys
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Load distinct sites for selected customer
+  useEffect(() => {
+    if (selectedCustomerId && !isWalkIn) {
+      apiFetch<string[]>(`/api/v1/customers/${selectedCustomerId}/sites`)
+        .then(sites => setCustomerSites(sites || []))
+        .catch(err => console.error('Failed to load customer sites', err));
+    } else {
+      setCustomerSites([]);
+    }
+  }, [selectedCustomerId, isWalkIn]);
 
   useEffect(() => {
     loadCategories();
@@ -426,6 +442,7 @@ export const POSPage: React.FC = () => {
       items: cart,
       discount_amount: String(calculatedDiscount),
       is_etr: isETR,
+      site_name: siteName,
       notes: notes,
       total: total
     };
@@ -433,6 +450,7 @@ export const POSPage: React.FC = () => {
     saveParkedCartsToStorage([newParkedCart, ...parkedCarts]);
     setCart([]);
     setDiscountAmount('0');
+    setSiteName('');
     setNotes('');
     setAmountTendered('');
     setShowParkedDrawer(false);
@@ -449,6 +467,7 @@ export const POSPage: React.FC = () => {
     setCart(parkedCart.items);
     setDiscountAmount(parkedCart.discount_amount);
     setIsETR(parkedCart.is_etr);
+    setSiteName(parkedCart.site_name || '');
     setNotes(parkedCart.notes || '');
     if (parkedCart.customer_id) {
       setIsWalkIn(false);
@@ -497,6 +516,7 @@ export const POSPage: React.FC = () => {
       customer_id: !isWalkIn && selectedCustomerId ? Number(selectedCustomerId) : null,
       discount_amount: calculatedDiscount,
       is_etr: isETR,
+      site_name: siteName.trim() || null,
       notes: notes.trim() || null,
       items: cart.map(item => ({
         product_id: item.product.id,
@@ -533,6 +553,7 @@ export const POSPage: React.FC = () => {
       setCart([]);
       setDiscountAmount('0');
       setPaymentReference('');
+      setSiteName('');
       setNotes('');
       setAmountTendered('');
       setSplitLines([{ id: 'split_1', payment_method: 'mpesa', amount: '', reference: '' }]);
@@ -1141,6 +1162,76 @@ export const POSPage: React.FC = () => {
                   <span className="font-mono text-amber-700">
                     KES {total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>
+                </div>
+              </div>
+
+              {/* Site / Project Location & Narrative Input */}
+              <div className="p-2.5 rounded-xl bg-white border border-slate-200 space-y-1.5 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5 text-amber-600" />
+                    <span>Site / Project / Narrative:</span>
+                  </span>
+                  {siteName && (
+                    <button
+                      type="button"
+                      onClick={() => setSiteName('')}
+                      className="text-[10px] text-slate-400 hover:text-slate-600 font-medium cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Autocomplete recent site tags for selected customer */}
+                {customerSites.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Recent Sites:</span>
+                    {customerSites.slice(0, 4).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setSiteName(s)}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all cursor-pointer ${
+                          siteName === s
+                            ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-300'
+                        }`}
+                      >
+                        + {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <input
+                  type="text"
+                  placeholder="e.g. Kilifi Beach Villa - Main DB (optional)"
+                  value={siteName}
+                  onChange={(e) => setSiteName(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1 text-xs text-slate-900 focus:outline-none focus:border-amber-600 focus:bg-white"
+                />
+
+                {/* Expandable Internal Notes */}
+                <div className="pt-0.5">
+                  {!showNotesField && !notes ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowNotesField(true)}
+                      className="text-[10px] font-semibold text-slate-500 hover:text-slate-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="h-2.5 w-2.5" />
+                      <span>Add internal sale note</span>
+                    </button>
+                  ) : (
+                    <textarea
+                      placeholder="Internal sale note (optional)..."
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      rows={1}
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-amber-600 focus:bg-white resize-none"
+                    />
+                  )}
                 </div>
               </div>
 

@@ -28,7 +28,10 @@ def run_startup_migrations():
         "ALTER TABLE project_expenses ADD COLUMN IF NOT EXISTS receipt_no VARCHAR(100);",
         "ALTER TABLE project_incomes ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'client_payment';",
         "ALTER TABLE project_incomes ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash';",
-        "ALTER TABLE project_incomes ADD COLUMN IF NOT EXISTS reference VARCHAR(100);"
+        "ALTER TABLE project_incomes ADD COLUMN IF NOT EXISTS reference VARCHAR(100);",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS site_name VARCHAR(200);",
+        "ALTER TABLE pre_sale_documents ADD COLUMN IF NOT EXISTS site_name VARCHAR(200);",
+        "CREATE INDEX IF NOT EXISTS ix_sales_site_name ON sales (site_name);"
     ]
 
     with engine.connect() as conn:

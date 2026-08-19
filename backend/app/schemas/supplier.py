@@ -77,3 +77,11 @@ class SupplierLedgerResponse(BaseModel):
     phone: Optional[str] = None
     current_balance: Decimal
     entries: List[SupplierLedgerEntry]
+
+
+class SupplierSummaryResponse(BaseModel):
+    total_suppliers: int
+    active_suppliers: int
+    total_payables_debt: Decimal
+    suppliers_with_balance: int
+

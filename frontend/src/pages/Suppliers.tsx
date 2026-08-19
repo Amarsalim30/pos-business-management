@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../services/api';
-import type { Supplier, SupplierLedgerResponse } from '../types';
+import type { Supplier, SupplierLedgerResponse, SupplierSummaryResponse } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import {
   Truck,
@@ -15,22 +15,34 @@ import {
   X,
   User,
   Hash,
-  Loader2
+  Loader2,
+  Edit3,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 
 export const SuppliersPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [summary, setSummary] = useState<SupplierSummaryResponse | null>(null);
 
-  // Supplier Modal
+  // Supplier Create / Edit Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [name, setName] = useState('');
   const [contactPerson, setContactPerson] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [taxPin, setTaxPin] = useState('');
+  const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+
+  // Delete Supplier State
+  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Live Statement Ledger Modal
   const [ledgerSupplier, setLedgerSupplier] = useState<Supplier | null>(null);
@@ -65,6 +77,19 @@ export const SuppliersPage: React.FC = () => {
     dependencies: [searchQuery]
   });
 
+  const loadSummary = async () => {
+    try {
+      const data = await apiFetch<SupplierSummaryResponse>('/api/v1/suppliers/summary');
+      setSummary(data);
+    } catch (e) {
+      console.error('Failed to load supplier summary', e);
+    }
+  };
+
+  useEffect(() => {
+    loadSummary();
+  }, []);
+
   const loadLedger = async (supp: Supplier) => {
     setLedgerSupplier(supp);
     setLoadingLedger(true);
@@ -78,24 +103,65 @@ export const SuppliersPage: React.FC = () => {
     }
   };
 
-  const handleCreateSupplier = async (e: React.FormEvent) => {
+  const handleOpenCreateModal = () => {
+    setEditingSupplier(null);
+    setName('');
+    setContactPerson('');
+    setPhone('');
+    setEmail('');
+    setAddress('');
+    setTaxPin('');
+    setIsActive(true);
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (supp: Supplier) => {
+    setEditingSupplier(supp);
+    setName(supp.name);
+    setContactPerson(supp.contact_person || '');
+    setPhone(supp.phone || '');
+    setEmail(supp.email || '');
+    setAddress(supp.address || '');
+    setTaxPin(supp.tax_pin || '');
+    setIsActive(supp.is_active ?? true);
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
     setFormError(null);
 
     try {
-      await apiFetch('/api/v1/suppliers/', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: name.trim(),
-          contact_person: contactPerson.trim() || null,
-          phone: phone.trim() || null,
-          email: email.trim() || null,
-          address: address.trim() || null,
-          tax_pin: taxPin.trim() || null
-        })
-      });
+      if (editingSupplier) {
+        await apiFetch(`/api/v1/suppliers/${editingSupplier.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            name: name.trim(),
+            contact_person: contactPerson.trim() || null,
+            phone: phone.trim() || null,
+            email: email.trim() || null,
+            address: address.trim() || null,
+            tax_pin: taxPin.trim() || null,
+            is_active: isActive
+          })
+        });
+      } else {
+        await apiFetch('/api/v1/suppliers/', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: name.trim(),
+            contact_person: contactPerson.trim() || null,
+            phone: phone.trim() || null,
+            email: email.trim() || null,
+            address: address.trim() || null,
+            tax_pin: taxPin.trim() || null
+          })
+        });
+      }
       setIsModalOpen(false);
       setName('');
       setContactPerson('');
@@ -103,11 +169,32 @@ export const SuppliersPage: React.FC = () => {
       setEmail('');
       setAddress('');
       setTaxPin('');
+      setEditingSupplier(null);
       reloadSuppliers();
+      loadSummary();
     } catch (err: any) {
       setFormError(err.message || 'Failed to save supplier');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteSupplier = async () => {
+    if (!deletingSupplier) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+
+    try {
+      await apiFetch(`/api/v1/suppliers/${deletingSupplier.id}`, {
+        method: 'DELETE'
+      });
+      setDeletingSupplier(null);
+      reloadSuppliers();
+      loadSummary();
+    } catch (err: any) {
+      setDeleteError(err.message || 'Failed to delete supplier');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -137,6 +224,7 @@ export const SuppliersPage: React.FC = () => {
       setPaymentReference('');
       setPaymentNotes('');
       reloadSuppliers();
+      loadSummary();
       if (ledgerSupplier?.id === paymentSupplier.id) {
         loadLedger(paymentSupplier);
       }
@@ -150,8 +238,6 @@ export const SuppliersPage: React.FC = () => {
   const handlePrintLedger = () => {
     window.print();
   };
-
-  const totalOutstanding = suppliers.reduce((sum, s) => sum + Number(s.balance || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -170,8 +256,8 @@ export const SuppliersPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold shadow-sm transition-all duration-150 active:scale-[0.98]"
+            onClick={handleOpenCreateModal}
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold shadow-sm transition-all duration-150 active:scale-[0.98] cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             Add Supplier
@@ -184,21 +270,23 @@ export const SuppliersPage: React.FC = () => {
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Suppliers</div>
           <div className="text-2xl font-black text-slate-900 mt-2 font-mono">
-            {suppliers.filter(s => s.is_active).length}
+            {summary ? summary.active_suppliers : suppliers.filter(s => s.is_active).length}
           </div>
-          <div className="text-xs text-slate-400 mt-1">Total registered suppliers</div>
+          <div className="text-xs text-slate-400 mt-1">
+            {summary ? `${summary.total_suppliers} total registered suppliers` : 'Total registered suppliers'}
+          </div>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
           <div className="text-xs font-bold text-rose-600 uppercase tracking-wider">Total Payables Debt</div>
           <div className="text-2xl font-black text-rose-600 mt-2 font-mono">
-            KES {totalOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            KES {Number(summary ? summary.total_payables_debt : suppliers.reduce((sum, s) => sum + Number(s.balance || 0), 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs text-slate-400 mt-1">Outstanding vendor liability</div>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
           <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Suppliers with Balance</div>
           <div className="text-2xl font-black text-emerald-600 mt-2 font-mono">
-            {suppliers.filter(s => Number(s.balance) > 0).length}
+            {summary ? summary.suppliers_with_balance : suppliers.filter(s => Number(s.balance) > 0).length}
           </div>
           <div className="text-xs text-slate-400 mt-1">Vendors pending settlement</div>
         </div>
@@ -304,10 +392,10 @@ export const SuppliersPage: React.FC = () => {
                         {supp.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-right space-x-2">
+                    <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
                       <button
                         onClick={() => loadLedger(supp)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                         title="View Statement Ledger"
                       >
                         <FileText className="h-3.5 w-3.5" />
@@ -318,11 +406,28 @@ export const SuppliersPage: React.FC = () => {
                           setPaymentSupplier(supp);
                           setPaymentAmount(supp.balance > 0 ? String(supp.balance) : '');
                         }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                         title="Record Payment"
                       >
                         <Banknote className="h-3.5 w-3.5" />
                         Pay
+                      </button>
+                      <button
+                        onClick={() => handleOpenEditModal(supp)}
+                        className="inline-flex items-center p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg text-xs transition-colors cursor-pointer"
+                        title="Edit Supplier Details"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDeletingSupplier(supp);
+                          setDeleteError(null);
+                        }}
+                        className="inline-flex items-center p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 border border-rose-100 rounded-lg text-xs transition-colors cursor-pointer"
+                        title="Delete Supplier"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </td>
                   </tr>
@@ -354,16 +459,16 @@ export const SuppliersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Create Supplier Modal */}
+      {/* Create / Edit Supplier Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Truck className="h-5 w-5 text-indigo-600" />
-                Add New Supplier
+                {editingSupplier ? <Edit3 className="h-5 w-5 text-indigo-600" /> : <Truck className="h-5 w-5 text-indigo-600" />}
+                <span>{editingSupplier ? `Edit Supplier: ${editingSupplier.name}` : 'Add New Supplier'}</span>
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -374,7 +479,7 @@ export const SuppliersPage: React.FC = () => {
               </div>
             )}
 
-            <form onSubmit={handleCreateSupplier} className="space-y-4">
+            <form onSubmit={handleSaveSupplier} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                   Supplier / Company Name *
@@ -456,23 +561,126 @@ export const SuppliersPage: React.FC = () => {
                 />
               </div>
 
+              {editingSupplier && (
+                <div className="pt-1 flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="is_active_supp"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                    className="h-4 w-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                  />
+                  <label htmlFor="is_active_supp" className="text-xs font-semibold text-slate-700 select-none cursor-pointer">
+                    Supplier Account is Active
+                  </label>
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
                 >
-                  {saving ? 'Saving...' : 'Save Supplier'}
+                  {saving ? 'Saving...' : editingSupplier ? 'Save Changes' : 'Create Supplier'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Supplier Confirmation Modal */}
+      {deletingSupplier && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-100">
+                <AlertTriangle className="h-6 w-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Supplier</h3>
+                <p className="text-xs text-slate-500 font-medium">{deletingSupplier.name}</p>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
+                {deleteError}
+              </div>
+            )}
+
+            {Number(deletingSupplier.balance) > 0 ? (
+              <div className="space-y-3">
+                <div className="p-3.5 bg-rose-50/80 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-1.5 font-medium">
+                  <div className="font-bold flex items-center gap-1.5 text-rose-900">
+                    <Banknote className="h-4 w-4" />
+                    Open Payable Balance Detected
+                  </div>
+                  <div>
+                    This supplier currently has an open payable balance of <strong className="font-mono text-rose-900">KES {Number(deletingSupplier.balance).toLocaleString()}</strong>.
+                    You cannot delete a supplier with an outstanding balance. Please settle or reconcile the balance first.
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeletingSupplier(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const supp = deletingSupplier;
+                      setDeletingSupplier(null);
+                      setPaymentSupplier(supp);
+                      setPaymentAmount(String(supp.balance));
+                    }}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1"
+                  >
+                    <Banknote className="h-3.5 w-3.5" />
+                    Record Settlement
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-600">
+                  Are you sure you want to delete <strong>{deletingSupplier.name}</strong>?
+                </p>
+                <div className="text-[11px] text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  💡 <strong>Integrity Safeguard</strong>: If this supplier has past Purchase Orders, GRNs, or payment transactions, their account will be deactivated instead of removed to maintain audit logs.
+                </div>
+
+                <div className="flex items-center justify-end space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeletingSupplier(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deleteLoading}
+                    onClick={handleDeleteSupplier}
+                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
+                  >
+                    {deleteLoading ? 'Deleting...' : 'Confirm Deletion'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

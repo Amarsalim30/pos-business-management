@@ -1,10 +1,14 @@
 from typing import List, Optional
 from decimal import Decimal
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from fastapi import HTTPException, status
 from app.models.supplier import Supplier, SupplierPayment
-from app.models.purchase import GoodsReceivedNote
-from app.schemas.supplier import SupplierCreate, SupplierUpdate, SupplierPaymentCreate, SupplierLedgerResponse, SupplierLedgerEntry
+from app.models.purchase import GoodsReceivedNote, PurchaseOrder
+from app.schemas.supplier import (
+    SupplierCreate, SupplierUpdate, SupplierPaymentCreate,
+    SupplierLedgerResponse, SupplierLedgerEntry, SupplierSummaryResponse
+)
 
 
 def create_supplier(db: Session, store_id: int, supplier_in: SupplierCreate) -> Supplier:
@@ -163,3 +167,57 @@ def get_supplier_ledger(db: Session, store_id: int, supplier_id: int) -> Supplie
         current_balance=supplier.balance,
         entries=entries
     )
+
+
+def delete_supplier(db: Session, store_id: int, supplier_id: int) -> dict:
+    supplier = get_supplier_by_id(db, store_id, supplier_id)
+    if Decimal(str(supplier.balance)) > Decimal("0.00"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete supplier with an outstanding payable balance of KES {Decimal(str(supplier.balance)):,.2f}. Please settle payable first."
+        )
+
+    # Check for purchase orders, GRNs, or payments
+    has_pos = db.query(PurchaseOrder).filter(PurchaseOrder.supplier_id == supplier.id).first() is not None
+    has_grns = db.query(GoodsReceivedNote).filter(GoodsReceivedNote.supplier_id == supplier.id).first() is not None
+    has_payments = db.query(SupplierPayment).filter(SupplierPayment.supplier_id == supplier.id).first() is not None
+
+    if has_pos or has_grns or has_payments:
+        supplier.is_active = False
+        db.commit()
+        return {"detail": "Supplier has purchase transaction history and has been deactivated."}
+    else:
+        db.delete(supplier)
+        db.commit()
+        return {"detail": "Supplier deleted successfully."}
+
+
+def get_suppliers_summary(db: Session, store_id: int) -> SupplierSummaryResponse:
+    total_suppliers = db.query(func.count(Supplier.id)).filter(
+        Supplier.store_id == store_id
+    ).scalar() or 0
+
+    active_suppliers = db.query(func.count(Supplier.id)).filter(
+        Supplier.store_id == store_id,
+        Supplier.is_active == True
+    ).scalar() or 0
+
+    total_payables_debt = db.query(
+        func.coalesce(func.sum(Supplier.balance), Decimal("0.00"))
+    ).filter(
+        Supplier.store_id == store_id
+    ).scalar() or Decimal("0.00")
+
+    suppliers_with_balance = db.query(func.count(Supplier.id)).filter(
+        Supplier.store_id == store_id,
+        Supplier.balance > Decimal("0.00")
+    ).scalar() or 0
+
+    return SupplierSummaryResponse(
+        total_suppliers=total_suppliers,
+        active_suppliers=active_suppliers,
+        total_payables_debt=Decimal(str(total_payables_debt)),
+        suppliers_with_balance=suppliers_with_balance
+    )
+
+

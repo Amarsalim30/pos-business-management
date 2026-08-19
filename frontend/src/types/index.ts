@@ -139,6 +139,14 @@ export interface CustomerLedgerResponse {
   entries: CustomerLedgerEntry[];
 }
 
+export interface CustomerSummaryResponse {
+  total_customers: number;
+  active_customers: number;
+  total_receivables_debt: number;
+  customers_with_debt: number;
+}
+
+
 export interface SaleItem {
   id: number;
   product_id: number;
@@ -261,6 +269,14 @@ export interface SupplierLedgerResponse {
   current_balance: number;
   entries: SupplierLedgerEntry[];
 }
+
+export interface SupplierSummaryResponse {
+  total_suppliers: number;
+  active_suppliers: number;
+  total_payables_debt: number;
+  suppliers_with_balance: number;
+}
+
 
 export interface PurchaseItem {
   id: number;

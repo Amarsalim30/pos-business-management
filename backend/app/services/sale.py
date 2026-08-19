@@ -10,7 +10,8 @@ from app.models.inventory import Inventory, StockMovement
 from app.models.product import Product
 from app.schemas.sale import (
     CustomerCreate, CustomerUpdate, CustomerPaymentCreate, PaymentCreate,
-    SaleCreate, SaleItemCreate, PreSaleDocumentCreate, CustomerLedgerEntry, CustomerLedgerResponse
+    SaleCreate, SaleItemCreate, PreSaleDocumentCreate, CustomerLedgerEntry,
+    CustomerLedgerResponse, CustomerSummaryResponse
 )
 from app.utils.roll_conversion import roll_count_to_meters
 
@@ -18,6 +19,20 @@ from app.utils.roll_conversion import roll_count_to_meters
 # =========================================================================
 # Customer Services & Live Ledger
 # =========================================================================
+
+def get_customers_summary(db: Session) -> CustomerSummaryResponse:
+    total_customers = db.query(func.count(Customer.id)).scalar() or 0
+    active_customers = db.query(func.count(Customer.id)).filter(Customer.is_active == True).scalar() or 0
+    total_receivables_debt = db.query(func.coalesce(func.sum(Customer.balance), Decimal("0.00"))).scalar() or Decimal("0.00")
+    customers_with_debt = db.query(func.count(Customer.id)).filter(Customer.balance > Decimal("0.00")).scalar() or 0
+
+    return CustomerSummaryResponse(
+        total_customers=total_customers,
+        active_customers=active_customers,
+        total_receivables_debt=Decimal(str(total_receivables_debt)),
+        customers_with_debt=customers_with_debt
+    )
+
 
 def create_customer(db: Session, cust_in: CustomerCreate) -> Customer:
     cust = Customer(
@@ -112,6 +127,28 @@ def update_customer(db: Session, customer_id: int, cust_in: CustomerUpdate) -> C
     db.commit()
     db.refresh(cust)
     return cust
+
+
+def delete_customer(db: Session, customer_id: int) -> dict:
+    cust = get_customer(db, customer_id)
+    if Decimal(str(cust.balance)) > Decimal("0.00"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete customer with an outstanding balance of KES {Decimal(str(cust.balance)):,.2f}. Please settle debt first."
+        )
+    
+    # Check for associated sales or payments
+    has_sales = db.query(Sale).filter(Sale.customer_id == cust.id).first() is not None
+    has_payments = db.query(Payment).filter(Payment.customer_id == cust.id).first() is not None
+
+    if has_sales or has_payments:
+        cust.is_active = False
+        db.commit()
+        return {"detail": "Customer has transaction history and has been deactivated."}
+    else:
+        db.delete(cust)
+        db.commit()
+        return {"detail": "Customer deleted successfully."}
 
 
 def record_customer_payment(

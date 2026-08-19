@@ -8,13 +8,23 @@ from app.schemas.supplier import (
     SupplierResponse,
     SupplierPaymentCreate,
     SupplierPaymentResponse,
-    SupplierLedgerResponse
+    SupplierLedgerResponse,
+    SupplierSummaryResponse
 )
 from app.services import supplier as supplier_service
 from app.dependencies import get_current_user, require_staff
 from app.models.user import User
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
+
+
+@router.get("/summary", response_model=SupplierSummaryResponse)
+def get_supplier_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    target_store_id = current_user.store_id or 1
+    return supplier_service.get_suppliers_summary(db, target_store_id)
 
 
 @router.get("/", response_model=List[SupplierResponse])
@@ -31,6 +41,7 @@ def get_suppliers(
         db, target_store_id, q=q, is_active=is_active, limit=limit, offset=offset
     )
     return [SupplierResponse.model_validate(s) for s in suppliers]
+
 
 
 @router.post("/", response_model=SupplierResponse, status_code=status.HTTP_201_CREATED)
@@ -87,3 +98,14 @@ def get_supplier_ledger(
 ):
     target_store_id = current_user.store_id or 1
     return supplier_service.get_supplier_ledger(db, target_store_id, supplier_id)
+
+
+@router.delete("/{supplier_id}")
+def delete_supplier_by_id(
+    supplier_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    return supplier_service.delete_supplier(db, target_store_id, supplier_id)
+

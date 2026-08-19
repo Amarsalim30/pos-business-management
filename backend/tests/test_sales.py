@@ -341,3 +341,65 @@ def test_customer_live_statement_ledger(staff_auth_client):
     assert float(entries[2]["credit"]) == 2000.0
     assert float(entries[2]["running_balance"]) == 242.0
 
+
+def test_delete_customer_safeguards(staff_auth_client):
+    # 1. Create a customer without transactions and delete them
+    c1 = staff_auth_client.post("/api/v1/customers/", json={
+        "name": "Temporary Test Customer",
+        "phone": "+254700000001"
+    }).json()
+
+    del_res = staff_auth_client.delete(f"/api/v1/customers/{c1['id']}")
+    assert del_res.status_code == 200
+    assert "deleted successfully" in del_res.json()["detail"]
+
+    # 2. Create customer with credit debt and verify delete is blocked
+    c2 = staff_auth_client.post("/api/v1/customers/", json={
+        "name": "Indebted Customer",
+        "phone": "+254700000002"
+    }).json()
+
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Battery 200Ah",
+        "cost_price": 15000.0,
+        "selling_price": 22000.0,
+        "initial_stock": 5.0
+    }).json()
+
+    staff_auth_client.post("/api/v1/sales/", json={
+        "customer_id": c2["id"],
+        "payment_method": "credit",
+        "items": [{"product_id": prod["id"], "unit_type": "piece", "unit_sold": "piece", "quantity": 1.0, "unit_price": 22000.0}]
+    })
+
+    # Try deleting indebted customer -> 400
+    del_debt = staff_auth_client.delete(f"/api/v1/customers/{c2['id']}")
+    assert del_debt.status_code == 400
+    assert "outstanding balance" in del_debt.json()["detail"].lower()
+
+    # Settle debt
+    staff_auth_client.post(f"/api/v1/customers/{c2['id']}/payments", json={
+        "amount": 22000.0,
+        "payment_method": "mpesa"
+    })
+
+    # Delete settled customer -> soft deactivates due to sales history
+    del_settled = staff_auth_client.delete(f"/api/v1/customers/{c2['id']}")
+    assert del_settled.status_code == 200
+    assert "deactivated" in del_settled.json()["detail"].lower()
+
+
+def test_customers_summary(staff_auth_client):
+    summary_res = staff_auth_client.get("/api/v1/customers/summary")
+    assert summary_res.status_code == 200
+    summary = summary_res.json()
+    assert "total_customers" in summary
+    assert "active_customers" in summary
+    assert "total_receivables_debt" in summary
+    assert "customers_with_debt" in summary
+    assert isinstance(summary["total_customers"], int)
+    assert isinstance(summary["active_customers"], int)
+    assert float(summary["total_receivables_debt"]) >= 0.0
+
+
+

@@ -91,3 +91,85 @@ def test_supplier_payment_and_ledger(staff_auth_client):
     assert float(e2["credit"]) == 0.0
     assert float(e2["debit"]) == 100000.0
     assert float(e2["running_balance"]) == 140000.0
+
+
+def test_update_supplier(staff_auth_client):
+    supp = staff_auth_client.post("/api/v1/suppliers/", json={
+        "name": "Original Supplier Name",
+        "phone": "+254711111111"
+    }).json()
+
+    update_res = staff_auth_client.put(f"/api/v1/suppliers/{supp['id']}", json={
+        "name": "Updated Supplier Name",
+        "contact_person": "Jane Doe",
+        "phone": "+254722222222",
+        "tax_pin": "P059999999Z",
+        "is_active": True
+    })
+    assert update_res.status_code == 200
+    updated = update_res.json()
+    assert updated["name"] == "Updated Supplier Name"
+    assert updated["contact_person"] == "Jane Doe"
+    assert updated["tax_pin"] == "P059999999Z"
+
+
+def test_delete_supplier_safeguards(staff_auth_client):
+    # 1. Create a supplier without transactions and delete them
+    s1 = staff_auth_client.post("/api/v1/suppliers/", json={
+        "name": "Temp Supplier",
+        "phone": "+254733333333"
+    }).json()
+
+    del_res = staff_auth_client.delete(f"/api/v1/suppliers/{s1['id']}")
+    assert del_res.status_code == 200
+    assert "deleted successfully" in del_res.json()["detail"]
+
+    # 2. Create supplier with open liability and verify delete is blocked
+    s2 = staff_auth_client.post("/api/v1/suppliers/", json={
+        "name": "Creditor Supplier",
+        "phone": "+254744444444"
+    }).json()
+
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Cable 6mm",
+        "cost_price": 5000.0,
+        "selling_price": 7500.0,
+        "initial_stock": 0.0
+    }).json()
+
+    staff_auth_client.post("/api/v1/purchases/grn", json={
+        "supplier_id": s2["id"],
+        "invoice_number": "DN-9999",
+        "items": [{"product_id": prod["id"], "unit_type": "piece", "quantity_received": 1.0, "unit_cost": 5000.0}]
+    })
+
+    # Try deleting supplier with balance -> 400
+    del_debt = staff_auth_client.delete(f"/api/v1/suppliers/{s2['id']}")
+    assert del_debt.status_code == 400
+    assert "outstanding payable balance" in del_debt.json()["detail"].lower()
+
+    # Settle payable balance
+    staff_auth_client.post(f"/api/v1/suppliers/{s2['id']}/payments", json={
+        "amount": 5000.0,
+        "payment_method": "bank"
+    })
+
+    # Delete settled supplier -> soft deactivates due to GRN history
+    del_settled = staff_auth_client.delete(f"/api/v1/suppliers/{s2['id']}")
+    assert del_settled.status_code == 200
+    assert "deactivated" in del_settled.json()["detail"].lower()
+
+
+def test_suppliers_summary(staff_auth_client):
+    summary_res = staff_auth_client.get("/api/v1/suppliers/summary")
+    assert summary_res.status_code == 200
+    summary = summary_res.json()
+    assert "total_suppliers" in summary
+    assert "active_suppliers" in summary
+    assert "total_payables_debt" in summary
+    assert "suppliers_with_balance" in summary
+    assert isinstance(summary["total_suppliers"], int)
+    assert isinstance(summary["active_suppliers"], int)
+    assert float(summary["total_payables_debt"]) >= 0.0
+
+

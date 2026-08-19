@@ -7,12 +7,21 @@ from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.sale import (
     CustomerCreate, CustomerUpdate, CustomerResponse,
-    CustomerPaymentCreate, CustomerPaymentResponse, CustomerLedgerResponse
+    CustomerPaymentCreate, CustomerPaymentResponse, CustomerLedgerResponse,
+    CustomerSummaryResponse
 )
 from app.services import sale as sale_service
 
 
 router = APIRouter(prefix="/customers", tags=["Customers & Debt Ledgers"])
+
+
+@router.get("/summary", response_model=CustomerSummaryResponse)
+def get_customer_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return sale_service.get_customers_summary(db)
 
 
 @router.post("/", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
@@ -34,6 +43,7 @@ def get_customers(
     current_user: User = Depends(get_current_user)
 ):
     return sale_service.list_customers(db, q=q, active_only=active_only, limit=limit, offset=offset)
+
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
@@ -72,4 +82,14 @@ def record_payment(
     current_user: User = Depends(get_current_user)
 ):
     return sale_service.record_customer_payment(db, customer_id, current_user.id, pay_in)
+
+
+@router.delete("/{customer_id}")
+def delete_customer_by_id(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return sale_service.delete_customer(db, customer_id)
+
 

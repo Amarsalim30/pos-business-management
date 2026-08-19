@@ -86,6 +86,14 @@ class CustomerLedgerResponse(BaseModel):
     entries: List[CustomerLedgerEntry] = []
 
 
+class CustomerSummaryResponse(BaseModel):
+    total_customers: int
+    active_customers: int
+    total_receivables_debt: Decimal
+    customers_with_debt: int
+
+
+
 # =========================================================================
 # Sale & Line Item Schemas
 # =========================================================================

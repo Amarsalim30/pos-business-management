@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../services/api';
-import type { Customer, CustomerLedgerResponse } from '../types';
+import type { Customer, CustomerLedgerResponse, CustomerSummaryResponse } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import {
   Users,
@@ -15,20 +15,32 @@ import {
   X,
   ArrowDownRight,
   ArrowUpRight,
-  Loader2
+  Loader2,
+  Edit3,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 
 export const CustomersPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [summary, setSummary] = useState<CustomerSummaryResponse | null>(null);
 
-  // Customer Modal
+  // Customer Create / Edit Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
+  const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Delete Customer State
+  const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Live Statement Ledger Modal
   const [ledgerCustomer, setLedgerCustomer] = useState<Customer | null>(null);
@@ -63,6 +75,19 @@ export const CustomersPage: React.FC = () => {
     dependencies: [searchQuery]
   });
 
+  const loadSummary = async () => {
+    try {
+      const data = await apiFetch<CustomerSummaryResponse>('/api/v1/customers/summary');
+      setSummary(data);
+    } catch (e) {
+      console.error('Failed to load customer summary', e);
+    }
+  };
+
+  useEffect(() => {
+    loadSummary();
+  }, []);
+
   const loadLedger = async (cust: Customer) => {
     setLedgerCustomer(cust);
     setLoadingLedger(true);
@@ -76,32 +101,88 @@ export const CustomersPage: React.FC = () => {
     }
   };
 
-  const handleCreateCustomer = async (e: React.FormEvent) => {
+  const handleOpenCreateModal = () => {
+    setEditingCustomer(null);
+    setName('');
+    setPhone('');
+    setEmail('');
+    setAddress('');
+    setIsActive(true);
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (cust: Customer) => {
+    setEditingCustomer(cust);
+    setName(cust.name);
+    setPhone(cust.phone || '');
+    setEmail(cust.email || '');
+    setAddress(cust.address || '');
+    setIsActive(cust.is_active ?? true);
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
     setFormError(null);
 
     try {
-      await apiFetch('/api/v1/customers/', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: name.trim(),
-          phone: phone.trim() || null,
-          email: email.trim() || null,
-          address: address.trim() || null
-        })
-      });
+      if (editingCustomer) {
+        await apiFetch(`/api/v1/customers/${editingCustomer.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name: name.trim(),
+            phone: phone.trim() || null,
+            email: email.trim() || null,
+            address: address.trim() || null,
+            is_active: isActive
+          })
+        });
+      } else {
+        await apiFetch('/api/v1/customers/', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: name.trim(),
+            phone: phone.trim() || null,
+            email: email.trim() || null,
+            address: address.trim() || null
+          })
+        });
+      }
       setIsModalOpen(false);
       setName('');
       setPhone('');
       setEmail('');
       setAddress('');
+      setEditingCustomer(null);
       reloadCustomers();
+      loadSummary();
     } catch (err: any) {
       setFormError(err.message || 'Failed to save customer');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!deletingCustomer) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+
+    try {
+      await apiFetch(`/api/v1/customers/${deletingCustomer.id}`, {
+        method: 'DELETE'
+      });
+      setDeletingCustomer(null);
+      reloadCustomers();
+      loadSummary();
+    } catch (err: any) {
+      setDeleteError(err.message || 'Failed to delete customer');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -133,6 +214,7 @@ export const CustomersPage: React.FC = () => {
       setPaymentReference('');
       setPaymentNotes('');
       reloadCustomers();
+      loadSummary();
       if (ledgerCustomer && ledgerCustomer.id === updatedCust.id) {
         loadLedger(updatedCust);
       }
@@ -143,7 +225,7 @@ export const CustomersPage: React.FC = () => {
     }
   };
 
-  const totalDebt = customers.reduce((acc, c) => acc + Number(c.balance || 0), 0);
+  const totalDebt = summary ? summary.total_receivables_debt : customers.reduce((acc, c) => acc + Number(c.balance || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -160,17 +242,40 @@ export const CustomersPage: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-3">
-          <div className="rounded-xl border border-rose-200 bg-rose-50/80 px-3.5 py-1.5 text-xs text-rose-800 font-bold">
-            Total Outstanding Receivables: <span className="font-mono">KES {totalDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenCreateModal}
             className="flex items-center space-x-1.5 rounded-xl bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-amber-500 transition-all shadow-xs cursor-pointer active:scale-95"
           >
             <UserPlus className="h-4 w-4" />
             <span>New Customer</span>
           </button>
+        </div>
+      </div>
+
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Customers</div>
+          <div className="text-2xl font-black text-slate-900 mt-2 font-mono">
+            {summary ? summary.active_customers : customers.filter(c => c.is_active).length}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">
+            {summary ? `${summary.total_customers} total registered accounts` : 'Total registered accounts'}
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <div className="text-xs font-bold text-rose-600 uppercase tracking-wider">Total Receivables Debt</div>
+          <div className="text-2xl font-black text-rose-600 mt-2 font-mono">
+            KES {Number(totalDebt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Outstanding customer credit liability</div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <div className="text-xs font-bold text-amber-600 uppercase tracking-wider">Accounts with Debt</div>
+          <div className="text-2xl font-black text-amber-600 mt-2 font-mono">
+            {summary ? summary.customers_with_debt : customers.filter(c => Number(c.balance) > 0).length}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Customers with open credit balance</div>
         </div>
       </div>
 
@@ -187,7 +292,7 @@ export const CustomersPage: React.FC = () => {
       </div>
 
       {/* Customer Directory Cards Grid */}
-      <div className="max-h-[calc(100vh-245px)] overflow-y-auto pr-1">
+      <div className="max-h-[calc(100vh-270px)] overflow-y-auto pr-1">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {customersLoading && customers.length === 0 ? (
             <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-400 space-y-2">
@@ -206,12 +311,41 @@ export const CustomersPage: React.FC = () => {
                 <div key={c.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all">
                   <div>
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-bold text-sm text-slate-900">{c.name}</h3>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        hasDebt ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      }`}>
-                        {hasDebt ? `Debt: KES ${Number(c.balance).toLocaleString()}` : 'Clean Account'}
-                      </span>
+                      <div>
+                        <div className="flex items-center space-x-1.5">
+                          <h3 className="font-bold text-sm text-slate-900">{c.name}</h3>
+                          {c.is_active === false && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          hasDebt ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        }`}>
+                          {hasDebt ? `Debt: KES ${Number(c.balance).toLocaleString()}` : 'Clean'}
+                        </span>
+                        <button
+                          onClick={() => handleOpenEditModal(c)}
+                          className="p-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                          title="Edit Customer Details"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeletingCustomer(c);
+                            setDeleteError(null);
+                          }}
+                          className="p-1 rounded-lg border border-rose-100 hover:bg-rose-50 text-rose-500 hover:text-rose-700 transition-colors cursor-pointer"
+                          title="Delete Customer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="mt-3 space-y-1.5 text-xs text-slate-600">
@@ -437,17 +571,27 @@ export const CustomersPage: React.FC = () => {
         </div>
       )}
 
-      {/* Create Customer Modal */}
+      {/* Create / Edit Customer Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
-            <h3 className="text-base font-bold text-slate-900">Register New Customer</h3>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                {editingCustomer ? <Edit3 className="h-4 w-4 text-amber-600" /> : <UserPlus className="h-4 w-4 text-amber-600" />}
+                <span>{editingCustomer ? `Edit Customer: ${editingCustomer.name}` : 'Register New Customer'}</span>
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
             {formError && (
               <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
                 {formError}
               </div>
             )}
-            <form onSubmit={handleCreateCustomer} className="space-y-3 text-xs">
+
+            <form onSubmit={handleSaveCustomer} className="space-y-3 text-xs">
               <div>
                 <label className="font-bold text-slate-700">Full Name / Company *</label>
                 <input
@@ -490,6 +634,21 @@ export const CustomersPage: React.FC = () => {
                 />
               </div>
 
+              {editingCustomer && (
+                <div className="pt-2 flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="is_active_cust"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                    className="h-4 w-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500"
+                  />
+                  <label htmlFor="is_active_cust" className="font-semibold text-slate-700 select-none cursor-pointer">
+                    Account is Active (enable for new POS credit sales)
+                  </label>
+                </div>
+              )}
+
               <div className="flex items-center justify-end space-x-3 pt-3">
                 <button
                   type="button"
@@ -503,10 +662,97 @@ export const CustomersPage: React.FC = () => {
                   disabled={saving}
                   className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold transition-all shadow-xs cursor-pointer"
                 >
-                  {saving ? 'Saving...' : 'Create Customer'}
+                  {saving ? 'Saving...' : editingCustomer ? 'Save Changes' : 'Create Customer'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Customer Confirmation Modal */}
+      {deletingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-100">
+                <AlertTriangle className="h-6 w-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Customer Account</h3>
+                <p className="text-xs text-slate-500 font-medium">{deletingCustomer.name}</p>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
+                {deleteError}
+              </div>
+            )}
+
+            {Number(deletingCustomer.balance) > 0 ? (
+              <div className="space-y-3">
+                <div className="p-3.5 bg-rose-50/80 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-1.5 font-medium">
+                  <div className="font-bold flex items-center gap-1.5 text-rose-900">
+                    <Banknote className="h-4 w-4" />
+                    Outstanding Debt Detected
+                  </div>
+                  <div>
+                    This customer currently owes <strong className="font-mono text-rose-900">KES {Number(deletingCustomer.balance).toLocaleString()}</strong>.
+                    You cannot delete an account with an open debt balance. Please settle or write off the balance first.
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeletingCustomer(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cust = deletingCustomer;
+                      setDeletingCustomer(null);
+                      setPaymentCustomer(cust);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1"
+                  >
+                    <Banknote className="h-3.5 w-3.5" />
+                    Record Settlement
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-600">
+                  Are you sure you want to delete <strong>{deletingCustomer.name}</strong>?
+                </p>
+                <div className="text-[11px] text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  💡 <strong>Integrity Safeguard</strong>: If this customer has existing sales invoices or ledger payments, their account will be deactivated instead of removed to preserve accounting history.
+                </div>
+
+                <div className="flex items-center justify-end space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeletingCustomer(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deleteLoading}
+                    onClick={handleDeleteCustomer}
+                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
+                  >
+                    {deleteLoading ? 'Deleting...' : 'Confirm Deletion'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

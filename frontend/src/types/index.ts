@@ -356,3 +356,214 @@ export interface GoodsReceivedNote {
   items: GRNItem[];
 }
 
+// =========================================================================
+// Projects Interfaces (Phase 5)
+// =========================================================================
+
+export interface ProjectExpense {
+  id: number;
+  project_id: number;
+  source: 'inventory' | 'external';
+  category: string;
+  product_id?: number | null;
+  product_name?: string | null;
+  quantity?: number | null;
+  unit_sold?: string | null;
+  unit_price?: number | null;
+  amount: number;
+  cost_price?: number | null;
+  cost_amount?: number | null;
+  description?: string | null;
+  vendor?: string | null;
+  receipt_no?: string | null;
+  date: string;
+  created_by: number;
+  creator_name?: string | null;
+  created_at: string;
+}
+
+export interface ProjectIncome {
+  id: number;
+  project_id: number;
+  description: string;
+  amount: number;
+  source: 'client_payment' | 'materials';
+  payment_method?: string | null;
+  reference?: string | null;
+  date: string;
+  created_by: number;
+  creator_name?: string | null;
+  created_at: string;
+}
+
+export interface Project {
+  id: number;
+  store_id: number;
+  name: string;
+  client_name: string;
+  client_phone?: string | null;
+  description?: string | null;
+  quoted_amount: number;
+  start_date?: string | null;
+  end_date?: string | null;
+  status: 'active' | 'completed' | 'cancelled';
+  created_by: number;
+  creator_name?: string | null;
+  created_at: string;
+  updated_at: string;
+  total_income: number;
+  total_expenses: number;
+  net_profit: number;
+}
+
+export interface ProjectDetail extends Project {
+  expenses: ProjectExpense[];
+  incomes: ProjectIncome[];
+  materials_cost: number;
+  materials_billed: number;
+  materials_profit: number;
+  external_expenses_total: number;
+  client_payments_total: number;
+}
+
+export interface ProjectSummary {
+  total_projects: number;
+  active_projects: number;
+  completed_projects: number;
+  total_quoted_value: number;
+  total_project_income: number;
+  total_project_cost: number;
+  total_net_profit: number;
+}
+
+// =========================================================================
+// Accounts & Petty Cash Interfaces (Phase 7 & 8)
+// =========================================================================
+
+export interface PettyCashEntry {
+  id: number;
+  store_id: number;
+  date: string;
+  description: string;
+  amount: number;
+  type: 'in' | 'out';
+  category?: string | null;
+  receipt_no?: string | null;
+  user_id: number;
+  user_name?: string | null;
+  created_at: string;
+}
+
+export interface PettyCashSummary {
+  total_in: number;
+  total_out: number;
+  balance: number;
+  entries_count: number;
+}
+
+export interface BankTransaction {
+  id: number;
+  bank_account_id: number;
+  date: string;
+  description: string;
+  amount: number;
+  type: 'deposit' | 'withdrawal';
+  reference?: string | null;
+  user_id: number;
+  user_name?: string | null;
+  created_at: string;
+}
+
+export interface BankAccount {
+  id: number;
+  store_id: number;
+  name: string;
+  bank_name: string;
+  account_number: string;
+  balance: number;
+  is_active: boolean;
+  created_at: string;
+  transactions?: BankTransaction[];
+}
+
+export interface BankAccountDetail extends BankAccount {
+  transactions: BankTransaction[];
+}
+
+
+export interface MpesaIncome {
+  id: number;
+  store_id: number;
+  date: string;
+  description: string;
+  amount: number;
+  reference?: string | null;
+  user_id: number;
+  user_name?: string | null;
+  created_at: string;
+}
+
+export interface AccountsOverview {
+  petty_cash_balance: number;
+  total_bank_balances: number;
+  total_mpesa_commission: number;
+  active_bank_accounts: number;
+}
+
+// =========================================================================
+// Reports Interfaces (Phase 6 & 10)
+// =========================================================================
+
+export interface PaymentMethodSummaryItem {
+  method: string;
+  total_amount: number;
+  count: number;
+  percentage: number;
+}
+
+export interface FastMovingProductItem {
+  product_id: number;
+  product_name: string;
+  sku?: string | null;
+  category_name?: string | null;
+  total_units_sold: number;
+  total_revenue: number;
+  total_profit: number;
+  stock_on_hand: number;
+}
+
+export interface NetProfitStatement {
+  period_start?: string | null;
+  period_end?: string | null;
+  gross_sales_revenue: number;
+  tax_amount: number;
+  discount_amount: number;
+  net_sales_revenue: number;
+  cost_of_goods_sold: number;
+  gross_profit: number;
+  gross_margin_percentage: number;
+  purchase_expenses: number;
+  recurring_expenses: number;
+  petty_cash_expenses: number;
+  total_operating_expenses: number;
+  mpesa_commission_income: number;
+  project_net_profit: number;
+  net_profit: number;
+}
+
+export interface SalesReportSummary {
+  period_start?: string | null;
+  period_end?: string | null;
+  total_transactions: number;
+  total_subtotal: number;
+  total_tax: number;
+  total_discount: number;
+  total_revenue: number;
+  total_collected: number;
+  total_outstanding_credit: number;
+  etr_revenue: number;
+  non_etr_revenue: number;
+  payment_methods: PaymentMethodSummaryItem[];
+}
+
+

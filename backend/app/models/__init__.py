@@ -7,6 +7,8 @@ from app.models.inventory import Inventory, StockMovement, StockTake, StockTakeI
 from app.models.sale import Customer, Sale, SaleItem, Payment, CustomerPayment, PreSaleDocument, PreSaleItem
 from app.models.supplier import Supplier, SupplierPayment
 from app.models.purchase import PurchaseOrder, PurchaseItem, PurchaseExpense, GoodsReceivedNote, GoodsReceivedItem
+from app.models.project import Project, ProjectExpense, ProjectIncome
+from app.models.account import PettyCashEntry, BankAccount, BankTransaction, MpesaIncome
 
 __all__ = [
     "Base",
@@ -34,6 +36,14 @@ __all__ = [
     "PurchaseItem",
     "PurchaseExpense",
     "GoodsReceivedNote",
-    "GoodsReceivedItem"
+    "GoodsReceivedItem",
+    "Project",
+    "ProjectExpense",
+    "ProjectIncome",
+    "PettyCashEntry",
+    "BankAccount",
+    "BankTransaction",
+    "MpesaIncome"
 ]
+
 

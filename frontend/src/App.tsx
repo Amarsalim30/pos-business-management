@@ -12,6 +12,9 @@ import { InventoryPage } from './pages/Inventory';
 import { StockTakePage } from './pages/StockTake';
 import { PurchasesPage } from './pages/Purchases';
 import { SuppliersPage } from './pages/Suppliers';
+import { ProjectsPage } from './pages/Projects';
+import { AccountsPage } from './pages/Accounts';
+import { ReportsPage } from './pages/Reports';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -23,6 +26,9 @@ import {
   ClipboardCheck,
   ShoppingBag,
   Truck,
+  Sun,
+  Wallet,
+  BarChart3,
   LogOut
 } from 'lucide-react';
 
@@ -38,10 +44,14 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
     { label: 'Customers', path: '/customers', icon: Users },
     { label: 'Purchases & GRN', path: '/purchases', icon: ShoppingBag },
     { label: 'Suppliers', path: '/suppliers', icon: Truck },
+    { label: 'Projects', path: '/projects', icon: Sun },
+    { label: 'Accounts', path: '/accounts', icon: Wallet },
+    { label: 'Reports', path: '/reports', icon: BarChart3 },
     { label: 'Products', path: '/products', icon: Package },
     { label: 'Inventory', path: '/inventory', icon: Boxes },
     { label: 'Stock Take', path: '/stock-take', icon: ClipboardCheck },
   ];
+
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
@@ -128,9 +138,13 @@ export function App() {
             <Route path="/customers" element={<NavigationLayout><CustomersPage /></NavigationLayout>} />
             <Route path="/purchases" element={<NavigationLayout><PurchasesPage /></NavigationLayout>} />
             <Route path="/suppliers" element={<NavigationLayout><SuppliersPage /></NavigationLayout>} />
+            <Route path="/projects" element={<NavigationLayout><ProjectsPage /></NavigationLayout>} />
+            <Route path="/accounts" element={<NavigationLayout><AccountsPage /></NavigationLayout>} />
+            <Route path="/reports" element={<NavigationLayout><ReportsPage /></NavigationLayout>} />
             <Route path="/products" element={<NavigationLayout><ProductsPage /></NavigationLayout>} />
             <Route path="/inventory" element={<NavigationLayout><InventoryPage /></NavigationLayout>} />
             <Route path="/stock-take" element={<NavigationLayout><StockTakePage /></NavigationLayout>} />
+
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

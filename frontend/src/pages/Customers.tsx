@@ -26,10 +26,7 @@ import {
   Share2,
   Receipt,
   ExternalLink,
-  Package,
-  CheckCircle2,
-  Layers,
-  Sparkles
+  Package
 } from 'lucide-react';
 
 export const CustomersPage: React.FC = () => {
@@ -109,6 +106,8 @@ export const CustomersPage: React.FC = () => {
   const loadLedger = async (cust: Customer) => {
     setLedgerCustomer(cust);
     setLoadingLedger(true);
+    setLedgerFilter('all');
+    setExpandedEntries(new Set());
     try {
       const data = await apiFetch<CustomerLedgerResponse>(`/api/v1/customers/${cust.id}/ledger`);
       setLedgerData(data);
@@ -117,6 +116,103 @@ export const CustomersPage: React.FC = () => {
     } finally {
       setLoadingLedger(false);
     }
+  };
+
+  const ledgerMetrics = useMemo(() => {
+    if (!ledgerData) return { totalInvoiced: 0, totalPaid: 0, currentDebt: 0, salesCount: 0, paymentsCount: 0 };
+    let totalInvoiced = 0;
+    let totalPaid = 0;
+    let salesCount = 0;
+    let paymentsCount = 0;
+
+    for (const en of ledgerData.entries) {
+      if (en.debit) {
+        totalInvoiced += Number(en.debit);
+      }
+      if (en.credit) {
+        totalPaid += Number(en.credit);
+      }
+      if (en.entry_type === 'sale') salesCount++;
+      if (en.entry_type === 'payment') paymentsCount++;
+    }
+
+    return {
+      totalInvoiced,
+      totalPaid,
+      currentDebt: Number(ledgerData.total_debt),
+      salesCount,
+      paymentsCount
+    };
+  }, [ledgerData]);
+
+  const filteredLedgerEntries = useMemo(() => {
+    if (!ledgerData) return [];
+    if (ledgerFilter === 'sales') {
+      return ledgerData.entries.filter(e => e.entry_type === 'sale' || e.entry_type === 'void');
+    }
+    if (ledgerFilter === 'payments') {
+      return ledgerData.entries.filter(e => e.entry_type === 'payment');
+    }
+    return ledgerData.entries;
+  }, [ledgerData, ledgerFilter]);
+
+  const handleViewInvoice = async (saleId: number) => {
+    setLoadingSaleId(saleId);
+    try {
+      const sale = await apiFetch<Sale>(`/api/v1/sales/${saleId}`);
+      setSelectedSaleForDrawer(sale);
+      setIsInvoiceDrawerOpen(true);
+    } catch (err) {
+      console.error('Failed to fetch invoice details', err);
+    } finally {
+      setLoadingSaleId(null);
+    }
+  };
+
+  const toggleEntryExpand = (entryId: string) => {
+    setExpandedEntries((prev) => {
+      const next = new Set(prev);
+      if (next.has(entryId)) {
+        next.delete(entryId);
+      } else {
+        next.add(entryId);
+      }
+      return next;
+    });
+  };
+
+  const handleShareWhatsAppStatement = () => {
+    if (!ledgerCustomer || !ledgerData) return;
+    const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const totalInvoiced = ledgerMetrics.totalInvoiced;
+    const totalPaid = ledgerMetrics.totalPaid;
+    const currentDebt = ledgerMetrics.currentDebt;
+
+    const recentLines = ledgerData.entries.slice(-5).map((e) => {
+      const d = new Date(e.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      if (e.entry_type === 'sale') {
+        return `• ${d}: Invoice ${e.reference} -> KES ${Number(e.debit).toLocaleString()}${e.items_summary ? ` (${e.items_summary})` : ''}`;
+      }
+      return `• ${d}: ${e.reference} -> KES ${Number(e.credit).toLocaleString()}`;
+    }).join('\n');
+
+    const msg = `*ACCOUNT STATEMENT: ${ledgerCustomer.name.toUpperCase()}*\n` +
+      `Statement Date: ${dateStr}\n` +
+      `---------------------------------\n` +
+      `*Total Invoiced:* KES ${totalInvoiced.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` +
+      `*Total Settled / Paid:* KES ${totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` +
+      `*Current Outstanding Due:* KES ${currentDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` +
+      `---------------------------------\n` +
+      `*Recent Activity:*\n${recentLines}\n` +
+      `---------------------------------\n` +
+      `Payment via M-Pesa / Bank / Cash.\n` +
+      `Thank you for your business!`;
+
+    const cleanPhone = (ledgerCustomer.phone || '').replace(/\D/g, '');
+    const waUrl = cleanPhone
+      ? `https://wa.me/${cleanPhone.startsWith('0') ? '254' + cleanPhone.slice(1) : cleanPhone}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank');
   };
 
   const handleOpenCreateModal = () => {
@@ -431,34 +527,56 @@ export const CustomersPage: React.FC = () => {
         )}
       </div>
 
-      {/* Live Customer Statement Ledger Modal */}
+      {/* Live Interactive Customer Statement Ledger Modal & Document Hub */}
       {ledgerCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:shadow-none print:border-none print:w-full">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-4xl w-full overflow-hidden flex flex-col max-h-[92vh] print:max-h-none print:shadow-none print:border-none print:w-full animate-in fade-in zoom-in-95 duration-150">
             {/* Header - Screen Only */}
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between print:hidden">
-              <div className="flex items-center space-x-2">
-                <FileText className="h-5 w-5 text-amber-400" />
+            <div className="p-4 sm:px-6 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/20 border border-amber-500/30">
+                  <FileText className="h-5 w-5 text-amber-400" />
+                </div>
                 <div>
-                  <h3 className="font-bold text-sm">Customer Statement Ledger</h3>
-                  <div className="text-[11px] text-slate-400">{ledgerCustomer.name}</div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base tracking-tight text-white">Financial Statement & Ledger</h3>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-amber-300">
+                      ID #{ledgerCustomer.id}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-300 font-medium flex items-center gap-2">
+                    <span className="font-bold text-white">{ledgerCustomer.name}</span>
+                    {ledgerCustomer.phone && <span>• {ledgerCustomer.phone}</span>}
+                    {ledgerCustomer.address && <span>• {ledgerCustomer.address}</span>}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 shrink-0">
                 <button
-                  onClick={() => window.print()}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs transition-colors cursor-pointer border border-slate-700"
+                  type="button"
+                  onClick={handleShareWhatsAppStatement}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs active:scale-95"
+                  title="Share formatted statement via WhatsApp"
                 >
-                  <Printer className="h-3.5 w-3.5" />
-                  <span>Print Statement</span>
+                  <Share2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">WhatsApp</span>
                 </button>
                 <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs transition-colors cursor-pointer border border-slate-700 active:scale-95"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>Print A4</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setLedgerCustomer(null);
                     setLedgerData(null);
                   }}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -466,98 +584,305 @@ export const CustomersPage: React.FC = () => {
             </div>
 
             {/* Statement Document Body */}
-            <div ref={ledgerPrintRef} className="p-6 overflow-y-auto flex-1 font-mono text-xs space-y-4 bg-white print:p-4">
-              {/* Company & Customer Header Box */}
-              <div className="border-2 border-slate-900 p-4 rounded-xl space-y-2 bg-slate-50/50">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-slate-200 pb-2">
-                  <h2 className="font-black text-sm uppercase tracking-tight text-slate-950">
-                    {ledgerCustomer.name}
-                  </h2>
-                  <div className="text-[11px] text-slate-500 font-sans">
-                    Statement Date: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+            <div ref={ledgerPrintRef} className="p-4 sm:p-6 overflow-y-auto flex-1 font-sans text-xs space-y-4 bg-slate-50/50 print:bg-white print:p-4">
+              
+              {/* Executive KPI Summary Dashboard */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:grid-cols-3">
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                    <span>Total Invoiced</span>
+                    <Receipt className="h-3.5 w-3.5 text-slate-400" />
+                  </div>
+                  <div className="text-lg font-black text-slate-900 font-mono mt-1">
+                    KES {ledgerMetrics.totalInvoiced.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-medium mt-0.5">
+                    Across {ledgerMetrics.salesCount} invoice{ledgerMetrics.salesCount === 1 ? '' : 's'}
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
-                  <div className="text-[11px] text-slate-600 font-sans space-y-0.5">
-                    {ledgerCustomer.phone && <div>Tel: {ledgerCustomer.phone}</div>}
-                    {ledgerCustomer.address && <div>Location: {ledgerCustomer.address}</div>}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 flex items-center justify-between">
+                    <span>Total Collections / Settled</span>
+                    <Banknote className="h-3.5 w-3.5 text-emerald-600" />
                   </div>
-                  <div className="text-right">
-                    <div className="text-[10px] text-slate-500 font-sans uppercase font-bold tracking-wider">Outstanding Balance:</div>
-                    <div className="text-base font-black text-rose-600 font-mono">
-                      KES {Number(ledgerData?.total_debt ?? ledgerCustomer.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </div>
+                  <div className="text-lg font-black text-emerald-700 font-mono mt-1">
+                    KES {ledgerMetrics.totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-[10px] text-emerald-600/90 font-medium mt-0.5">
+                    {ledgerMetrics.paymentsCount} recorded payment{ledgerMetrics.paymentsCount === 1 ? '' : 's'}
+                  </div>
+                </div>
+
+                <div className={`p-3.5 rounded-xl border shadow-2xs ${ledgerMetrics.currentDebt > 0 ? 'bg-rose-50/70 border-rose-200' : 'bg-emerald-50/70 border-emerald-200'}`}>
+                  <div className="text-[10px] font-bold uppercase tracking-wider flex items-center justify-between text-slate-600">
+                    <span>Current Outstanding Debt</span>
+                    <AlertTriangle className={`h-3.5 w-3.5 ${ledgerMetrics.currentDebt > 0 ? 'text-rose-600' : 'text-emerald-600'}`} />
+                  </div>
+                  <div className={`text-lg font-black font-mono mt-1 ${ledgerMetrics.currentDebt > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    KES {ledgerMetrics.currentDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className={`text-[10px] font-medium mt-0.5 ${ledgerMetrics.currentDebt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {ledgerMetrics.currentDebt > 0 ? 'Open balance due' : 'Account is fully settled'}
                   </div>
                 </div>
               </div>
 
-              {/* Statement Ledger Table */}
-              <div className="rounded-xl border border-slate-300 overflow-hidden shadow-2xs">
+              {/* Filter Tabs Bar (Screen Only) */}
+              <div className="flex items-center justify-between gap-2 pt-1 border-b border-slate-200 pb-2 print:hidden">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setLedgerFilter('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      ledgerFilter === 'all'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    All Records ({ledgerData?.entries.length || 0})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLedgerFilter('sales')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      ledgerFilter === 'sales'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Sales Invoices ({ledgerMetrics.salesCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLedgerFilter('payments')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      ledgerFilter === 'payments'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Payments & Credits ({ledgerMetrics.paymentsCount})
+                  </button>
+                </div>
+
+                <div className="text-[11px] text-slate-500 font-mono hidden sm:block">
+                  Statement Date: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </div>
+              </div>
+
+              {/* Interactive Statement Ledger Matrix Table */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-2xs">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-300 bg-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-800">
-                      <th className="px-3 py-2">Date</th>
-                      <th className="px-3 py-2">Invoice / Ref</th>
-                      <th className="px-3 py-2 text-right">Debit (KES)</th>
-                      <th className="px-3 py-2 text-right">Credit (KES)</th>
-                      <th className="px-3 py-2 text-right">Balance (KES)</th>
+                    <tr className="border-b border-slate-200 bg-slate-100/80 text-[10px] font-black uppercase tracking-wider text-slate-700">
+                      <th className="px-3.5 py-2.5">Date</th>
+                      <th className="px-3.5 py-2.5">Transaction Ref / Line Items</th>
+                      <th className="px-3.5 py-2.5 text-right">Invoiced (Debit)</th>
+                      <th className="px-3.5 py-2.5 text-right">Settled (Credit)</th>
+                      <th className="px-3.5 py-2.5 text-right">Balance Due</th>
+                      <th className="px-3.5 py-2.5 text-center print:hidden">Document</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 text-[11px] text-slate-800">
+                  <tbody className="divide-y divide-slate-100 text-xs">
                     {loadingLedger ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-8 text-center text-slate-400 font-sans">
-                          Loading statement entries...
+                        <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
+                          <div className="flex flex-col items-center justify-center space-y-2">
+                            <Loader2 className="h-6 w-6 animate-spin text-amber-600" />
+                            <span className="font-medium">Loading ledger statement entries...</span>
+                          </div>
                         </td>
                       </tr>
-                    ) : !ledgerData || ledgerData.entries.length === 0 ? (
+                    ) : !ledgerData || filteredLedgerEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-8 text-center text-slate-400 font-sans">
-                          No transaction history recorded for this customer account.
+                        <td colSpan={6} className="px-4 py-10 text-center text-slate-400 font-medium">
+                          No {ledgerFilter !== 'all' ? ledgerFilter : ''} transactions recorded for this customer.
                         </td>
                       </tr>
                     ) : (
-                      ledgerData.entries.map((en) => (
-                        <tr key={en.id} className="hover:bg-slate-50">
-                          <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
-                            {new Date(en.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="font-bold flex items-center space-x-1.5 text-slate-900">
-                              {en.entry_type === 'sale' ? (
-                                <ArrowUpRight className="h-3 w-3 text-rose-500 shrink-0" />
-                              ) : en.entry_type === 'void' ? (
-                                <span className="text-[9px] px-1 bg-slate-200 text-slate-700 rounded">VOID</span>
-                              ) : (
-                                <ArrowDownRight className="h-3 w-3 text-emerald-600 shrink-0" />
-                              )}
-                              <span>{en.reference}</span>
-                            </div>
-                            {en.notes && <div className="text-[10px] text-slate-400 italic font-sans">{en.notes}</div>}
-                          </td>
-                          <td className="px-3 py-2 text-right font-bold text-slate-900 whitespace-nowrap">
-                            {en.debit ? Number(en.debit).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'}
-                          </td>
-                          <td className="px-3 py-2 text-right font-bold text-emerald-700 whitespace-nowrap">
-                            {en.credit ? Number(en.credit).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'}
-                          </td>
-                          <td className="px-3 py-2 text-right font-black text-slate-950 whitespace-nowrap">
-                            {Number(en.running_balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      ))
+                      filteredLedgerEntries.map((en) => {
+                        const isExpanded = expandedEntries.has(en.id);
+                        const isSale = en.entry_type === 'sale';
+                        const isVoid = en.entry_type === 'void';
+
+                        return (
+                          <React.Fragment key={en.id}>
+                            <tr
+                              className={`transition-colors ${
+                                isExpanded ? 'bg-amber-50/40' : 'hover:bg-slate-50/80'
+                              }`}
+                            >
+                              {/* Date */}
+                              <td className="px-3.5 py-3 text-slate-600 whitespace-nowrap align-top font-mono text-[11px]">
+                                {new Date(en.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </td>
+
+                              {/* Transaction Ref & Summary */}
+                              <td className="px-3.5 py-3 align-top">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {/* Type icon & badge */}
+                                    {isSale ? (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold">
+                                        <ArrowUpRight className="h-3 w-3" />
+                                        INVOICE
+                                      </span>
+                                    ) : isVoid ? (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold">
+                                        VOID
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                                        <ArrowDownRight className="h-3 w-3" />
+                                        PAYMENT
+                                      </span>
+                                    )}
+
+                                    {/* Clickable Reference Link */}
+                                    {en.sale_id ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleViewInvoice(en.sale_id!)}
+                                        className="font-bold text-slate-900 hover:text-amber-700 underline decoration-slate-300 hover:decoration-amber-500 underline-offset-2 transition-colors flex items-center gap-1 cursor-pointer font-mono"
+                                        title="Click to view full Tax Invoice / Thermal receipt"
+                                      >
+                                        <span>{en.reference}</span>
+                                        {loadingSaleId === en.sale_id ? (
+                                          <Loader2 className="h-3 w-3 animate-spin text-amber-600" />
+                                        ) : (
+                                          <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-amber-600" />
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <span className="font-bold text-slate-900 font-mono">{en.reference}</span>
+                                    )}
+
+                                    {/* Inline Accordion Expand Button for Invoices with items */}
+                                    {en.items_summary && (
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleEntryExpand(en.id)}
+                                        className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium flex items-center gap-0.5 cursor-pointer transition-colors"
+                                      >
+                                        <span>{en.items_count} item{en.items_count === 1 ? '' : 's'}</span>
+                                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Line item quick preview snippet */}
+                                  {en.items_summary && !isExpanded && (
+                                    <div className="text-[11px] text-slate-500 font-medium line-clamp-1">
+                                      📦 {en.items_summary}
+                                    </div>
+                                  )}
+
+                                  {/* Notes */}
+                                  {en.notes && (
+                                    <div className="text-[10px] text-slate-400 italic">
+                                      {en.notes}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Debit (Invoiced) */}
+                              <td className="px-3.5 py-3 text-right font-bold text-slate-900 whitespace-nowrap align-top font-mono">
+                                {en.debit ? (
+                                  <span className="text-slate-900">
+                                    KES {Number(en.debit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-300">-</span>
+                                )}
+                              </td>
+
+                              {/* Credit (Settled) */}
+                              <td className="px-3.5 py-3 text-right font-bold text-emerald-700 whitespace-nowrap align-top font-mono">
+                                {en.credit ? (
+                                  <span className="text-emerald-700">
+                                    KES {Number(en.credit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-300">-</span>
+                                )}
+                              </td>
+
+                              {/* Running Balance */}
+                              <td className="px-3.5 py-3 text-right font-black text-slate-950 whitespace-nowrap align-top font-mono">
+                                KES {Number(en.running_balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+
+                              {/* Document Action Button */}
+                              <td className="px-3.5 py-3 text-center align-top print:hidden whitespace-nowrap">
+                                {en.sale_id ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewInvoice(en.sale_id!)}
+                                    disabled={loadingSaleId === en.sale_id}
+                                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-amber-100 hover:text-amber-800 text-slate-600 transition-colors cursor-pointer inline-flex items-center gap-1 font-bold text-[11px]"
+                                    title="Open interactive A4 Invoice & Receipt Hub"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    <span className="hidden sm:inline">View Doc</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-300 text-[10px]">—</span>
+                                )}
+                              </td>
+                            </tr>
+
+                            {/* Expanded Inline Product Accordion */}
+                            {isExpanded && en.items_summary && (
+                              <tr className="bg-amber-50/50 border-y border-amber-200/60 print:bg-white">
+                                <td colSpan={6} className="px-4 py-3">
+                                  <div className="bg-white p-3 rounded-xl border border-amber-200/80 shadow-2xs space-y-2">
+                                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                                      <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                                        <Package className="h-3.5 w-3.5 text-amber-600" />
+                                        <span>Invoice Items & Products Breakdown</span>
+                                      </div>
+                                      {en.sale_id && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleViewInvoice(en.sale_id!)}
+                                          className="text-[10px] text-amber-700 hover:text-amber-800 font-bold flex items-center gap-1 underline cursor-pointer"
+                                        >
+                                          Open Full A4 Tax Invoice / Thermal Receipt →
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-slate-700 font-mono leading-relaxed">
+                                      {en.items_summary}
+                                    </div>
+                                    {en.payment_method && (
+                                      <div className="text-[10px] text-slate-500 flex items-center gap-2 pt-1 border-t border-slate-100">
+                                        <span>Payment Term / Mode: <strong className="uppercase text-slate-700">{en.payment_method}</strong></span>
+                                        {en.notes && <span>• Note: {en.notes}</span>}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
               </div>
 
-              {/* Current Balance Footer Box */}
-              <div className="p-3.5 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono">
-                <span className="font-bold text-xs uppercase tracking-wider">Current Account Balance:</span>
-                <span className="text-base font-black text-amber-400">
+              {/* Current Account Balance Summary Bar */}
+              <div className="p-4 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono shadow-md">
+                <div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Statement Reconciliation</div>
+                  <div className="text-xs font-semibold text-slate-200">Current Outstanding Account Due:</div>
+                </div>
+                <div className="text-xl font-black text-amber-400">
                   KES {Number(ledgerData?.total_debt ?? ledgerCustomer.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </span>
+                </div>
               </div>
             </div>
 
@@ -571,19 +896,30 @@ export const CustomersPage: React.FC = () => {
                 }}
                 className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
               >
-                Close
+                Close Statement
               </button>
 
-              {Number(ledgerCustomer.balance) > 0 && (
+              <div className="flex items-center space-x-2">
                 <button
                   type="button"
-                  onClick={() => setPaymentCustomer(ledgerCustomer)}
-                  className="flex items-center space-x-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                  onClick={handleShareWhatsAppStatement}
+                  className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
                 >
-                  <Banknote className="h-4 w-4" />
-                  <span>Record Payment Against Account</span>
+                  <Share2 className="h-4 w-4" />
+                  <span>Send Statement to Client</span>
                 </button>
-              )}
+
+                {Number(ledgerCustomer.balance) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPaymentCustomer(ledgerCustomer)}
+                    className="flex items-center space-x-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                  >
+                    <Banknote className="h-4 w-4" />
+                    <span>Record Payment</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -861,6 +1197,16 @@ export const CustomersPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Universal Interactive Invoice & Document Hub Drawer */}
+      <InvoiceDrawer
+        sale={selectedSaleForDrawer}
+        isOpen={isInvoiceDrawerOpen}
+        onClose={() => {
+          setIsInvoiceDrawerOpen(false);
+          setSelectedSaleForDrawer(null);
+        }}
+      />
     </div>
   );
 };

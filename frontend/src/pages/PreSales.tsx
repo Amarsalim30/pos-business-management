@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
 import type { PreSaleDocument, Product, Customer, Sale } from '../types';
 import { ReceiptModal } from '../components/ReceiptModal';
+import { InvoiceDrawer } from '../components/InvoiceDrawer';
 import {
   FileCheck2,
   Plus,
   Trash2,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Eye
 } from 'lucide-react';
 
 interface PreSaleLine {
@@ -29,6 +31,10 @@ export const PreSalesPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [activeTab, setActiveTab] = useState<'quotation' | 'proforma'>('quotation');
+
+  const [selectedDocForDrawer, setSelectedDocForDrawer] = useState<PreSaleDocument | null>(null);
+  const [drawerFormat, setDrawerFormat] = useState<'a4' | 'thermal'>('a4');
+
 
   // New Document Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -264,9 +270,18 @@ export const PreSalesPage: React.FC = () => {
                 </tr>
               ) : (
                 documents.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr
+                    key={doc.id}
+                    onClick={() => {
+                      setSelectedDocForDrawer(doc);
+                      setDrawerFormat('a4');
+                    }}
+                    className="hover:bg-amber-50/40 transition-colors cursor-pointer group"
+                  >
                     <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                      {doc.document_no}
+                      <span className="group-hover:text-amber-600 transition-colors underline decoration-slate-300 underline-offset-2">
+                        {doc.document_no}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-slate-500 font-mono text-[11px]">
                       {new Date(doc.created_at).toLocaleDateString()}
@@ -294,19 +309,32 @@ export const PreSalesPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {doc.status === 'draft' ? (
+                      <div className="flex items-center justify-end space-x-2" onClick={(e) => e.stopPropagation()}>
                         <button
-                          onClick={() => setConvertingDoc(doc)}
-                          className="inline-flex items-center space-x-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer shadow-2xs"
+                          onClick={() => {
+                            setSelectedDocForDrawer(doc);
+                            setDrawerFormat('a4');
+                          }}
+                          className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 cursor-pointer shadow-2xs"
+                          title="View / Print Document"
                         >
-                          <Sparkles className="h-3 w-3" />
-                          <span>Convert to Sale</span>
+                          <Eye className="h-3.5 w-3.5 text-slate-600" />
                         </button>
-                      ) : (
-                        <span className="text-[11px] font-mono text-emerald-700 font-bold">
-                          Converted to Sale #{doc.converted_sale_id}
-                        </span>
-                      )}
+
+                        {doc.status === 'draft' ? (
+                          <button
+                            onClick={() => setConvertingDoc(doc)}
+                            className="inline-flex items-center space-x-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer shadow-2xs"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            <span>Convert</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] font-mono text-emerald-700 font-bold">
+                            Sale #{doc.converted_sale_id}
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -563,7 +591,23 @@ export const PreSalesPage: React.FC = () => {
         </div>
       )}
 
-      {/* 80mm Receipt Modal after conversion */}
+      {/* Document Drawer for Quotations & Proformas */}
+      <InvoiceDrawer
+        preSaleDoc={selectedDocForDrawer}
+        isOpen={!!selectedDocForDrawer}
+        defaultFormat={drawerFormat}
+        onClose={() => setSelectedDocForDrawer(null)}
+      />
+
+      {/* Invoice Drawer for Converted Sales */}
+      <InvoiceDrawer
+        sale={completedSale}
+        isOpen={!!completedSale}
+        defaultFormat="a4"
+        onClose={() => setCompletedSale(null)}
+      />
+
+      {/* 80mm Receipt Modal after conversion fallback */}
       <ReceiptModal
         sale={completedSale}
         onClose={() => setCompletedSale(null)}

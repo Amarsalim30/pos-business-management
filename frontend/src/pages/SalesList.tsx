@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
 import type { Sale, Customer } from '../types';
 import { ReceiptModal } from '../components/ReceiptModal';
+import { InvoiceDrawer } from '../components/InvoiceDrawer';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import {
   FileText,
@@ -13,7 +14,8 @@ import {
   Calendar,
   Banknote,
   Split,
-  Loader2
+  Loader2,
+  Eye
 } from 'lucide-react';
 
 export const SalesListPage: React.FC = () => {
@@ -25,7 +27,10 @@ export const SalesListPage: React.FC = () => {
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
 
+  const [selectedSaleForDrawer, setSelectedSaleForDrawer] = useState<Sale | null>(null);
+  const [drawerFormat, setDrawerFormat] = useState<'a4' | 'thermal'>('a4');
   const [selectedSaleForReceipt, setSelectedSaleForReceipt] = useState<Sale | null>(null);
+
   
   // Void Modal State
   const [voidingSale, setVoidingSale] = useState<Sale | null>(null);
@@ -329,10 +334,19 @@ export const SalesListPage: React.FC = () => {
                   const bal = Number(s.balance_due || 0);
 
                   return (
-                    <tr key={s.id} className={`hover:bg-slate-50/50 transition-colors ${isVoided ? 'opacity-60 bg-slate-50/40' : ''}`}>
+                    <tr
+                      key={s.id}
+                      onClick={() => {
+                        setSelectedSaleForDrawer(s);
+                        setDrawerFormat('a4');
+                      }}
+                      className={`hover:bg-amber-50/40 transition-colors cursor-pointer group ${isVoided ? 'opacity-60 bg-slate-50/40' : ''}`}
+                    >
                       <td className="px-4 py-3 font-mono font-bold text-slate-900 whitespace-nowrap">
                         <div className="flex items-center space-x-1.5">
-                          <span>{s.invoice_no}</span>
+                          <span className="group-hover:text-amber-600 transition-colors underline decoration-slate-300 underline-offset-2">
+                            {s.invoice_no}
+                          </span>
                           {s.is_etr && (
                             <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300">
                               ETR
@@ -411,7 +425,18 @@ export const SalesListPage: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center space-x-1.5">
+                        <div className="flex items-center justify-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => {
+                              setSelectedSaleForDrawer(s);
+                              setDrawerFormat('a4');
+                            }}
+                            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 cursor-pointer shadow-2xs"
+                            title="View A4 Tax Invoice / Document Hub"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-slate-600" />
+                          </button>
+
                           {(isPartial || isUnpaid) && !isVoided && (
                             <button
                               onClick={() => {
@@ -427,7 +452,10 @@ export const SalesListPage: React.FC = () => {
                           )}
 
                           <button
-                            onClick={() => setSelectedSaleForReceipt(s)}
+                            onClick={() => {
+                              setSelectedSaleForDrawer(s);
+                              setDrawerFormat('thermal');
+                            }}
                             className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 cursor-pointer shadow-2xs"
                             title="Reprint 80mm Thermal Receipt"
                           >
@@ -619,7 +647,24 @@ export const SalesListPage: React.FC = () => {
         </div>
       )}
 
-      {/* 80mm Receipt Reprint Modal */}
+      {/* Unified Document Drawer (A4 Tax Invoice & 80mm Thermal Slip) */}
+      <InvoiceDrawer
+        sale={selectedSaleForDrawer}
+        isOpen={!!selectedSaleForDrawer}
+        defaultFormat={drawerFormat}
+        onClose={() => setSelectedSaleForDrawer(null)}
+        onRecordPayment={(s) => {
+          setSelectedSaleForDrawer(null);
+          setPayingSale(s);
+          setInvoicePayAmount(String(s.balance_due || s.total_amount));
+        }}
+        onVoidSale={(s) => {
+          setSelectedSaleForDrawer(null);
+          setVoidingSale(s);
+        }}
+      />
+
+      {/* 80mm Receipt Reprint Modal fallback */}
       <ReceiptModal
         sale={selectedSaleForReceipt}
         onClose={() => setSelectedSaleForReceipt(null)}

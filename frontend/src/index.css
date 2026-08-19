@@ -4,10 +4,17 @@
   body * {
     visibility: hidden;
   }
+  
+  /* Printable Containers */
   #thermal-receipt-container,
-  #thermal-receipt-container * {
+  #thermal-receipt-container *,
+  #a4-invoice-container,
+  #a4-invoice-container *,
+  #executive-report-container,
+  #executive-report-container * {
     visibility: visible;
   }
+
   #thermal-receipt-container {
     position: absolute;
     left: 0;
@@ -17,8 +24,20 @@
     margin: 0 !important;
     padding: 2mm !important;
   }
+
+  #a4-invoice-container,
+  #executive-report-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+  }
+
   @page {
-    size: 80mm auto;
-    margin: 0;
+    margin: 10mm;
   }
 }
+

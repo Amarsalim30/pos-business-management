@@ -88,3 +88,13 @@ def test_project_lifecycle_and_inventory_allocation(staff_auth_client):
     assert summary["total_projects"] >= 1
     assert summary["active_projects"] >= 1
     assert float(summary["total_quoted_value"]) >= 450000.0
+
+    # 8. Delete material allocation and verify inventory restoration
+    del_res = staff_auth_client.delete(f"/api/v1/projects/{proj_id}/expenses/{mat['id']}")
+    assert del_res.status_code == 200
+
+    # Verify inventory was restored from 6 back to 10
+    inv_res2 = staff_auth_client.get("/api/v1/inventory/")
+    inv_item2 = next(i for i in inv_res2.json() if i["product_id"] == prod["id"])
+    assert float(inv_item2["quantity"]) == 10.0
+

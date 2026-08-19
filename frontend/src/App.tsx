@@ -13,8 +13,10 @@ import { StockTakePage } from './pages/StockTake';
 import { PurchasesPage } from './pages/Purchases';
 import { SuppliersPage } from './pages/Suppliers';
 import { ProjectsPage } from './pages/Projects';
+import { ProjectWorkspacePage } from './pages/ProjectWorkspace';
 import { AccountsPage } from './pages/Accounts';
 import { ReportsPage } from './pages/Reports';
+
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -139,7 +141,9 @@ export function App() {
             <Route path="/purchases" element={<NavigationLayout><PurchasesPage /></NavigationLayout>} />
             <Route path="/suppliers" element={<NavigationLayout><SuppliersPage /></NavigationLayout>} />
             <Route path="/projects" element={<NavigationLayout><ProjectsPage /></NavigationLayout>} />
+            <Route path="/projects/:id" element={<NavigationLayout><ProjectWorkspacePage /></NavigationLayout>} />
             <Route path="/accounts" element={<NavigationLayout><AccountsPage /></NavigationLayout>} />
+
             <Route path="/reports" element={<NavigationLayout><ReportsPage /></NavigationLayout>} />
             <Route path="/products" element={<NavigationLayout><ProductsPage /></NavigationLayout>} />
             <Route path="/inventory" element={<NavigationLayout><InventoryPage /></NavigationLayout>} />

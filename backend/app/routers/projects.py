@@ -171,3 +171,30 @@ def add_income(
         creator_name=current_user.full_name,
         created_at=income.created_at
     )
+
+
+@router.delete("/{project_id}/expenses/{expense_id}")
+def delete_expense(
+    project_id: int,
+    expense_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    return project_service.delete_project_expense(
+        db, target_store_id, current_user.id, project_id, expense_id
+    )
+
+
+@router.delete("/{project_id}/incomes/{income_id}")
+def delete_income(
+    project_id: int,
+    income_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    return project_service.delete_project_income(
+        db, target_store_id, project_id, income_id
+    )
+

@@ -355,3 +355,79 @@ def get_projects_summary(db: Session, store_id: int) -> ProjectSummaryResponse:
         total_project_cost=Decimal(str(total_cost)),
         total_net_profit=Decimal(str(net_profit))
     )
+
+
+def delete_project_expense(
+    db: Session, store_id: int, user_id: int, project_id: int, expense_id: int
+) -> dict:
+    get_project_by_id(db, store_id, project_id)
+    expense = db.query(ProjectExpense).filter(
+        ProjectExpense.id == expense_id,
+        ProjectExpense.project_id == project_id
+    ).first()
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project expense not found")
+
+    # If inventory material, return stock to inventory and log movement
+    if expense.source == "inventory" and expense.product_id:
+        product = db.query(Product).filter(Product.id == expense.product_id).first()
+        if product:
+            if product.unit_type == "roll" and expense.unit_sold == "roll":
+                meters_per_roll = Decimal(str(product.meters_per_roll or 100))
+                base_return = expense.quantity * meters_per_roll
+            else:
+                base_return = expense.quantity
+
+            inv = db.query(Inventory).filter(
+                Inventory.product_id == product.id,
+                Inventory.store_id == store_id
+            ).first()
+
+            if inv:
+                prev_qty = inv.quantity
+                inv.quantity += base_return
+                new_qty = inv.quantity
+
+                movement = StockMovement(
+                    product_id=product.id,
+                    store_id=store_id,
+                    type="project_return",
+                    quantity=base_return,
+                    unit_sold=expense.unit_sold,
+                    previous_quantity=prev_qty,
+                    new_quantity=new_qty,
+                    reference_id=f"PROJ-{project_id}",
+                    note=f"Material allocation deleted from project #{project_id}",
+                    user_id=user_id
+                )
+                db.add(movement)
+
+        # Remove companion material income entry
+        companion_income = db.query(ProjectIncome).filter(
+            ProjectIncome.project_id == project_id,
+            ProjectIncome.source == "materials",
+            ProjectIncome.amount == expense.amount
+        ).first()
+        if companion_income:
+            db.delete(companion_income)
+
+    db.delete(expense)
+    db.commit()
+    return {"detail": "Project expense removed successfully"}
+
+
+def delete_project_income(
+    db: Session, store_id: int, project_id: int, income_id: int
+) -> dict:
+    get_project_by_id(db, store_id, project_id)
+    income = db.query(ProjectIncome).filter(
+        ProjectIncome.id == income_id,
+        ProjectIncome.project_id == project_id
+    ).first()
+    if not income:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project income not found")
+
+    db.delete(income)
+    db.commit()
+    return {"detail": "Project income removed successfully"}
+

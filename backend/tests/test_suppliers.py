@@ -188,3 +188,30 @@ def test_suppliers_summary(staff_auth_client):
     assert float(summary["total_payables_debt"]) >= 0.0
 
 
+def test_suppliers_infinite_scroll_and_filters(staff_auth_client):
+    # Create suppliers
+    s_a = staff_auth_client.post("/api/v1/suppliers/", json={"name": "AAA Vendor Alpha", "phone": "0700000001"}).json()
+    s_b = staff_auth_client.post("/api/v1/suppliers/", json={"name": "ZZZ Vendor Omega", "phone": "0700000002"}).json()
+
+    # Test limit and offset
+    page1 = staff_auth_client.get("/api/v1/suppliers/?limit=1&offset=0").json()
+    assert len(page1) == 1
+
+    page2 = staff_auth_client.get("/api/v1/suppliers/?limit=1&offset=1").json()
+    assert len(page2) == 1
+    assert page1[0]["id"] != page2[0]["id"]
+
+    # Test search q
+    search_res = staff_auth_client.get("/api/v1/suppliers/?q=Alpha").json()
+    assert any(s["name"] == "AAA Vendor Alpha" for s in search_res)
+
+    # Test sort_by
+    sort_asc = staff_auth_client.get("/api/v1/suppliers/?sort_by=name_asc").json()
+    assert len(sort_asc) >= 2
+
+    # Test has_balance filter
+    zero_bal = staff_auth_client.get("/api/v1/suppliers/?has_balance=false").json()
+    assert any(s["name"] == "AAA Vendor Alpha" for s in zero_bal)
+
+
+

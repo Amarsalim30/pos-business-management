@@ -34,12 +34,18 @@ def list_suppliers(
     store_id: int,
     q: Optional[str] = None,
     is_active: Optional[bool] = None,
+    has_balance: Optional[bool] = None,
+    sort_by: Optional[str] = "name_asc",
     limit: Optional[int] = None,
     offset: int = 0
 ) -> List[Supplier]:
     query = db.query(Supplier).filter(Supplier.store_id == store_id)
     if is_active is not None:
         query = query.filter(Supplier.is_active == is_active)
+    if has_balance is True:
+        query = query.filter(Supplier.balance > 0)
+    elif has_balance is False:
+        query = query.filter(Supplier.balance <= 0)
     if q:
         search = f"%{q.strip()}%"
         query = query.filter(
@@ -47,7 +53,13 @@ def list_suppliers(
             (Supplier.phone.ilike(search)) |
             (Supplier.tax_pin.ilike(search))
         )
-    query = query.order_by(Supplier.name.asc())
+    if sort_by == "balance_desc":
+        query = query.order_by(Supplier.balance.desc(), Supplier.name.asc())
+    elif sort_by == "recent":
+        query = query.order_by(Supplier.created_at.desc(), Supplier.id.desc())
+    else:
+        query = query.order_by(Supplier.name.asc())
+
     if offset:
         query = query.offset(offset)
     if limit is not None:

@@ -42,6 +42,7 @@ class Sale(Base):
     payment_reference = Column(String(100), nullable=True)  # Mpesa code, cheque #, etc.
     status = Column(String(20), default="paid", nullable=False)  # 'paid', 'unpaid', 'partial', 'voided'
     is_etr = Column(Boolean, default=False, nullable=False)
+    site_name = Column(String(200), nullable=True, index=True)
     notes = Column(Text, nullable=True)
     
     # Void Tracking

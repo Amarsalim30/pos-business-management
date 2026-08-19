@@ -28,11 +28,15 @@ import {
   ExternalLink,
   Package,
   Building2,
-  Receipt
+  Receipt,
+  RotateCcw,
+  SlidersHorizontal
 } from 'lucide-react';
 
 export const SuppliersPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'debt' | 'zero' | 'active' | 'inactive'>('all');
+  const [sortBy, setSortBy] = useState<string>('name_asc');
   const [summary, setSummary] = useState<SupplierSummaryResponse | null>(null);
 
   // Supplier Create / Edit Modal
@@ -89,13 +93,23 @@ export const SuppliersPage: React.FC = () => {
     reload: reloadSuppliers
   } = useInfiniteScroll<Supplier>({
     fetchFn: async (offset, limit) => {
-      let url = `/api/v1/suppliers/?limit=${limit}&offset=${offset}`;
+      let url = `/api/v1/suppliers/?limit=${limit}&offset=${offset}&sort_by=${sortBy}`;
       if (searchQuery.trim()) url += `&q=${encodeURIComponent(searchQuery.trim())}`;
+      if (statusFilter === 'debt') url += `&has_balance=true`;
+      if (statusFilter === 'zero') url += `&has_balance=false`;
+      if (statusFilter === 'active') url += `&is_active=true`;
+      if (statusFilter === 'inactive') url += `&is_active=false`;
       return await apiFetch<Supplier[]>(url);
     },
     limit: 25,
-    dependencies: [searchQuery]
+    dependencies: [searchQuery, statusFilter, sortBy]
   });
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setSortBy('name_asc');
+  };
 
   const loadSummary = async () => {
     try {
@@ -398,57 +412,157 @@ export const SuppliersPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Summary KPI Grid */}
+      {/* Summary KPI Grid - Interactive Quick Filters */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Active Suppliers</div>
-          <div className="text-2xl font-black text-slate-900 mt-1 font-mono">{summary?.total_suppliers ?? 0}</div>
-          <div className="text-xs text-slate-400 font-medium mt-0.5">{summary?.active_suppliers ?? 0} active registered vendors</div>
-        </div>
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'active' ? 'all' : 'active')}
+          className={`p-5 rounded-2xl border text-left transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-[0.99] ${
+            statusFilter === 'active'
+              ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-slate-900/20'
+              : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className={`text-[11px] font-bold uppercase tracking-wider ${statusFilter === 'active' ? 'text-slate-300' : 'text-slate-500'}`}>
+            Active Suppliers
+          </div>
+          <div className="text-2xl font-black mt-1 font-mono">{summary?.total_suppliers ?? 0}</div>
+          <div className={`text-xs font-medium mt-0.5 ${statusFilter === 'active' ? 'text-slate-300' : 'text-slate-400'}`}>
+            {summary?.active_suppliers ?? 0} active registered vendors
+          </div>
+        </button>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-rose-600">Total Payables Debt</div>
-          <div className="text-2xl font-black text-rose-600 mt-1 font-mono">
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'debt' ? 'all' : 'debt')}
+          className={`p-5 rounded-2xl border text-left transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-[0.99] ${
+            statusFilter === 'debt'
+              ? 'bg-rose-900 text-white border-rose-900 ring-2 ring-rose-600/30'
+              : 'bg-white text-rose-600 border-rose-100 hover:border-rose-300'
+          }`}
+        >
+          <div className={`text-[11px] font-bold uppercase tracking-wider ${statusFilter === 'debt' ? 'text-rose-200' : 'text-rose-600'}`}>
+            Total Payables Debt
+          </div>
+          <div className="text-2xl font-black mt-1 font-mono">
             KES {summary?.total_payables_debt ? Number(summary.total_payables_debt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
           </div>
-          <div className="text-xs text-rose-500/80 font-medium mt-0.5">Outstanding vendor liability across all accounts</div>
-        </div>
+          <div className={`text-xs font-medium mt-0.5 ${statusFilter === 'debt' ? 'text-rose-200' : 'text-rose-500/80'}`}>
+            Outstanding vendor liability across all accounts
+          </div>
+        </button>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Suppliers With Balance</div>
-          <div className="text-2xl font-black text-emerald-700 mt-1 font-mono">{summary?.suppliers_with_balance ?? 0}</div>
-          <div className="text-xs text-emerald-600/80 font-medium mt-0.5">Vendors pending settlement</div>
-        </div>
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'debt' ? 'all' : 'debt')}
+          className={`p-5 rounded-2xl border text-left transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-[0.99] ${
+            statusFilter === 'debt'
+              ? 'bg-emerald-950 text-white border-emerald-900 ring-2 ring-emerald-600/30'
+              : 'bg-white text-emerald-700 border-emerald-100 hover:border-emerald-300'
+          }`}
+        >
+          <div className={`text-[11px] font-bold uppercase tracking-wider ${statusFilter === 'debt' ? 'text-emerald-300' : 'text-emerald-700'}`}>
+            Suppliers With Balance
+          </div>
+          <div className="text-2xl font-black mt-1 font-mono">{summary?.suppliers_with_balance ?? 0}</div>
+          <div className={`text-xs font-medium mt-0.5 ${statusFilter === 'debt' ? 'text-emerald-300' : 'text-emerald-600/80'}`}>
+            Vendors pending settlement
+          </div>
+        </button>
       </div>
 
-      {/* Search & Filters */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-        <div className="relative">
-          <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search suppliers by name, phone, or KRA PIN..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition-all placeholder:text-slate-400"
-          />
-          {searchQuery && (
+      {/* Search & Filter Control Strip */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+          {/* Search Box */}
+          <div className="md:col-span-8 relative">
+            <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search suppliers by name, phone, or KRA PIN..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition-all placeholder:text-slate-400 shadow-2xs"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Sort Dropdown & Reset */}
+          <div className="md:col-span-4 flex items-center justify-end space-x-2">
+            <div className="relative flex-1 sm:flex-initial">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-slate-900 shadow-2xs cursor-pointer"
+              >
+                <option value="name_asc">Sort: Name (A-Z)</option>
+                <option value="balance_desc">Sort: Highest Debt (KES)</option>
+                <option value="recent">Sort: Recently Added</option>
+              </select>
+            </div>
+
             <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+              type="button"
+              onClick={resetFilters}
+              className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs transition-colors shrink-0"
+              title="Reset Filters"
             >
-              <X className="h-4 w-4" />
+              <RotateCcw className="h-4 w-4" />
             </button>
-          )}
+          </div>
+        </div>
+
+        {/* Status Filter Pills */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold text-slate-500 mr-1 flex items-center gap-1">
+              <SlidersHorizontal className="h-3 w-3 text-slate-400" />
+              <span>Status:</span>
+            </span>
+            {[
+              { id: 'all', label: 'All Vendors' },
+              { id: 'debt', label: 'With Payable Debt' },
+              { id: 'zero', label: 'Zero Balance / Settled' },
+              { id: 'active', label: 'Active Only' },
+              { id: 'inactive', label: 'Inactive' }
+            ].map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setStatusFilter(st.id as any)}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  statusFilter === st.id
+                    ? st.id === 'debt'
+                      ? 'bg-rose-600 text-white shadow-2xs'
+                      : 'bg-slate-900 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {st.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="text-[11px] text-slate-400 font-medium">
+            Loaded <span className="font-bold text-slate-700 font-mono">{suppliers.length}</span> vendors
+          </div>
         </div>
       </div>
 
-      {/* Suppliers Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
+      {/* Suppliers Table with Infinite Scroll Container */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden max-h-[calc(100vh-270px)] flex flex-col">
+        <div className="overflow-x-auto overflow-y-auto flex-1">
           <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-2xs">
+              <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                 <th className="py-3 px-4">Supplier Name</th>
                 <th className="py-3 px-4">Contact Info</th>
                 <th className="py-3 px-4">Address / PIN</th>
@@ -479,9 +593,15 @@ export const SuppliersPage: React.FC = () => {
                 </tr>
               ) : (
                 suppliers.map((supp) => (
-                  <tr key={supp.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr
+                    key={supp.id}
+                    onClick={() => loadLedger(supp)}
+                    className="hover:bg-amber-50/40 transition-colors cursor-pointer group"
+                  >
                     <td className="py-3 px-4">
-                      <div className="font-bold text-slate-900 text-sm">{supp.name}</div>
+                      <div className="font-bold text-slate-900 text-sm group-hover:text-amber-700 transition-colors underline decoration-slate-200 group-hover:decoration-amber-400 underline-offset-2">
+                        {supp.name}
+                      </div>
                       {supp.contact_person && (
                         <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                           <User className="h-3 w-3 text-slate-400" />
@@ -522,7 +642,7 @@ export const SuppliersPage: React.FC = () => {
 
                     <td className="py-3 px-4 text-right font-mono font-bold">
                       {supp.balance > 0 ? (
-                        <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded-lg">
+                        <span className="text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-lg">
                           KES {Number(supp.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       ) : (
@@ -540,39 +660,43 @@ export const SuppliersPage: React.FC = () => {
                       </span>
                     </td>
 
-                    <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+                    <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <button
+                        type="button"
                         onClick={() => loadLedger(supp)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
                         title="View Statement Ledger"
                       >
                         <FileText className="h-3.5 w-3.5 text-slate-500" />
                         <span>Statement</span>
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
                           setPaymentSupplier(supp);
                           setPaymentAmount(supp.balance > 0 ? String(supp.balance) : '');
                         }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
                         title="Record Payment"
                       >
                         <Banknote className="h-3.5 w-3.5 text-emerald-600" />
                         <span>Pay</span>
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleOpenEditModal(supp)}
-                        className="inline-flex items-center p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg text-xs transition-colors cursor-pointer"
+                        className="inline-flex items-center p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg text-xs transition-colors cursor-pointer shadow-2xs"
                         title="Edit Supplier Details"
                       >
                         <Edit3 className="h-3.5 w-3.5" />
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
                           setDeletingSupplier(supp);
                           setDeleteError(null);
                         }}
-                        className="inline-flex items-center p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 border border-rose-100 rounded-lg text-xs transition-colors cursor-pointer"
+                        className="inline-flex items-center p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 border border-rose-100 rounded-lg text-xs transition-colors cursor-pointer shadow-2xs"
                         title="Delete Supplier"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -582,12 +706,12 @@ export const SuppliersPage: React.FC = () => {
                 ))
               )}
 
-              {/* Loading More Suppliers */}
+              {/* Loading More Suppliers Indicator */}
               {suppliersLoadingMore && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-3 text-center text-slate-600 bg-slate-50/50 text-xs font-bold">
+                  <td colSpan={6} className="px-4 py-3 text-center text-amber-600 bg-amber-50/40 text-xs font-bold">
                     <div className="flex items-center justify-center space-x-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-slate-600" />
+                      <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
                       <span>Loading more suppliers...</span>
                     </div>
                   </td>
@@ -596,7 +720,7 @@ export const SuppliersPage: React.FC = () => {
             </tbody>
           </table>
 
-          {/* Sentinel */}
+          {/* Intersection Observer Sentinel */}
           <div ref={suppliersSentinelRef} className="h-4 w-full" />
 
           {!suppliersHasMore && suppliers.length > 0 && (

@@ -111,16 +111,34 @@ export function useInfiniteScroll<T>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
+  const scrollCleanupRef = useRef<(() => void) | null>(null);
+
   // Stable Intersection observer sentinel callback
   const sentinelRef = useCallback((node: HTMLElement | null) => {
     if (observerRef.current) {
       observerRef.current.disconnect();
       observerRef.current = null;
     }
+    if (scrollCleanupRef.current) {
+      scrollCleanupRef.current();
+      scrollCleanupRef.current = null;
+    }
 
     if (!node) {
       return;
     }
+
+    // Locate closest scrollable ancestor container if any
+    let scrollParent: HTMLElement | null = node.parentElement;
+    while (scrollParent && scrollParent !== document.body) {
+      const style = window.getComputedStyle(scrollParent);
+      if (/(auto|scroll)/.test(style.overflow + style.overflowY)) {
+        break;
+      }
+      scrollParent = scrollParent.parentElement;
+    }
+
+    const effectiveRoot = scrollParent && scrollParent !== document.body ? scrollParent : null;
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
@@ -134,13 +152,43 @@ export function useInfiniteScroll<T>({
         }
       },
       {
-        root: null,
-        rootMargin: '100px',
+        root: effectiveRoot,
+        rootMargin: '250px',
         threshold
       }
     );
 
     observerRef.current.observe(node);
+
+    // Passive scroll listener for fast wheel / touch events in inner containers
+    const handleScroll = () => {
+      if (
+        !hasMoreRef.current ||
+        loadingRef.current ||
+        loadingMoreRef.current ||
+        isFetchingMoreRef.current
+      ) {
+        return;
+      }
+
+      if (effectiveRoot) {
+        const { scrollTop, scrollHeight, clientHeight } = effectiveRoot;
+        if (scrollHeight - (scrollTop + clientHeight) < 350) {
+          loadMoreRef.current();
+        }
+      } else {
+        const rect = node.getBoundingClientRect();
+        if (rect.top <= window.innerHeight + 350) {
+          loadMoreRef.current();
+        }
+      }
+    };
+
+    const target: EventTarget = effectiveRoot || window;
+    target.addEventListener('scroll', handleScroll, { passive: true });
+    scrollCleanupRef.current = () => {
+      target.removeEventListener('scroll', handleScroll);
+    };
   }, [threshold]);
 
   const reload = useCallback(async () => {

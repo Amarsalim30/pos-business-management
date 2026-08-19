@@ -31,6 +31,8 @@ def get_supplier_summary(
 def get_suppliers(
     q: Optional[str] = None,
     is_active: Optional[bool] = None,
+    has_balance: Optional[bool] = None,
+    sort_by: Optional[str] = "name_asc",
     limit: Optional[int] = None,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -38,7 +40,7 @@ def get_suppliers(
 ):
     target_store_id = current_user.store_id or 1
     suppliers = supplier_service.list_suppliers(
-        db, target_store_id, q=q, is_active=is_active, limit=limit, offset=offset
+        db, target_store_id, q=q, is_active=is_active, has_balance=has_balance, sort_by=sort_by, limit=limit, offset=offset
     )
     return [SupplierResponse.model_validate(s) for s in suppliers]
 

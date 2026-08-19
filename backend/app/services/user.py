@@ -20,6 +20,7 @@ def create_user(db: Session, user_in: UserCreate, current_user_id: Optional[int]
         password_hash=get_password_hash(user_in.password),
         full_name=user_in.full_name,
         role=user_in.role,
+        permissions=user_in.permissions,
         store_id=user_in.store_id,
         is_active=True
     )
@@ -31,7 +32,7 @@ def create_user(db: Session, user_in: UserCreate, current_user_id: Optional[int]
         action="create",
         table_name="users",
         record_id=user.id,
-        changes={"username": user.username, "role": user.role, "full_name": user.full_name}
+        changes={"username": user.username, "role": user.role, "full_name": user.full_name, "permissions": user.permissions}
     )
     db.add(audit)
     db.commit()
@@ -57,7 +58,7 @@ def update_user(db: Session, user_id: int, user_update: UserUpdate, current_user
     
     # Check if modifying the last active owner
     if user.role == "owner":
-        if user_update.role == "staff" or user_update.is_active is False:
+        if (user_update.role is not None and user_update.role != "owner") or user_update.is_active is False:
             active_owners = db.query(User).filter(
                 User.role == "owner",
                 User.is_active == True,
@@ -76,6 +77,9 @@ def update_user(db: Session, user_id: int, user_update: UserUpdate, current_user
     if user_update.role is not None:
         changes["role"] = [user.role, user_update.role]
         user.role = user_update.role
+    if user_update.permissions is not None:
+        changes["permissions"] = [user.permissions, user_update.permissions]
+        user.permissions = user_update.permissions
     if user_update.store_id is not None:
         changes["store_id"] = [user.store_id, user_update.store_id]
         user.store_id = user_update.store_id

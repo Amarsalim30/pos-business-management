@@ -31,7 +31,9 @@ def run_startup_migrations():
         "ALTER TABLE project_incomes ADD COLUMN IF NOT EXISTS reference VARCHAR(100);",
         "ALTER TABLE sales ADD COLUMN IF NOT EXISTS site_name VARCHAR(200);",
         "ALTER TABLE pre_sale_documents ADD COLUMN IF NOT EXISTS site_name VARCHAR(200);",
-        "CREATE INDEX IF NOT EXISTS ix_sales_site_name ON sales (site_name);"
+        "CREATE INDEX IF NOT EXISTS ix_sales_site_name ON sales (site_name);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSON;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL;"
     ]
 
     with engine.connect() as conn:

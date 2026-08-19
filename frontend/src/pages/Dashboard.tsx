@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/api';
-import type { Store, User, RecurringExpense } from '../types';
+import type { Store, User, RecurringExpense, RoleType } from '../types';
 import { 
   Users, 
   Receipt, 
@@ -33,7 +33,7 @@ export const Dashboard: React.FC = () => {
   const [userFullName, setUserFullName] = useState('');
   const [userUsername, setUserUsername] = useState('');
   const [userPassword, setUserPassword] = useState('');
-  const [userRole, setUserRole] = useState<'owner' | 'staff'>('staff');
+  const [userRole, setUserRole] = useState<RoleType>('staff');
   const [userError, setUserError] = useState<string | null>(null);
 
   // Store Settings Modal State

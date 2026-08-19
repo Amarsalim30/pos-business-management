@@ -12,8 +12,10 @@ import {
   Layers,
   Edit3,
   Trash2,
-  FolderPlus
+  FolderPlus,
+  History
 } from 'lucide-react';
+import { ProductHistoryDrawer } from '../components/ProductHistoryDrawer';
 
 export const ProductsPage: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -22,6 +24,7 @@ export const ProductsPage: React.FC = () => {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [historyDrawerProductId, setHistoryDrawerProductId] = useState<number | null>(null);
 
   // Infinite Scroll Products State
   const {
@@ -346,8 +349,16 @@ export const ProductsPage: React.FC = () => {
               products.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
                   <td className="p-3.5">
-                    <div className="font-bold text-slate-900">{p.name}</div>
-                    <div className="text-[11px] font-mono text-slate-400 mt-0.5">{p.sku || '---'}</div>
+                    <button
+                      onClick={() => setHistoryDrawerProductId(p.id)}
+                      className="text-left group cursor-pointer"
+                      title="Click to view purchase & sales telemetry"
+                    >
+                      <div className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors">
+                        {p.name}
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-400 mt-0.5">{p.sku || '---'}</div>
+                    </button>
                   </td>
                   <td className="p-3.5">
                     {p.unit_type === 'roll' ? (
@@ -401,6 +412,13 @@ export const ProductsPage: React.FC = () => {
                   </td>
                   <td className="p-3.5 text-right">
                     <div className="flex items-center justify-end space-x-1.5">
+                      <button
+                        onClick={() => setHistoryDrawerProductId(p.id)}
+                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-all cursor-pointer shadow-2xs"
+                        title="View Sales, Purchase & Movement History"
+                      >
+                        <History className="h-3.5 w-3.5" />
+                      </button>
                       <button
                         onClick={() => handleOpenEditModal(p)}
                         className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-amber-700 transition-all cursor-pointer shadow-2xs"
@@ -773,6 +791,13 @@ export const ProductsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Product History & Telemetry Drawer */}
+      <ProductHistoryDrawer
+        productId={historyDrawerProductId}
+        isOpen={!!historyDrawerProductId}
+        onClose={() => setHistoryDrawerProductId(null)}
+      />
     </div>
   );
 };

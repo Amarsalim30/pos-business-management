@@ -10,10 +10,20 @@ from app.services.user import (
     update_user,
     deactivate_user
 )
-from app.dependencies import require_owner
+from app.dependencies import require_owner, get_current_user
 from app.models.user import User
+from app.core.permissions import PERMISSION_REGISTRY, ROLE_PRESET_PERMISSIONS
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.get("/permissions")
+def get_permission_registry(current_user: User = Depends(get_current_user)):
+    """Returns the full dictionary of granular permissions and role presets."""
+    return {
+        "registry": PERMISSION_REGISTRY,
+        "presets": ROLE_PRESET_PERMISSIONS
+    }
 
 
 @router.get("/", response_model=List[UserResponse])

@@ -17,6 +17,8 @@ import { ProjectsPage } from './pages/Projects';
 import { ProjectWorkspacePage } from './pages/ProjectWorkspace';
 import { AccountsPage } from './pages/Accounts';
 import { ReportsPage } from './pages/Reports';
+import { UsersPage } from './pages/Users';
+import { SettingsPage } from './pages/Settings';
 
 export function App() {
   return (
@@ -42,6 +44,9 @@ export function App() {
             <Route path="/products" element={<NavigationLayout><ProductsPage /></NavigationLayout>} />
             <Route path="/inventory" element={<NavigationLayout><InventoryPage /></NavigationLayout>} />
             <Route path="/stock-take" element={<NavigationLayout><StockTakePage /></NavigationLayout>} />
+
+            <Route path="/users" element={<NavigationLayout><UsersPage /></NavigationLayout>} />
+            <Route path="/settings" element={<NavigationLayout><SettingsPage /></NavigationLayout>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

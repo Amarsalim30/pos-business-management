@@ -21,7 +21,9 @@ import {
   X,
   Search,
   Smartphone,
-  TrendingUp
+  TrendingUp,
+  Settings,
+  ShieldCheck
 } from 'lucide-react';
 
 interface NavSubItem {
@@ -161,7 +163,35 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
     ]
   };
 
-  const navGroups = [revenueGroup, salesGroup, inventoryGroup, procurementGroup];
+  // Group 5: Administration (Owner Only)
+  const adminGroup: NavGroup = {
+    id: 'admin',
+    label: 'Admin',
+    icon: Settings,
+    items: [
+      {
+        label: 'Store Settings & Overheads',
+        path: '/settings',
+        icon: Settings,
+        description: 'Business profile, default VAT rates & recurring monthly expenses'
+      },
+      {
+        label: 'User Management (RBAC)',
+        path: '/users',
+        icon: ShieldCheck,
+        description: 'Staff accounts, roles, access permissions & password resets'
+      }
+    ]
+  };
+
+  const isOwner = user?.role === 'owner' || user?.role === 'admin';
+  const navGroups = [
+    revenueGroup,
+    salesGroup,
+    inventoryGroup,
+    procurementGroup,
+    ...(isOwner ? [adminGroup] : [])
+  ];
 
   // All flat items for command palette search
   const allItems: { label: string; path: string; group: string; icon: React.ElementType }[] = [
@@ -171,7 +201,8 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
     ...inventoryGroup.items.map((i) => ({ ...i, group: 'Inventory' })),
     ...procurementGroup.items.map((i) => ({ ...i, group: 'Purchases' })),
     { label: 'Accounts & Petty Cash', path: '/accounts', group: 'Finance', icon: Wallet },
-    { label: 'Reports & Analytics', path: '/reports', group: 'Analytics', icon: BarChart3 }
+    { label: 'Reports & Analytics', path: '/reports', group: 'Analytics', icon: BarChart3 },
+    ...(isOwner ? adminGroup.items.map((i) => ({ ...i, group: 'Admin' })) : [])
   ];
 
   // Click outside listener for dropdowns

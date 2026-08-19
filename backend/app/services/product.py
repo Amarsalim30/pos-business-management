@@ -236,3 +236,113 @@ def delete_product(db: Session, store_id: int, product_id: int) -> bool:
     prod.is_active = False
     db.commit()
     return True
+
+
+def get_product_history(db: Session, store_id: int, product_id: int) -> dict:
+    from app.models.sale import Sale, SaleItem, Customer
+    from app.models.purchase import GoodsReceivedNote, GoodsReceivedItem, PurchaseOrder
+    from app.models.supplier import Supplier
+    from app.models.user import User
+
+    prod, current_qty, formatted, is_low = get_product(db, store_id, product_id)
+
+    # 1. Sales History
+    sale_items = db.query(SaleItem, Sale, Customer.name.label("cust_name"))\
+        .join(Sale, SaleItem.sale_id == Sale.id)\
+        .outerjoin(Customer, Sale.customer_id == Customer.id)\
+        .filter(SaleItem.product_id == product_id, Sale.store_id == store_id)\
+        .order_by(Sale.created_at.desc())\
+        .limit(50)\
+        .all()
+
+    sales_history = []
+    for item, sale, cust_name in sale_items:
+        sales_history.append({
+            "sale_id": sale.id,
+            "invoice_no": sale.invoice_no,
+            "date": sale.created_at,
+            "customer_name": cust_name or "Walk-in Customer",
+            "quantity": item.quantity,
+            "unit_sold": item.unit_sold,
+            "unit_price": item.unit_price,
+            "cost_price": item.cost_price,
+            "total": item.total,
+            "status": sale.computed_status,
+        })
+
+    # 2. Purchase / GRN History
+    grn_items = db.query(GoodsReceivedItem, GoodsReceivedNote, PurchaseOrder.po_no, Supplier.name.label("supp_name"))\
+        .join(GoodsReceivedNote, GoodsReceivedItem.grn_id == GoodsReceivedNote.id)\
+        .outerjoin(PurchaseOrder, GoodsReceivedNote.po_id == PurchaseOrder.id)\
+        .outerjoin(Supplier, GoodsReceivedNote.supplier_id == Supplier.id)\
+        .filter(GoodsReceivedItem.product_id == product_id, GoodsReceivedNote.store_id == store_id)\
+        .order_by(GoodsReceivedNote.created_at.desc())\
+        .limit(50)\
+        .all()
+
+    purchase_history = []
+    for item, grn, po_no, supp_name in grn_items:
+        purchase_history.append({
+            "grn_id": grn.id,
+            "grn_no": grn.grn_no,
+            "po_no": po_no,
+            "date": grn.delivery_date or grn.created_at,
+            "supplier_name": supp_name or "Unknown Supplier",
+            "quantity": item.quantity_received,
+            "unit_cost": item.unit_cost,
+            "total": item.total_cost,
+        })
+
+    # 3. Stock Movements
+    movements = db.query(StockMovement, User.full_name.label("user_name"))\
+        .outerjoin(User, StockMovement.user_id == User.id)\
+        .filter(StockMovement.product_id == product_id, StockMovement.store_id == store_id)\
+        .order_by(StockMovement.created_at.desc())\
+        .limit(50)\
+        .all()
+
+    stock_movements = []
+    for mov, user_name in movements:
+        stock_movements.append({
+            "id": mov.id,
+            "type": mov.type,
+            "quantity": mov.quantity,
+            "unit_sold": mov.unit_sold,
+            "previous_quantity": mov.previous_quantity,
+            "new_quantity": mov.new_quantity,
+            "reference_id": mov.reference_id,
+            "timestamp": mov.created_at,
+            "user_name": user_name or "System",
+        })
+
+    prod_dict = {
+        "id": prod.id,
+        "name": prod.name,
+        "sku": prod.sku,
+        "category_id": prod.category_id,
+        "store_id": prod.store_id,
+        "unit": prod.unit,
+        "unit_type": prod.unit_type,
+        "meters_per_roll": prod.meters_per_roll,
+        "cost_price": prod.cost_price,
+        "selling_price": prod.selling_price,
+        "price_per_roll": prod.price_per_roll,
+        "price_per_meter": prod.price_per_meter,
+        "cost_per_meter": prod.cost_per_meter,
+        "reorder_level": prod.reorder_level,
+        "is_taxable": prod.is_taxable,
+        "tax_rate": prod.tax_rate,
+        "is_active": prod.is_active,
+        "current_stock": current_qty,
+        "formatted_stock": formatted,
+        "is_low_stock": is_low,
+        "created_at": prod.created_at,
+        "updated_at": prod.updated_at,
+    }
+
+    return {
+        "product": prod_dict,
+        "sales_history": sales_history,
+        "purchase_history": purchase_history,
+        "stock_movements": stock_movements,
+    }

@@ -1,13 +1,32 @@
+export type RoleType = 'owner' | 'accountant' | 'staff' | 'storekeeper' | 'project_manager' | 'admin' | 'cashier';
+
 export interface User {
   id: number;
   username: string;
   full_name: string;
-  role: 'owner' | 'staff';
+  role: RoleType;
+  permissions?: string[] | null;
+  effective_permissions?: string[];
   store_id: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
+
+export interface PermissionItem {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface PermissionCategory {
+  title: string;
+  icon: string;
+  permissions: PermissionItem[];
+}
+
+export type PermissionRegistry = Record<string, PermissionCategory>;
+export type RolePresets = Record<string, string[]>;
 
 export interface Store {
   id: number;
@@ -25,7 +44,7 @@ export interface RecurringExpense {
   store_id: number;
   name: string;
   amount: number;
-  category: 'rent' | 'payroll' | 'other';
+  category: 'rent' | 'payroll' | 'utilities' | 'other' | string;
   is_active: boolean;
 }
 
@@ -593,6 +612,49 @@ export interface SalesReportSummary {
   etr_revenue: number;
   non_etr_revenue: number;
   payment_methods: PaymentMethodSummaryItem[];
+}
+
+export interface ProductSaleHistoryItem {
+  sale_id: number;
+  invoice_no: string;
+  date: string;
+  customer_name?: string | null;
+  quantity: number;
+  unit_sold?: string;
+  unit_price: number;
+  cost_price: number;
+  total: number;
+  status: string;
+}
+
+export interface ProductPurchaseHistoryItem {
+  grn_id?: number | null;
+  grn_no?: string | null;
+  po_no?: string | null;
+  date: string;
+  supplier_name?: string | null;
+  quantity: number;
+  unit_cost: number;
+  total: number;
+}
+
+export interface ProductStockMovementItem {
+  id: number;
+  type: string;
+  quantity: number;
+  unit_sold?: string;
+  previous_quantity: number;
+  new_quantity: number;
+  reference_id?: string | null;
+  timestamp: string;
+  user_name?: string | null;
+}
+
+export interface ProductHistoryResponse {
+  product: Product;
+  sales_history: ProductSaleHistoryItem[];
+  purchase_history: ProductPurchaseHistoryItem[];
+  stock_movements: ProductStockMovementItem[];
 }
 
 

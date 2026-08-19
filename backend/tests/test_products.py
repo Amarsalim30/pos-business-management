@@ -308,3 +308,31 @@ def test_product_flexible_tax_rates(owner_auth_client):
         "tax_rate": 0.16
     }).json()
     assert float(update_res["tax_rate"]) == 0.16
+
+
+def test_get_product_history(owner_auth_client):
+    # 1. Create a product
+    prod = owner_auth_client.post("/api/v1/products/", json={
+        "name": "Heavy Duty Solar Battery 200Ah",
+        "sku": "BAT-200AH-HD",
+        "cost_price": 28000.0,
+        "selling_price": 38000.0,
+        "initial_stock": 10.0
+    }).json()
+    prod_id = prod["id"]
+
+    # 2. Make a sale
+    sale_res = owner_auth_client.post("/api/v1/sales/", json={
+        "items": [{"product_id": prod_id, "quantity": 2.0, "unit_price": 37500.0}],
+        "payment_method": "cash"
+    })
+    assert sale_res.status_code == 201
+
+    # 3. Fetch history
+    hist_res = owner_auth_client.get(f"/api/v1/products/{prod_id}/history")
+    assert hist_res.status_code == 200
+    hist = hist_res.json()
+    assert hist["product"]["id"] == prod_id
+    assert len(hist["sales_history"]) >= 1
+    assert float(hist["sales_history"][0]["quantity"]) == 2.0
+    assert len(hist["stock_movements"]) >= 1

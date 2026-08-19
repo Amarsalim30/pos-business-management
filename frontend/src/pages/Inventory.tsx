@@ -3,6 +3,7 @@ import { apiFetch } from '../services/api';
 import type { InventoryItem, StockMovement, Supplier, GoodsReceivedNote } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { GRNDocumentDrawer } from '../components/GRNDocumentDrawer';
+import { ProductHistoryDrawer } from '../components/ProductHistoryDrawer';
 import {
   Boxes,
   Search,
@@ -42,6 +43,7 @@ export const InventoryPage: React.FC = () => {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<'levels' | 'history'>('levels');
   const [movementProductFilter, setMovementProductFilter] = useState<number | 'all'>('all');
+  const [historyDrawerProductId, setHistoryDrawerProductId] = useState<number | null>(null);
 
   // Suppliers State
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -556,7 +558,15 @@ export const InventoryPage: React.FC = () => {
                     filteredItems.map((item) => (
                       <tr key={item.product_id} className="hover:bg-slate-50/60 transition-colors">
                         <td className="px-4 py-3 font-semibold text-slate-900">
-                          {item.product_name}
+                          <button
+                            onClick={() => setHistoryDrawerProductId(item.product_id)}
+                            className="text-left group cursor-pointer"
+                            title="Click to view purchase, sales & movement telemetry"
+                          >
+                            <span className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors">
+                              {item.product_name}
+                            </span>
+                          </button>
                         </td>
                         <td className="px-4 py-3 font-mono text-[11px] text-slate-500">
                           {item.sku || '—'}
@@ -601,6 +611,14 @@ export const InventoryPage: React.FC = () => {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => setHistoryDrawerProductId(item.product_id)}
+                              className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 font-semibold text-[11px] cursor-pointer"
+                              title="View sales & purchase history"
+                            >
+                              <History className="h-3 w-3" />
+                              <span>History</span>
+                            </button>
                             <button
                               onClick={() => handleOpenGRNModal(item.product_id)}
                               className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] cursor-pointer"
@@ -1613,6 +1631,13 @@ export const InventoryPage: React.FC = () => {
           setIsGRNDrawerOpen(false);
           setSelectedGRNForDrawer(null);
         }}
+      />
+
+      {/* Universal Product Telemetry & History Drawer */}
+      <ProductHistoryDrawer
+        productId={historyDrawerProductId}
+        isOpen={!!historyDrawerProductId}
+        onClose={() => setHistoryDrawerProductId(null)}
       />
     </div>
   );

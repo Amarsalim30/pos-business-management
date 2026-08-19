@@ -69,11 +69,15 @@ def get_current_user(
 
 def require_role(allowed_role: str):
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
-        # Staff and Owner can perform staff-level tasks; Owner has full access to all tasks
+        # Staff role tasks: staff, cashier, accountant, owner, admin
         if allowed_role == "staff":
-            # Both 'staff' and 'owner' have staff permissions
-            if current_user.role in ("staff", "owner", "admin", "cashier"):
+            if current_user.role in ("staff", "owner", "admin", "cashier", "accountant"):
                 return current_user
+        # Accountant role tasks: accountant, owner, admin
+        elif allowed_role == "accountant":
+            if current_user.role in ("accountant", "owner", "admin"):
+                return current_user
+        # Owner role tasks: owner, admin
         elif allowed_role == "owner":
             if current_user.role in ("owner", "admin"):
                 return current_user
@@ -87,4 +91,22 @@ def require_role(allowed_role: str):
 
 # Specific dependency shortcuts
 require_owner = require_role("owner")
+require_accountant = require_role("accountant")
 require_staff = require_role("staff")
+
+
+def require_permission(permission_token: str):
+    def permission_checker(current_user: User = Depends(get_current_user)) -> User:
+        # Owner or Admin has universal wildcard access
+        if current_user.role in ("owner", "admin"):
+            return current_user
+
+        perms = current_user.effective_permissions
+        if "*" in perms or permission_token in perms:
+            return current_user
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Operation not permitted. Required permission: {permission_token}"
+        )
+    return permission_checker

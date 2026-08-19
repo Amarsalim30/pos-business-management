@@ -2,7 +2,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.schemas.product import CategoryCreate, CategoryResponse, ProductCreate, ProductUpdate, ProductResponse
+from app.schemas.product import (
+    CategoryCreate, CategoryResponse, ProductCreate, ProductUpdate, ProductResponse, ProductHistoryResponse
+)
 from app.services import product as product_service
 from app.dependencies import get_current_user, require_owner, require_staff
 from app.models.user import User
@@ -121,6 +123,18 @@ def get_product_by_id(
     res.formatted_stock = formatted
     res.is_low_stock = is_low
     return res
+
+
+@products_router.get("/{product_id}/history", response_model=ProductHistoryResponse)
+def get_product_history_by_id(
+    product_id: int,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    target_store_id = store_id or current_user.store_id or 1
+    history = product_service.get_product_history(db, target_store_id, product_id)
+    return ProductHistoryResponse.model_validate(history)
 
 
 @products_router.patch("/{product_id}", response_model=ProductResponse)

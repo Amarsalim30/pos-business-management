@@ -72,3 +72,52 @@ class ProductResponse(ProductBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProductSaleHistoryItem(BaseModel):
+    sale_id: int
+    invoice_no: str
+    date: datetime
+    customer_name: Optional[str] = "Walk-in Customer"
+    quantity: Decimal
+    unit_sold: Optional[str] = "piece"
+    unit_price: Decimal
+    cost_price: Decimal
+    total: Decimal
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductPurchaseHistoryItem(BaseModel):
+    grn_id: Optional[int] = None
+    grn_no: Optional[str] = None
+    po_no: Optional[str] = None
+    date: datetime
+    supplier_name: Optional[str] = "Unknown Supplier"
+    quantity: Decimal
+    unit_cost: Decimal
+    total: Decimal
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductStockMovementItem(BaseModel):
+    id: int
+    type: str  # in, sale, adjust, project_allocation, void_return, stock_take
+    quantity: Decimal
+    unit_sold: Optional[str] = "piece"
+    previous_quantity: Decimal
+    new_quantity: Decimal
+    reference_id: Optional[str] = None
+    timestamp: datetime
+    user_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductHistoryResponse(BaseModel):
+    product: ProductResponse
+    sales_history: List[ProductSaleHistoryItem] = []
+    purchase_history: List[ProductPurchaseHistoryItem] = []
+    stock_movements: List[ProductStockMovementItem] = []

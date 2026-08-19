@@ -161,7 +161,8 @@ ROLE_PRESET_PERMISSIONS: Dict[str, List[str]] = {
         "pos:quotes",
         "inventory:view",
         "purchases:receive_grn",
-        "customers:credit_ledger"
+        "customers:credit_ledger",
+        "accounts:petty_cash"
     ],
     "storekeeper": [
         "inventory:view",

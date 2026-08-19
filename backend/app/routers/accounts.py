@@ -1,3 +1,4 @@
+from decimal import Decimal
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, status
@@ -30,9 +31,9 @@ def get_accounts_overview(
     can_banking = is_owner or "*" in current_user.effective_permissions or "accounts:banking_mpesa" in current_user.effective_permissions
 
     if not can_banking:
-        overview.bank_total = 0.0
-        overview.bank_accounts = []
-        overview.mpesa_agent_income = 0.0
+        overview.total_bank_balances = Decimal("0.00")
+        overview.total_mpesa_commission = Decimal("0.00")
+        overview.active_bank_accounts = 0
 
     return overview
 

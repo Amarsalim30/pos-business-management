@@ -1,9 +1,13 @@
 from decimal import Decimal
 
 
-def test_reports_and_profit_statement(staff_auth_client):
-    # 1. Check Net Profit Statement
-    net_res = staff_auth_client.get("/api/v1/reports/net-profit")
+def test_reports_and_profit_statement(owner_auth_client, staff_auth_client):
+    # 1. Staff without reports:view_net_profit gets 403 Forbidden
+    staff_net_res = staff_auth_client.get("/api/v1/reports/net-profit")
+    assert staff_net_res.status_code == 403
+
+    # 2. Owner with reports:view_net_profit gets 200 OK
+    net_res = owner_auth_client.get("/api/v1/reports/net-profit")
     assert net_res.status_code == 200
     np = net_res.json()
     assert "gross_sales_revenue" in np
@@ -14,13 +18,12 @@ def test_reports_and_profit_statement(staff_auth_client):
     assert "project_net_profit" in np
     assert "net_profit" in np
 
-    # 2. Check Fast Moving Products
-    fast_res = staff_auth_client.get("/api/v1/reports/fast-moving")
+    # 3. Check Fast Moving Products and Sales Summary
+    fast_res = owner_auth_client.get("/api/v1/reports/fast-moving")
     assert fast_res.status_code == 200
     assert isinstance(fast_res.json(), list)
 
-    # 3. Check Sales Summary
-    sales_res = staff_auth_client.get("/api/v1/reports/sales-summary")
+    sales_res = owner_auth_client.get("/api/v1/reports/sales-summary")
     assert sales_res.status_code == 200
     s_sum = sales_res.json()
     assert "total_transactions" in s_sum

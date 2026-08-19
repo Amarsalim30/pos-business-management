@@ -92,20 +92,32 @@ def client(db_session):
 
 
 @pytest.fixture(scope="function")
-def owner_auth_client(client):
-    login_res = client.post(
-        "/api/v1/auth/login",
-        json={"username": "owner", "password": "owner123"}
-    )
-    assert login_res.status_code == 200
-    return client
+def owner_auth_client(db_session):
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as test_client:
+        login_res = test_client.post(
+            "/api/v1/auth/login",
+            json={"username": "owner", "password": "owner123"}
+        )
+        assert login_res.status_code == 200
+        yield test_client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture(scope="function")
-def staff_auth_client(client):
-    login_res = client.post(
-        "/api/v1/auth/login",
-        json={"username": "staff", "password": "staff123"}
-    )
-    assert login_res.status_code == 200
-    return client
+def staff_auth_client(db_session):
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as test_client:
+        login_res = test_client.post(
+            "/api/v1/auth/login",
+            json={"username": "staff", "password": "staff123"}
+        )
+        assert login_res.status_code == 200
+        yield test_client
+    app.dependency_overrides.clear()

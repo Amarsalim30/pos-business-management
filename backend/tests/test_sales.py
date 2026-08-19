@@ -144,9 +144,9 @@ def test_credit_sale_and_customer_balance_lifecycle(staff_auth_client):
     assert float(cust_after_pay["balance"]) == 55000.0
 
 
-def test_void_sale_restores_inventory_as_staff_and_owner(staff_auth_client):
+def test_void_sale_restores_inventory_as_staff_and_owner(owner_auth_client, staff_auth_client):
     # 1. Product with 10 stock
-    prod = staff_auth_client.post("/api/v1/products/", json={
+    prod = owner_auth_client.post("/api/v1/products/", json={
         "name": "Digital Multimeter Pro",
         "cost_price": 1000.0,
         "selling_price": 1500.0,
@@ -162,16 +162,20 @@ def test_void_sale_restores_inventory_as_staff_and_owner(staff_auth_client):
     # Stock should be 6
     assert float(staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()["current_stock"]) == 6.0
 
-    # 3. Staff voids the sale
-    void_res = staff_auth_client.post(f"/api/v1/sales/{sale['id']}/void", json={"reason": "Customer changed mind"})
-    assert void_res.status_code == 200
-    assert void_res.json()["status"] == "voided"
+    # 3. Staff without pos:void attempts to void sale -> 403 Forbidden
+    staff_void_res = staff_auth_client.post(f"/api/v1/sales/{sale['id']}/void", json={"reason": "Customer changed mind"})
+    assert staff_void_res.status_code == 403
+
+    # 4. Owner voids the sale -> 200 OK
+    owner_void_res = owner_auth_client.post(f"/api/v1/sales/{sale['id']}/void", json={"reason": "Customer changed mind"})
+    assert owner_void_res.status_code == 200
+    assert owner_void_res.json()["status"] == "voided"
 
     # Stock must be restored to 10
-    assert float(staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()["current_stock"]) == 10.0
+    assert float(owner_auth_client.get(f"/api/v1/products/{prod['id']}").json()["current_stock"]) == 10.0
 
-    # 4. Attempting to void again should fail
-    re_void = staff_auth_client.post(f"/api/v1/sales/{sale['id']}/void", json={})
+    # 5. Attempting to void again should fail
+    re_void = owner_auth_client.post(f"/api/v1/sales/{sale['id']}/void", json={})
     assert re_void.status_code == 400
 
 

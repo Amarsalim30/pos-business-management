@@ -414,21 +414,6 @@ export const POSPage: React.FC = () => {
   const singleTendered = parseFloat(amountTendered) || 0;
   const singleCashChange = paymentMethod === 'cash' && singleTendered > total ? singleTendered - total : 0;
 
-  const handleQuickCash = (amt: number | 'exact' | 'round1000' | 'round500') => {
-    if (amt === 'exact') {
-      setAmountTendered(String(total));
-    } else if (amt === 'round1000') {
-      const rounded = Math.ceil(total / 1000) * 1000;
-      setAmountTendered(String(rounded));
-    } else if (amt === 'round500') {
-      const rounded = Math.ceil(total / 500) * 500;
-      setAmountTendered(String(rounded));
-    } else {
-      const curr = parseFloat(amountTendered) || 0;
-      setAmountTendered(String(curr + amt));
-    }
-  };
-
   // Park Current Cart
   const handleParkCart = () => {
     if (cart.length === 0) return;
@@ -1211,44 +1196,6 @@ export const POSPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Ergonomic Quick Cash Tender Buttons */}
-                      <div className="flex flex-wrap items-center gap-1 text-[10px] font-mono">
-                        <button
-                          type="button"
-                          onClick={() => handleQuickCash('exact')}
-                          className="px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold hover:bg-emerald-100 cursor-pointer"
-                        >
-                          Exact (KES {total.toLocaleString()})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleQuickCash('round500')}
-                          className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
-                        >
-                          Round 500
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleQuickCash('round1000')}
-                          className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
-                        >
-                          Round 1K
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleQuickCash(1000)}
-                          className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
-                        >
-                          +1,000
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleQuickCash(5000)}
-                          className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
-                        >
-                          +5,000
-                        </button>
-                      </div>
                     </div>
                   ) : paymentMethod === 'credit' ? (
                     <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-medium flex items-center space-x-1.5">

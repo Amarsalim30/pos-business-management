@@ -13,19 +13,22 @@ class Project(Base):
     name = Column(String(200), nullable=False, index=True)
     client_name = Column(String(200), nullable=False)
     client_phone = Column(String(50), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="SET NULL"), nullable=True)
     description = Column(Text, nullable=True)
     quoted_amount = Column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     start_date = Column(DateTime, nullable=True)
     end_date = Column(DateTime, nullable=True)
-    status = Column(String(20), default="active", nullable=False)  # 'active', 'completed', 'cancelled'
+    status = Column(String(20), default="active", nullable=False)  # 'draft', 'active', 'commissioning', 'completed', 'cancelled'
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     store = relationship("Store")
+    customer = relationship("Customer")
     creator = relationship("User", foreign_keys=[created_by])
     expenses = relationship("ProjectExpense", back_populates="project", cascade="all, delete-orphan")
     incomes = relationship("ProjectIncome", back_populates="project", cascade="all, delete-orphan")
+
 
 
 class ProjectExpense(Base):

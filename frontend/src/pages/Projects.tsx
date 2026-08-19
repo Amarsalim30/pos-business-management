@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../services/api';
-import type { Project, ProjectSummary } from '../types';
+import type { Project, ProjectSummary, Customer } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import {
   Sun,
   Plus,
   Search,
   User,
+  UserPlus,
   X,
   Loader2,
   ArrowRight
@@ -18,25 +19,37 @@ export const ProjectsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [summary, setSummary] = useState<ProjectSummary | null>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
   // New Project Modal State
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [name, setName] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | ''>('');
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [description, setDescription] = useState('');
   const [quotedAmount, setQuotedAmount] = useState('');
+  const [initialStatus, setInitialStatus] = useState<'draft' | 'active'>('active');
   const [savingProject, setSavingProject] = useState(false);
   const [projectFormError, setProjectFormError] = useState<string | null>(null);
+
+  // Quick Customer Creation State
+  const [isQuickCustOpen, setIsQuickCustOpen] = useState(false);
+  const [quickName, setQuickName] = useState('');
+  const [quickPhone, setQuickPhone] = useState('');
+  const [quickEmail, setQuickEmail] = useState('');
+  const [quickAddress, setQuickAddress] = useState('');
+  const [savingQuickCust, setSavingQuickCust] = useState(false);
+  const [quickCustError, setQuickCustError] = useState<string | null>(null);
 
   // Infinite Scroll Projects State
   const {
     items: projects,
     loading: projectsLoading,
     loadingMore: projectsLoadingMore,
+    hasMore: projectsHasMore,
     sentinelRef: projectsSentinelRef
   } = useInfiniteScroll<Project>({
-
     fetchFn: async (offset, limit) => {
       let url = `/api/v1/projects/?limit=${limit}&offset=${offset}`;
       if (statusFilter !== 'all') url += `&status=${statusFilter}`;
@@ -56,9 +69,63 @@ export const ProjectsPage: React.FC = () => {
     }
   };
 
+  const loadCustomers = async () => {
+    try {
+      const data = await apiFetch<Customer[]>('/api/v1/customers/');
+      setCustomers(data);
+    } catch (e) {
+      console.error('Failed to load customers', e);
+    }
+  };
+
   useEffect(() => {
     loadSummary();
+    loadCustomers();
   }, []);
+
+  const handleSelectCustomer = (custId: number | '') => {
+    setSelectedCustomerId(custId);
+    if (!custId) return;
+    const c = customers.find(x => x.id === custId);
+    if (c) {
+      setClientName(c.name);
+      setClientPhone(c.phone || '');
+    }
+  };
+
+  const handleQuickCreateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickName.trim()) return;
+
+    setSavingQuickCust(true);
+    setQuickCustError(null);
+    try {
+      const created = await apiFetch<Customer>('/api/v1/customers/', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: quickName.trim(),
+          phone: quickPhone.trim() || null,
+          email: quickEmail.trim() || null,
+          address: quickAddress.trim() || null
+        })
+      });
+
+      await loadCustomers();
+      setSelectedCustomerId(created.id);
+      setClientName(created.name);
+      setClientPhone(created.phone || '');
+
+      setIsQuickCustOpen(false);
+      setQuickName('');
+      setQuickPhone('');
+      setQuickEmail('');
+      setQuickAddress('');
+    } catch (err: any) {
+      setQuickCustError(err.message || 'Failed to create customer');
+    } finally {
+      setSavingQuickCust(false);
+    }
+  };
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,18 +140,19 @@ export const ProjectsPage: React.FC = () => {
           name: name.trim(),
           client_name: clientName.trim(),
           client_phone: clientPhone.trim() || null,
+          customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,
           description: description.trim() || null,
           quoted_amount: parseFloat(quotedAmount) || 0,
-          status: 'active'
+          status: initialStatus
         })
       });
       setIsNewProjectModalOpen(false);
       setName('');
+      setSelectedCustomerId('');
       setClientName('');
       setClientPhone('');
       setDescription('');
       setQuotedAmount('');
-      // Navigate directly to the new project workspace
       navigate(`/projects/${created.id}`);
     } catch (err: any) {
       setProjectFormError(err.message || 'Failed to create project');
@@ -105,7 +173,7 @@ export const ProjectsPage: React.FC = () => {
             Solar Projects & Installations
           </h1>
           <p className="text-sm text-slate-500 mt-1 font-medium">
-            Manage custom solar projects, allocate inventory materials, log labor/transport costs, and track project net profit
+            Track custom solar installations, assign store materials, record labor/expenses, and monitor project profit margins.
           </p>
         </div>
         <button
@@ -125,12 +193,12 @@ export const ProjectsPage: React.FC = () => {
             {summary ? summary.active_projects : 0}
           </div>
           <div className="text-xs text-slate-400 mt-1">
-            {summary ? `${summary.total_projects} total solar projects` : 'Total registered'}
+            {summary ? `${summary.total_projects} total projects` : 'Total registered'}
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Total Quoted Value</div>
+          <div className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Quoted Contracts</div>
           <div className="text-2xl font-black text-indigo-700 mt-2 font-mono">
             KES {Number(summary ? summary.total_quoted_value : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
@@ -138,11 +206,11 @@ export const ProjectsPage: React.FC = () => {
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">Project Incomes</div>
+          <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">Total Revenue</div>
           <div className="text-2xl font-black text-blue-700 mt-2 font-mono">
             KES {Number(summary ? summary.total_project_income : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-xs text-slate-400 mt-1">Client payments + materials billed</div>
+          <div className="text-xs text-slate-400 mt-1">Client payments + billed materials</div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
@@ -150,7 +218,7 @@ export const ProjectsPage: React.FC = () => {
           <div className="text-2xl font-black text-emerald-600 mt-2 font-mono">
             KES {Number(summary ? summary.total_net_profit : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-xs text-slate-400 mt-1">Income minus store material & labor cost</div>
+          <div className="text-xs text-slate-400 mt-1">Revenue minus materials & labor costs</div>
         </div>
       </div>
 
@@ -168,17 +236,24 @@ export const ProjectsPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl self-stretch sm:self-auto overflow-x-auto">
-          {['all', 'active', 'completed', 'cancelled'].map((st) => (
+          {[
+            { id: 'all', label: 'All' },
+            { id: 'draft', label: 'Drafts' },
+            { id: 'active', label: 'In Progress' },
+            { id: 'commissioning', label: 'Testing' },
+            { id: 'completed', label: 'Completed' },
+            { id: 'cancelled', label: 'Cancelled' }
+          ].map((st) => (
             <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
-                statusFilter === st
+              key={st.id}
+              onClick={() => setStatusFilter(st.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === st.id
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              {st}
+              {st.label}
             </button>
           ))}
         </div>
@@ -215,16 +290,24 @@ export const ProjectsPage: React.FC = () => {
                           ? 'bg-amber-50 text-amber-700 border border-amber-200'
                           : p.status === 'completed'
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : p.status === 'draft'
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                          : p.status === 'commissioning'
+                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
                           : 'bg-rose-50 text-rose-700 border border-rose-200'
                       }`}
                     >
-                      {p.status}
+                      {p.status === 'active'
+                        ? 'In Progress'
+                        : p.status === 'commissioning'
+                        ? 'Testing'
+                        : p.status}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2 text-xs text-slate-500 mt-2 font-medium">
                     <User className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{p.client_name}</span>
+                    <span className="font-semibold text-slate-700">{p.client_name}</span>
                     {p.client_phone && <span>• {p.client_phone}</span>}
                   </div>
 
@@ -261,14 +344,22 @@ export const ProjectsPage: React.FC = () => {
           </div>
         )}
 
-        <div ref={projectsSentinelRef} className="py-4 text-center">
-          {projectsLoadingMore && (
-            <div className="inline-flex items-center gap-2 text-xs text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
-              <span>Loading more projects...</span>
-            </div>
-          )}
-        </div>
+        {projectsHasMore && (
+          <div ref={projectsSentinelRef} className="py-4 text-center">
+            {projectsLoadingMore && (
+              <div className="inline-flex items-center gap-2 text-xs text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                <span>Loading more projects...</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!projectsHasMore && projects.length > 0 && (
+          <div className="text-center py-4 text-[11px] text-slate-400 font-medium">
+            Showing all {projects.length} solar projects
+          </div>
+        )}
       </div>
 
       {/* New Project Modal */}
@@ -309,6 +400,34 @@ export const ProjectsPage: React.FC = () => {
                 />
               </div>
 
+              {/* Linked Customer Selection & On-The-Spot Creation */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 uppercase">Customer Account</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickCustOpen(true)}
+                    className="flex items-center gap-1 text-xs font-bold text-amber-600 hover:text-amber-700 cursor-pointer"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    <span>+ Register New Client</span>
+                  </button>
+                </div>
+
+                <select
+                  value={selectedCustomerId}
+                  onChange={(e) => handleSelectCustomer(e.target.value ? Number(e.target.value) : '')}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none"
+                >
+                  <option value="">-- Choose from existing customers (or fill below) --</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.phone ? `(${c.phone})` : ''} {Number(c.balance) > 0 ? `• Debt: KES ${Number(c.balance).toLocaleString()}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Client Name *</label>
@@ -333,20 +452,33 @@ export const ProjectsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Quoted Contract Amount (KES)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="e.g. 450000"
-                  value={quotedAmount}
-                  onChange={(e) => setQuotedAmount(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Quoted Contract Amount (KES)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g. 450000"
+                    value={quotedAmount}
+                    onChange={(e) => setQuotedAmount(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Initial Status</label>
+                  <select
+                    value={initialStatus}
+                    onChange={(e) => setInitialStatus(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  >
+                    <option value="active">Active (In Progress)</option>
+                    <option value="draft">Draft Proposal</option>
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Project Scope / Details</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Scope / System Specifications</label>
                 <textarea
                   rows={3}
                   placeholder="Panels, inverters, cabling requirements, mounting setup..."
@@ -371,6 +503,94 @@ export const ProjectsPage: React.FC = () => {
                 >
                   {savingProject && <Loader2 className="h-4 w-4 animate-spin" />}
                   Create & Open Workspace
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* On-The-Spot Quick Customer Creation Modal */}
+      {isQuickCustOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <UserPlus className="h-4 w-4 text-amber-600" />
+                <span>Register New Customer</span>
+              </h3>
+              <button onClick={() => setIsQuickCustOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickCreateCustomer} className="mt-4 space-y-3">
+              {quickCustError && (
+                <div className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">
+                  {quickCustError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Customer / Client Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Captain Salim"
+                  value={quickName}
+                  onChange={(e) => setQuickName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  placeholder="e.g. +254 711 223344"
+                  value={quickPhone}
+                  onChange={(e) => setQuickPhone(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Email Address</label>
+                <input
+                  type="email"
+                  placeholder="e.g. client@example.com"
+                  value={quickEmail}
+                  onChange={(e) => setQuickEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Location / Site Address</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Nyali Links Road, Mombasa"
+                  value={quickAddress}
+                  onChange={(e) => setQuickAddress(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickCustOpen(false)}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingQuickCust}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {savingQuickCust && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Save & Select Customer
                 </button>
               </div>
             </form>

@@ -36,6 +36,13 @@ export function useInfiniteScroll<T>({
   const observerRef = useRef<IntersectionObserver | null>(null);
   const fetchFnRef = useRef(fetchFn);
 
+  const hasMoreRef = useRef(hasMore);
+  hasMoreRef.current = hasMore;
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+  const loadingMoreRef = useRef(loadingMore);
+  loadingMoreRef.current = loadingMore;
+
   // Keep fetchFn reference fresh
   useEffect(() => {
     fetchFnRef.current = fetchFn;
@@ -59,12 +66,17 @@ export function useInfiniteScroll<T>({
 
       if (isInitial) {
         setItems(newItems);
+        const moreAvailable = newItems.length >= limit && newItems.length > 0;
+        setHasMore(moreAvailable);
+        hasMoreRef.current = moreAvailable;
       } else {
         setItems((prev) => [...prev, ...newItems]);
+        const moreAvailable = newItems.length >= limit && newItems.length > 0;
+        setHasMore(moreAvailable);
+        hasMoreRef.current = moreAvailable;
       }
 
       offsetRef.current = currentOffset + newItems.length;
-      setHasMore(newItems.length >= limit);
     } catch (err: any) {
       console.error('Failed to load batch:', err);
       setError(err?.message || 'Failed to load items');
@@ -75,37 +87,47 @@ export function useInfiniteScroll<T>({
     }
   }, [limit]);
 
+  const loadBatchRef = useRef(loadBatch);
+  loadBatchRef.current = loadBatch;
+
   // Reset and load first page on dependency changes
   useEffect(() => {
     loadBatch(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
-  // Intersection observer sentinel callback
+  // Stable Intersection observer sentinel callback
   const sentinelRef = useCallback((node: HTMLElement | null) => {
     if (observerRef.current) {
       observerRef.current.disconnect();
+      observerRef.current = null;
     }
 
-    if (!node || !hasMore || loading || loadingMore) {
+    if (!node) {
       return;
     }
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !isFetchingRef.current) {
-          loadBatch(false);
+        if (
+          entries[0].isIntersecting &&
+          hasMoreRef.current &&
+          !loadingRef.current &&
+          !loadingMoreRef.current &&
+          !isFetchingRef.current
+        ) {
+          loadBatchRef.current(false);
         }
       },
       {
         root: null,
-        rootMargin: '250px',
+        rootMargin: '100px',
         threshold
       }
     );
 
     observerRef.current.observe(node);
-  }, [hasMore, loading, loadingMore, loadBatch, threshold]);
+  }, [threshold]);
 
   const reload = useCallback(async () => {
     await loadBatch(true);
@@ -123,3 +145,4 @@ export function useInfiniteScroll<T>({
     error
   };
 }
+

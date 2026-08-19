@@ -98,3 +98,26 @@ def test_project_lifecycle_and_inventory_allocation(staff_auth_client):
     inv_item2 = next(i for i in inv_res2.json() if i["product_id"] == prod["id"])
     assert float(inv_item2["quantity"]) == 10.0
 
+    # 9. Test Customer linking & creation
+    cust_res = staff_auth_client.post("/api/v1/customers/", json={
+        "name": "General Solar Estates Ltd",
+        "phone": "+254788990011",
+        "email": "estates@solar.co.ke",
+        "address": "Nyali Links Road"
+    })
+    assert cust_res.status_code == 201
+    cust = cust_res.json()
+
+    # Link project to customer
+    update_res = staff_auth_client.put(f"/api/v1/projects/{proj_id}", json={
+        "customer_id": cust["id"],
+        "status": "commissioning"
+    })
+    assert update_res.status_code == 200
+
+    updated_detail = staff_auth_client.get(f"/api/v1/projects/{proj_id}").json()
+    assert updated_detail["customer_id"] == cust["id"]
+    assert updated_detail["customer_name"] == "General Solar Estates Ltd"
+    assert updated_detail["status"] == "commissioning"
+
+

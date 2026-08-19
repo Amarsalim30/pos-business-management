@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 
 from app.models.project import Project, ProjectExpense, ProjectIncome
 from app.models.product import Product
+from app.models.sale import Customer
 from app.models.inventory import Inventory, StockMovement
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectExpenseCreate,
@@ -18,11 +19,24 @@ from app.utils.roll_conversion import roll_count_to_meters
 
 
 def create_project(db: Session, store_id: int, user_id: int, project_in: ProjectCreate) -> Project:
+    client_name = project_in.client_name.strip()
+    client_phone = project_in.client_phone.strip() if project_in.client_phone else None
+
+    # Auto-populate from registered customer if linked
+    if project_in.customer_id:
+        cust = db.query(Customer).filter(Customer.id == project_in.customer_id).first()
+        if cust:
+            if not client_name:
+                client_name = cust.name
+            if not client_phone and cust.phone:
+                client_phone = cust.phone
+
     project = Project(
         store_id=store_id,
         name=project_in.name.strip(),
-        client_name=project_in.client_name.strip(),
-        client_phone=project_in.client_phone.strip() if project_in.client_phone else None,
+        client_name=client_name,
+        client_phone=client_phone,
+        customer_id=project_in.customer_id,
         description=project_in.description.strip() if project_in.description else None,
         quoted_amount=project_in.quoted_amount,
         start_date=project_in.start_date,
@@ -82,6 +96,15 @@ def update_project(db: Session, store_id: int, project_id: int, project_in: Proj
         project.client_name = project_in.client_name.strip()
     if project_in.client_phone is not None:
         project.client_phone = project_in.client_phone.strip() if project_in.client_phone else None
+    if project_in.customer_id is not None:
+        project.customer_id = project_in.customer_id
+        if project_in.customer_id:
+            cust = db.query(Customer).filter(Customer.id == project_in.customer_id).first()
+            if cust:
+                if not project_in.client_name:
+                    project.client_name = cust.name
+                if not project_in.client_phone and cust.phone:
+                    project.client_phone = cust.phone
     if project_in.description is not None:
         project.description = project_in.description.strip() if project_in.description else None
     if project_in.quoted_amount is not None:
@@ -96,6 +119,7 @@ def update_project(db: Session, store_id: int, project_id: int, project_in: Proj
     db.commit()
     db.refresh(project)
     return project
+
 
 
 def delete_project(db: Session, store_id: int, project_id: int) -> dict:
@@ -306,6 +330,9 @@ def format_project_detail(project: Project) -> ProjectDetailResponse:
         name=project.name,
         client_name=project.client_name,
         client_phone=project.client_phone,
+        customer_id=project.customer_id,
+        customer_name=project.customer.name if project.customer else None,
+        customer_phone=project.customer.phone if project.customer else None,
         description=project.description,
         quoted_amount=project.quoted_amount,
         start_date=project.start_date,
@@ -318,6 +345,7 @@ def format_project_detail(project: Project) -> ProjectDetailResponse:
         total_income=total_income,
         total_expenses=total_cost,
         net_profit=net_profit,
+
         expenses=expenses_res,
         incomes=incomes_res,
         materials_cost=materials_cost,

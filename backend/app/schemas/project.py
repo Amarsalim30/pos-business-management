@@ -8,11 +8,12 @@ class ProjectBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     client_name: str = Field(..., min_length=1, max_length=200)
     client_phone: Optional[str] = None
+    customer_id: Optional[int] = None
     description: Optional[str] = None
     quoted_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    status: str = "active"  # 'active', 'completed', 'cancelled'
+    status: str = "active"  # 'draft', 'active', 'commissioning', 'completed', 'cancelled'
 
 
 class ProjectCreate(ProjectBase):
@@ -23,11 +24,13 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     client_name: Optional[str] = None
     client_phone: Optional[str] = None
+    customer_id: Optional[int] = None
     description: Optional[str] = None
     quoted_amount: Optional[Decimal] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     status: Optional[str] = None
+
 
 
 class ProjectExpenseCreate(BaseModel):
@@ -102,6 +105,9 @@ class ProjectResponse(ProjectBase):
 
     id: int
     store_id: int
+    customer_id: Optional[int] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
     created_by: int
     creator_name: Optional[str] = None
     created_at: datetime
@@ -109,6 +115,7 @@ class ProjectResponse(ProjectBase):
     total_income: Decimal = Decimal("0.00")
     total_expenses: Decimal = Decimal("0.00")
     net_profit: Decimal = Decimal("0.00")
+
 
 
 class ProjectDetailResponse(ProjectResponse):

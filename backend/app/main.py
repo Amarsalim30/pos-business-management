@@ -11,6 +11,8 @@ from app.routers import (
     auth, users, stores, health, products, inventory, sales,
     pre_sales, customers, suppliers, purchases, projects, accounts, reports
 )
+from app.core.db_migrations import run_startup_migrations
+
 
 
 
@@ -63,11 +65,13 @@ async def lifespan(app: FastAPI):
     # Ensure tables and seed exist when DB is reachable
     try:
         Base.metadata.create_all(bind=engine)
+        run_startup_migrations()
         init_first_store_and_owner()
     except Exception as e:
         # Don't crash app startup if local PostgreSQL is starting or during mocked tests
         pass
     yield
+
 
 
 app = FastAPI(

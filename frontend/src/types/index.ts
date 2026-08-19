@@ -402,11 +402,14 @@ export interface Project {
   name: string;
   client_name: string;
   client_phone?: string | null;
+  customer_id?: number | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
   description?: string | null;
   quoted_amount: number;
   start_date?: string | null;
   end_date?: string | null;
-  status: 'active' | 'completed' | 'cancelled';
+  status: 'draft' | 'active' | 'commissioning' | 'completed' | 'cancelled';
   created_by: number;
   creator_name?: string | null;
   created_at: string;
@@ -415,6 +418,7 @@ export interface Project {
   total_expenses: number;
   net_profit: number;
 }
+
 
 export interface ProjectDetail extends Project {
   expenses: ProjectExpense[];

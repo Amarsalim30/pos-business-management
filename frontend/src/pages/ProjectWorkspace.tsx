@@ -816,7 +816,6 @@ export const ProjectWorkspacePage: React.FC = () => {
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-slate-900 leading-snug truncate">{p.name}</div>
                           <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
-                            {p.sku && <span>SKU: {p.sku}</span>}
                             <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold ${
                               isOutOfStock
                                 ? 'bg-rose-50 text-rose-600 border border-rose-200'

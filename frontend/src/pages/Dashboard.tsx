@@ -5,7 +5,7 @@ import type { Store, User, RecurringExpense } from '../types';
 import { 
   Users, 
   Receipt, 
-  DollarSign, 
+  Banknote, 
   Plus, 
   CheckCircle2,
   Store as StoreIcon,
@@ -329,7 +329,7 @@ export const Dashboard: React.FC = () => {
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <DollarSign className="h-4 w-4 text-amber-600" />
+                <Banknote className="h-4 w-4 text-amber-600" />
                 <h3 className="font-bold text-slate-900 text-sm">Monthly Fixed Deductions</h3>
               </div>
               <span className="text-xs bg-slate-100 px-2.5 py-0.5 rounded-full text-slate-600 font-bold">

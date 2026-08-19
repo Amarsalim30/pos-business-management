@@ -5,7 +5,7 @@ import {
   Users,
   UserPlus,
   Search,
-  DollarSign,
+  Banknote,
   Phone,
   Mail,
   MapPin,
@@ -240,7 +240,7 @@ export const CustomersPage: React.FC = () => {
                       onClick={() => setPaymentCustomer(c)}
                       className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all cursor-pointer shadow-2xs"
                     >
-                      <DollarSign className="h-3.5 w-3.5" />
+                      <Banknote className="h-3.5 w-3.5" />
                       <span>Record Payment</span>
                     </button>
                   )}
@@ -400,7 +400,7 @@ export const CustomersPage: React.FC = () => {
                   onClick={() => setPaymentCustomer(ledgerCustomer)}
                   className="flex items-center space-x-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
                 >
-                  <DollarSign className="h-4 w-4" />
+                  <Banknote className="h-4 w-4" />
                   <span>Record Payment Against Account</span>
                 </button>
               )}

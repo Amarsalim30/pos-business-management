@@ -5,7 +5,7 @@ import {
   Truck,
   Plus,
   Search,
-  DollarSign,
+  Banknote,
   Phone,
   Mail,
   MapPin,
@@ -318,7 +318,7 @@ export const SuppliersPage: React.FC = () => {
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors"
                         title="Record Payment"
                       >
-                        <DollarSign className="h-3.5 w-3.5" />
+                        <Banknote className="h-3.5 w-3.5" />
                         Pay
                       </button>
                     </td>
@@ -459,7 +459,7 @@ export const SuppliersPage: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-emerald-600" />
+                <Banknote className="h-5 w-5 text-emerald-600" />
                 Record Supplier Payment
               </h3>
               <button onClick={() => setPaymentSupplier(null)} className="text-slate-400 hover:text-slate-600 p-1">

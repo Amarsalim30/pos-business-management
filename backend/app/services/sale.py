@@ -34,10 +34,28 @@ def create_customer(db: Session, cust_in: CustomerCreate) -> Customer:
     return cust
 
 
+def calculate_customer_debt(db: Session, customer_id: int) -> Decimal:
+    """Dynamically compute the exact outstanding credit debt for a customer."""
+    sales = db.query(Sale).filter(Sale.customer_id == customer_id, Sale.voided_at.is_(None)).all()
+    total_unpaid_on_sales = sum((s.balance_due for s in sales), Decimal("0.00"))
+    unallocated_payments = db.query(Payment).filter(
+        Payment.customer_id == customer_id,
+        Payment.sale_id.is_(None)
+    ).all()
+    unalloc_sum = sum((p.amount for p in unallocated_payments), Decimal("0.00"))
+    return max(Decimal("0.00"), total_unpaid_on_sales - unalloc_sum)
+
+
 def get_customer(db: Session, customer_id: int) -> Customer:
     cust = db.query(Customer).filter(Customer.id == customer_id).first()
     if not cust:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+    # Keep balance synchronized
+    calc_bal = calculate_customer_debt(db, cust.id)
+    if cust.balance != calc_bal:
+        cust.balance = calc_bal
+        db.commit()
+        db.refresh(cust)
     return cust
 
 
@@ -50,7 +68,20 @@ def list_customers(db: Session, q: Optional[str] = None, active_only: bool = Tru
             Customer.name.ilike(f"%{q.strip()}%") | 
             Customer.phone.ilike(f"%{q.strip()}%")
         )
-    return query.order_by(Customer.name.asc()).all()
+    customers = query.order_by(Customer.name.asc()).all()
+    
+    # Synchronize balances with live sales & payments
+    changed = False
+    for c in customers:
+        calc_bal = calculate_customer_debt(db, c.id)
+        if c.balance != calc_bal:
+            c.balance = calc_bal
+            db.add(c)
+            changed = True
+    if changed:
+        db.commit()
+
+    return customers
 
 
 def update_customer(db: Session, customer_id: int, cust_in: CustomerUpdate) -> Customer:
@@ -82,7 +113,6 @@ def record_customer_payment(
     # Distribute payment to oldest unpaid / partially paid sales
     unpaid_sales = db.query(Sale).filter(
         Sale.customer_id == cust.id,
-        Sale.status.in_(["unpaid", "partial"]),
         Sale.voided_at.is_(None)
     ).order_by(Sale.id.asc()).all()
 
@@ -129,7 +159,7 @@ def record_customer_payment(
             primary_payment = p
 
     # Reduce customer balance
-    cust.balance = max(Decimal("0.00"), cust.balance - pay_in.amount)
+    cust.balance = calculate_customer_debt(db, cust.id)
     db.commit()
     if primary_payment:
         db.refresh(primary_payment)
@@ -144,9 +174,10 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
         Sale.customer_id == customer_id
     ).order_by(Sale.created_at.asc(), Sale.id.asc()).all()
 
-    # Query all payments for this customer
-    payments = db.query(Payment).filter(
-        Payment.customer_id == customer_id
+    # Query all standalone payments for this customer (sale_id is None)
+    standalone_payments = db.query(Payment).filter(
+        Payment.customer_id == customer_id,
+        Payment.sale_id.is_(None)
     ).order_by(Payment.created_at.asc(), Payment.id.asc()).all()
 
     # Build chronological event timeline
@@ -164,6 +195,7 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
             "credit": None,
             "amount": s.total_amount
         })
+
         if s.voided_at:
             events.append({
                 "id": f"void-{s.id}",
@@ -176,22 +208,53 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
                 "credit": s.total_amount,
                 "amount": -s.total_amount
             })
+        else:
+            # Check for payments attached to this sale
+            if s.payments:
+                for p in s.payments:
+                    method_label = p.payment_method.upper()
+                    ref_text = f"Payment ({method_label})"
+                    if p.reference:
+                        ref_text += f" - {p.reference}"
+                    events.append({
+                        "id": f"pay-{p.id}",
+                        "date": p.created_at,
+                        "sort_priority": 2,  # payments after sale
+                        "entry_type": "payment",
+                        "reference": ref_text,
+                        "notes": p.notes or f"Paid for {s.invoice_no}",
+                        "debit": None,
+                        "credit": p.amount,
+                        "amount": -p.amount
+                    })
+            elif s.status == "paid" or s.payment_method != "credit":
+                # Legacy / direct cash checkout payment without separate payment row
+                method_label = s.payment_method.upper()
+                events.append({
+                    "id": f"pay-sale-{s.id}",
+                    "date": s.created_at,
+                    "sort_priority": 2,
+                    "entry_type": "payment",
+                    "reference": f"Payment ({method_label}) [Checkout]",
+                    "notes": s.notes or f"Paid at checkout for {s.invoice_no}",
+                    "debit": None,
+                    "credit": s.total_amount,
+                    "amount": -s.total_amount
+                })
 
-    for p in payments:
-        method_label = p.payment_method.capitalize()
-        ref_text = f"Payment ({method_label})"
+    for p in standalone_payments:
+        method_label = p.payment_method.upper()
+        ref_text = f"Account Payment ({method_label})"
         if p.reference:
             ref_text += f" - {p.reference}"
-        if p.sale:
-            ref_text += f" [for {p.sale.invoice_no}]"
 
         events.append({
             "id": f"pay-{p.id}",
             "date": p.created_at,
-            "sort_priority": 2,  # payments after sale
+            "sort_priority": 2,
             "entry_type": "payment",
             "reference": ref_text,
-            "notes": p.notes,
+            "notes": p.notes or "Account unallocated settlement",
             "debit": None,
             "credit": p.amount,
             "amount": -p.amount
@@ -220,11 +283,13 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
             running_balance=max(Decimal("0.00"), running)
         ))
 
+    total_debt = max(Decimal("0.00"), running)
+
     return CustomerLedgerResponse(
         customer_id=cust.id,
         customer_name=cust.name,
         phone=cust.phone,
-        total_debt=max(Decimal("0.00"), running),
+        total_debt=total_debt,
         entries=entries
     )
 

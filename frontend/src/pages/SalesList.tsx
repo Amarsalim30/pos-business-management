@@ -10,7 +10,7 @@ import {
   Download,
   AlertCircle,
   Calendar,
-  DollarSign,
+  Banknote,
   Split
 } from 'lucide-react';
 
@@ -409,7 +409,7 @@ export const SalesListPage: React.FC = () => {
                               className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer shadow-2xs"
                               title="Record Payment for this Invoice"
                             >
-                              <DollarSign className="h-3 w-3" />
+                              <Banknote className="h-3 w-3" />
                               <span>Pay</span>
                             </button>
                           )}

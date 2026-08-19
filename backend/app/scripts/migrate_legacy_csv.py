@@ -1,13 +1,19 @@
 """
 Legacy CSV Inventory Migration Script
 Imports categories and products from legacy MDB CSV files (/home/amar-salim/Downloads/2026_mdb_csv).
-Filters only products with positive stock (SysBal > 0 or StockQnty > 0).
-Auto-detects roll products (e.g. cables, flex, wires, units='ROLL') and sets meters_per_roll = 100.
+
+Fixes over original version:
+- Uses StockBalances.csv (ClBalWhole) as authoritative stock source instead of SysBal
+- Derives meters_per_roll from SellingPrice01 / SellingPriceLoose01 instead of hardcoding 100
+- Uses SellingPriceLoose01 / OPPriceLse01 directly for per-meter prices
+- Roll detection uses Units='ROLL' or distinct loose pricing, not keyword matching
+- Respects legacy VAT=0 (is_taxable=False, tax_rate=0) instead of defaulting to 16%
+- Supports idempotent re-runs: updates existing products and inventory
 """
 
 import os
 import csv
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, Optional
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
@@ -15,6 +21,41 @@ from app.models.product import Category, Product
 from app.models.inventory import Inventory, StockMovement
 from app.models.store import Store
 from app.models.user import User
+
+
+def _safe_decimal(value: Optional[str], default: str = "0") -> Decimal:
+    """Safely parse a string to Decimal, returning default on failure."""
+    try:
+        return Decimal(str(value or default))
+    except Exception:
+        return Decimal(default)
+
+
+def _is_roll_product(units: str, sp01: Decimal, sploose01: Decimal) -> bool:
+    """
+    Determine if a product is a roll product.
+    A product is a roll if:
+    - Units field == 'ROLL', OR
+    - It has distinct per-meter pricing (SellingPriceLoose01 > 0 and != SellingPrice01)
+    """
+    if units.upper() == "ROLL":
+        return True
+    if sploose01 > 0 and sp01 > 0 and sploose01 != sp01:
+        return True
+    return False
+
+
+def _derive_meters_per_roll(sp01: Decimal, sploose01: Decimal) -> Decimal:
+    """
+    Derive meters_per_roll from the legacy price relationship:
+    meters_per_roll = SellingPrice01 / SellingPriceLoose01
+    Falls back to 100 if derivation isn't possible.
+    """
+    if sp01 > 0 and sploose01 > 0 and sploose01 != sp01:
+        mpr = (sp01 / sploose01).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        if mpr > 0:
+            return mpr
+    return Decimal("100.00")
 
 
 def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv", store_id: Optional[int] = None):
@@ -33,8 +74,8 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
 
         # 2. Migrate Categories from GroupsT.csv
         groups_path = os.path.join(csv_dir, "GroupsT.csv")
-        category_map: Dict[str, Category] = {} # GrpNo -> Category
-        
+        category_map: Dict[str, Category] = {}  # GrpNo -> Category
+
         if os.path.exists(groups_path):
             with open(groups_path, "r", encoding="utf-8", errors="ignore") as f:
                 reader = csv.DictReader(f)
@@ -43,8 +84,7 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
                     grp_name = (row.get("GrpName") or "").strip()
                     if not grp_name:
                         continue
-                    
-                    # Avoid duplicate categories
+
                     cat = db.query(Category).filter(Category.store_id == store.id, Category.name == grp_name).first()
                     if not cat:
                         cat = Category(name=grp_name, store_id=store.id)
@@ -56,14 +96,31 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
         else:
             print(f"⚠️ GroupsT.csv not found at {groups_path}")
 
-        # 3. Migrate Products with Stock from ITEMS.csv
+        # 3. Build authoritative stock map from StockBalances.csv
+        stock_balances: Dict[str, Decimal] = {}
+        stock_bal_path = os.path.join(csv_dir, "StockBalances.csv")
+        if os.path.exists(stock_bal_path):
+            with open(stock_bal_path, "r", encoding="utf-8", errors="ignore") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    item_code = (row.get("ItemCode") or "").strip()
+                    cl_bal = _safe_decimal(row.get("ClBalWhole"))
+                    if item_code and cl_bal > 0:
+                        stock_balances[item_code] = cl_bal
+            print(f"✅ StockBalances loaded: {len(stock_balances)} items with closing stock")
+        else:
+            print(f"⚠️ StockBalances.csv not found at {stock_bal_path} — falling back to SysBal")
+
+        # 4. Migrate Products from ITEMS.csv
         items_path = os.path.join(csv_dir, "ITEMS.csv")
         if not os.path.exists(items_path):
             print(f"❌ ITEMS.csv not found at {items_path}")
             return
 
-        imported_count = 0
+        created_count = 0
+        updated_count = 0
         skipped_zero_stock = 0
+        roll_count = 0
 
         with open(items_path, "r", encoding="utf-8", errors="ignore") as f:
             reader = csv.DictReader(f)
@@ -73,55 +130,47 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
                 if not item_code or not item_desc:
                     continue
 
-                # Stock check: SysBal or StockQnty
-                try:
-                    sys_bal = Decimal(str(row.get("SysBal") or "0"))
-                except Exception:
-                    sys_bal = Decimal("0")
-
-                try:
-                    stock_qnty = Decimal(str(row.get("StockQnty") or "0"))
-                except Exception:
-                    stock_qnty = Decimal("0")
-
-                stock_to_use = sys_bal if sys_bal > 0 else stock_qnty
+                # --- Stock: StockBalances.csv (authoritative) > SysBal > StockQnty ---
+                stock_to_use = stock_balances.get(item_code, Decimal("0"))
+                if stock_to_use <= 0:
+                    sys_bal = _safe_decimal(row.get("SysBal"))
+                    stock_to_use = sys_bal if sys_bal > 0 else _safe_decimal(row.get("StockQnty"))
                 if stock_to_use <= 0:
                     skipped_zero_stock += 1
                     continue
 
-                # Prices
-                try:
-                    sp = Decimal(str(row.get("SellingPrice01") or row.get("SellingPrice") or "0"))
-                except Exception:
-                    sp = Decimal("0")
-
-                try:
-                    bp = Decimal(str(row.get("OPPrice01") or row.get("OPPrice") or "0"))
-                except Exception:
-                    bp = Decimal("0")
-
-                try:
-                    reorder = Decimal(str(row.get("ReOrderLevel") or "5"))
-                except Exception:
+                # --- Prices ---
+                sp = _safe_decimal(row.get("SellingPrice01"))
+                bp = _safe_decimal(row.get("OPPrice01"))
+                sp_loose = _safe_decimal(row.get("SellingPriceLoose01"))
+                bp_loose = _safe_decimal(row.get("OPPriceLse01"))
+                reorder = _safe_decimal(row.get("ReOrderLevel"), "5")
+                if reorder <= 0:
                     reorder = Decimal("5")
 
                 units = (row.get("Units") or "pcs").strip()
                 group_code = (row.get("GroupCode") or "").strip()
                 category = category_map.get(group_code)
 
-                # Detect Roll product
-                is_roll = False
-                upper_desc = item_desc.upper()
-                upper_unit = units.upper()
-                if upper_unit == "ROLL" or any(kw in upper_desc for kw in ["CABLE", "WIRE", "CONDUIT", "FLEX"]):
-                    is_roll = True
-
+                # --- Roll detection (pricing-based, not keyword-based) ---
+                is_roll = _is_roll_product(units, sp, sp_loose)
                 unit_type = "roll" if is_roll else "piece"
-                meters_per_roll = Decimal("100.00") if is_roll else None
-                price_per_meter = (sp / Decimal("100.00")) if is_roll and sp > 0 else None
-                cost_per_meter = (bp / Decimal("100.00")) if is_roll and bp > 0 else None
 
-                # Check if product already exists
+                if is_roll:
+                    meters_per_roll = _derive_meters_per_roll(sp, sp_loose)
+                    price_per_meter = sp_loose if sp_loose > 0 else None
+                    cost_per_meter = bp_loose if bp_loose > 0 else None
+                else:
+                    meters_per_roll = None
+                    price_per_meter = None
+                    cost_per_meter = None
+
+                # --- VAT from legacy (all items have VAT=0.0 in this dataset) ---
+                vat_val = _safe_decimal(row.get("VAT"))
+                is_taxable = vat_val > 0
+                tax_rate = vat_val if vat_val > 0 else Decimal("0.0000")
+
+                # --- Upsert Product ---
                 prod = db.query(Product).filter(Product.store_id == store.id, Product.sku == item_code).first()
                 if not prod:
                     prod = Product(
@@ -134,16 +183,37 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
                         meters_per_roll=meters_per_roll,
                         cost_price=bp,
                         selling_price=sp,
+                        price_per_roll=sp if is_roll else None,
                         price_per_meter=price_per_meter,
                         cost_per_meter=cost_per_meter,
                         reorder_level=reorder,
-                        is_taxable=True,
+                        is_taxable=is_taxable,
+                        tax_rate=tax_rate,
                         is_active=True
                     )
                     db.add(prod)
                     db.flush()
+                    created_count += 1
+                else:
+                    prod.name = item_desc
+                    prod.category_id = category.id if category else prod.category_id
+                    prod.unit = "meters" if is_roll else (units or "pcs")
+                    prod.unit_type = unit_type
+                    prod.meters_per_roll = meters_per_roll
+                    prod.cost_price = bp
+                    prod.selling_price = sp
+                    prod.price_per_roll = sp if is_roll else None
+                    prod.price_per_meter = price_per_meter
+                    prod.cost_per_meter = cost_per_meter
+                    prod.reorder_level = reorder
+                    prod.is_taxable = is_taxable
+                    prod.tax_rate = tax_rate
+                    updated_count += 1
 
-                # Upsert Inventory
+                if is_roll:
+                    roll_count += 1
+
+                # --- Upsert Inventory ---
                 inv = db.query(Inventory).filter(Inventory.product_id == prod.id, Inventory.store_id == store.id).first()
                 if not inv:
                     inv = Inventory(
@@ -152,29 +222,45 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
                         quantity=stock_to_use
                     )
                     db.add(inv)
+                    mov = StockMovement(
+                        product_id=prod.id,
+                        store_id=store.id,
+                        type="in",
+                        quantity=stock_to_use,
+                        unit_sold="meter" if is_roll else "piece",
+                        previous_quantity=Decimal("0.00"),
+                        new_quantity=stock_to_use,
+                        reference_id="LEGACY_MDB_MIGRATION",
+                        note=f"Imported from legacy MDB (ItemCode: {item_code})",
+                        user_id=user_id
+                    )
+                    db.add(mov)
                 else:
+                    old_qty = inv.quantity
                     inv.quantity = stock_to_use
-
-                # Log Migration Movement
-                mov = StockMovement(
-                    product_id=prod.id,
-                    store_id=store.id,
-                    type="in",
-                    quantity=stock_to_use,
-                    unit_sold="meter" if is_roll else "piece",
-                    previous_quantity=Decimal("0.00"),
-                    new_quantity=stock_to_use,
-                    reference_id="LEGACY_MDB_MIGRATION",
-                    note=f"Imported from legacy MDB (ItemCode: {item_code})",
-                    user_id=user_id
-                )
-                db.add(mov)
-                imported_count += 1
+                    if old_qty != stock_to_use:
+                        mov = StockMovement(
+                            product_id=prod.id,
+                            store_id=store.id,
+                            type="adjust",
+                            quantity=stock_to_use - old_qty,
+                            unit_sold="meter" if is_roll else "piece",
+                            previous_quantity=old_qty,
+                            new_quantity=stock_to_use,
+                            reference_id="LEGACY_MDB_MIGRATION",
+                            note=f"Stock corrected from legacy MDB (ItemCode: {item_code}): {old_qty} -> {stock_to_use}",
+                            user_id=user_id
+                        )
+                        db.add(mov)
 
             db.commit()
-            print(f"🎉 Legacy migration finished successfully!")
-            print(f"   • Products with active stock imported: {imported_count}")
-            print(f"   • Zero stock items skipped: {skipped_zero_stock}")
+            total = created_count + updated_count
+            print(f"\n🎉 Legacy migration finished!")
+            print(f"   • Products created: {created_count}")
+            print(f"   • Products updated: {updated_count}")
+            print(f"   • Total imported: {total}")
+            print(f"   • Roll products: {roll_count}")
+            print(f"   • Zero stock skipped: {skipped_zero_stock}")
 
     except Exception as e:
         db.rollback()

@@ -312,7 +312,11 @@ export const SalesListPage: React.FC = () => {
               type="date"
               title="Date From"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setDateFrom(val);
+                if (val && !dateTo) setDateTo(val);
+              }}
               className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono shadow-2xs"
             />
             <span className="text-slate-400 text-xs shrink-0">to</span>
@@ -323,6 +327,19 @@ export const SalesListPage: React.FC = () => {
               onChange={(e) => setDateTo(e.target.value)}
               className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono shadow-2xs"
             />
+            {(dateFrom || dateTo) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFrom('');
+                  setDateTo('');
+                }}
+                className="p-1 text-slate-400 hover:text-rose-600 rounded-full cursor-pointer shrink-0"
+                title="Clear date filter"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Searchable Customer Combobox */}

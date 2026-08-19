@@ -194,10 +194,20 @@ def receive_goods_grn(db: Session, store_id: int, user_id: int, grn_in: GRNCreat
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Product {it.product_id} not found")
 
         qty_received = it.quantity_received
-        if qty_received <= Decimal("0.00"):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quantity received must be greater than zero")
+        if (qty_received is None or qty_received <= Decimal("0.00")):
+            if product.unit_type == "roll":
+                from app.services.inventory import roll_count_to_meters
+                qty_received = roll_count_to_meters(it.rolls_received or 0, it.loose_meters_received or Decimal("0.00"), product.meters_per_roll)
+            elif it.rolls_received:
+                qty_received = Decimal(str(it.rolls_received))
 
-        line_total = qty_received * it.unit_cost
+        if not qty_received or qty_received <= Decimal("0.00"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Quantity received for '{product.name}' must be greater than zero")
+
+        if product.unit_type == "roll" and product.meters_per_roll and product.meters_per_roll > 0:
+            line_total = (qty_received / product.meters_per_roll) * it.unit_cost
+        else:
+            line_total = qty_received * it.unit_cost
         total_grn_amount += line_total
 
         # 1. Update/create physical stock in Inventory
@@ -216,6 +226,12 @@ def receive_goods_grn(db: Session, store_id: int, user_id: int, grn_in: GRNCreat
         new_qty = prev_qty + qty_received
         inv.quantity = new_qty
         inv.last_updated = datetime.now(timezone.utc)
+
+        # Update product buying cost price if provided
+        if it.unit_cost is not None and it.unit_cost > 0:
+            product.cost_price = it.unit_cost
+            if product.unit_type == "roll" and product.meters_per_roll:
+                product.cost_per_meter = Decimal(str(it.unit_cost)) / product.meters_per_roll
 
         # 2. Add GRN Item
         grn_items.append(GoodsReceivedItem(
@@ -258,7 +274,10 @@ def receive_goods_grn(db: Session, store_id: int, user_id: int, grn_in: GRNCreat
     db.add(grn)
     db.flush()
 
-    # Log Stock Movements
+    # Log Stock Movements with enriched notes
+    supplier_label = f" | Supplier: {supplier.name}" if supplier else ""
+    inv_label = f" (Inv/DN: {grn.invoice_number})" if grn.invoice_number else ""
+    note_label = f" | {grn.notes}" if grn.notes else ""
     for mov_data in stock_movements:
         db.add(StockMovement(
             product_id=mov_data["product_id"],
@@ -269,7 +288,7 @@ def receive_goods_grn(db: Session, store_id: int, user_id: int, grn_in: GRNCreat
             previous_quantity=mov_data["previous_quantity"],
             new_quantity=mov_data["new_quantity"],
             reference_id=grn.grn_no,
-            note=f"Inbound GRN receipt ({grn.grn_no})",
+            note=f"Inbound GRN receipt ({grn.grn_no}){inv_label}{supplier_label}{note_label}",
             user_id=user_id
         ))
 

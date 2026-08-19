@@ -87,10 +87,10 @@ class PurchaseOrderResponse(BaseModel):
 class GRNItemCreate(BaseModel):
     product_id: int
     unit_type: str = "piece"
-    quantity_received: Decimal  # base units (meters / pieces)
+    quantity_received: Optional[Decimal] = None  # base units (meters / pieces)
     rolls_received: Optional[int] = 0
     loose_meters_received: Optional[Decimal] = Decimal("0.00")
-    unit_cost: Decimal
+    unit_cost: Decimal = Decimal("0.00")
 
 
 class GRNItemResponse(BaseModel):

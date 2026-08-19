@@ -50,9 +50,9 @@
 
 - **Project**: A solar installation job for a client. Tracks income received and expenses incurred. Net profit is computed per project.
 
-- **Inventory-Linked Expense**: Project materials pulled from store stock. Auto-deducts inventory via a `project_allocation` stock movement. Cost calculated from product cost price.
+- **Inventory-Linked Expense**: Project materials pulled from store stock. User enters quantity and unit price (what the client is charged). System auto-deducts inventory, snapshots the cost price (BP) internally, and auto-creates a materials income entry at the unit price. The margin (unit price minus cost price) is captured automatically in the project profit.
 
-- **External Expense**: Project costs not from store inventory — labour, transport, externally sourced materials, subcontractor fees. Manually entered, no inventory impact.
+- **External Expense**: Project costs not from store inventory — labour, transport, externally sourced materials, subcontractor fees. Manually entered as a fixed amount, no inventory impact, no auto-income creation.
 
 ## Financial
 

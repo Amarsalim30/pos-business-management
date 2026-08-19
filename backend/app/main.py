@@ -7,7 +7,7 @@ from app.core.database import engine, Base, SessionLocal
 from app.models.user import User
 from app.models.store import Store, RecurringExpense
 from app.core.security import get_password_hash
-from app.routers import auth, users, stores, health, products, inventory, sales, pre_sales, customers
+from app.routers import auth, users, stores, health, products, inventory, sales, pre_sales, customers, suppliers, purchases
 
 
 def init_first_store_and_owner():
@@ -93,6 +93,8 @@ app.include_router(inventory.stock_takes_router, prefix=settings.API_V1_STR)
 app.include_router(sales.router, prefix=settings.API_V1_STR)
 app.include_router(pre_sales.router, prefix=settings.API_V1_STR)
 app.include_router(customers.router, prefix=settings.API_V1_STR)
+app.include_router(suppliers.router, prefix=settings.API_V1_STR)
+app.include_router(purchases.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

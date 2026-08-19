@@ -215,3 +215,128 @@ export interface PreSaleDocument {
   created_at: string;
   items: PreSaleItem[];
 }
+
+export interface Supplier {
+  id: number;
+  store_id: number;
+  name: string;
+  contact_person: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  tax_pin: string | null;
+  balance: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface SupplierPayment {
+  id: number;
+  store_id: number;
+  supplier_id: number;
+  po_id: number | null;
+  user_id: number;
+  amount: number;
+  payment_method: string;
+  reference: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface SupplierLedgerEntry {
+  date: string;
+  type: string;
+  reference: string;
+  debit: number;
+  credit: number;
+  running_balance: number;
+  notes: string | null;
+}
+
+export interface SupplierLedgerResponse {
+  supplier_id: number;
+  supplier_name: string;
+  contact_person: string | null;
+  phone: string | null;
+  current_balance: number;
+  entries: SupplierLedgerEntry[];
+}
+
+export interface PurchaseItem {
+  id: number;
+  po_id: number;
+  product_id: number;
+  product_name: string | null;
+  product_sku: string | null;
+  unit_type: 'piece' | 'roll';
+  ordered_qty: number;
+  received_qty: number;
+  unit_cost: number;
+  total_cost: number;
+}
+
+export interface PurchaseExpense {
+  id: number;
+  po_id: number;
+  store_id: number;
+  user_id: number;
+  category: string;
+  description: string;
+  amount: number;
+  payment_method: string;
+  reference: string | null;
+  created_at: string;
+}
+
+export interface PurchaseOrder {
+  id: number;
+  store_id: number;
+  po_no: string;
+  supplier_id: number;
+  supplier_name: string | null;
+  user_id: number;
+  authorizer_name: string | null;
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  status: 'draft' | 'ordered' | 'partial' | 'received' | 'cancelled';
+  is_etr: boolean;
+  notes: string | null;
+  expected_delivery_date: string | null;
+  created_at: string;
+  cancelled_at: string | null;
+  items: PurchaseItem[];
+  expenses: PurchaseExpense[];
+}
+
+export interface GRNItem {
+  id: number;
+  grn_id: number;
+  product_id: number;
+  product_name: string | null;
+  unit_type: 'piece' | 'roll';
+  quantity_received: number;
+  rolls_received: number;
+  loose_meters_received: number;
+  unit_cost: number;
+  total_cost: number;
+}
+
+export interface GoodsReceivedNote {
+  id: number;
+  store_id: number;
+  grn_no: string;
+  po_id: number | null;
+  po_no: string | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  user_id: number;
+  receiver_name: string | null;
+  invoice_number: string | null;
+  delivery_date: string;
+  total_amount: number;
+  notes: string | null;
+  created_at: string;
+  items: GRNItem[];
+}
+

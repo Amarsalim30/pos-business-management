@@ -123,14 +123,31 @@ Printing: Browser print (Ctrl+P), receipt layout sized for 80mm
 -- projects: id, name, client_name, client_phone, description, store_id,
 --           start_date, end_date, status('active'|'completed'|'cancelled'),
 --           quoted_amount, created_by
--- project_expenses: id, project_id, description, amount, source('inventory'|'external'),
+--
+-- project_expenses: id, project_id, source('inventory'|'external'),
 --                    category('labor'|'materials'|'transport'|'other'),
---                    product_id(nullable, for inventory-linked), quantity(nullable),
---                    vendor, date, receipt_no, created_by
+--                    product_id(nullable, for inventory-linked),
+--                    quantity(nullable),
+--                    unit_price(editable SP — what client is charged per unit),
+--                    amount(computed: unit_price × quantity),
+--                    cost_price(BP snapshot — system-calculated, not user-entered),
+--                    cost_amount(system-calculated: cost_price × quantity),
+--                    description, vendor, date, receipt_no, created_by
 --   inventory-linked: auto-deducts stock via stock_movement(type='project_allocation')
---   external: manual entry, no inventory impact
--- project_income: id, project_id, description, amount, source, date
+--                     snapshots BP from product at allocation time
+--                     auto-creates project_income at unit_price × quantity
+--   external: manual entry, no inventory impact, no auto-income
+--
+-- project_income: id, project_id, description, amount,
+--                  source('client_payment'|'materials'), date, created_by
+--   source='client_payment': manual entry (cash/Mpesa from client)
+--   source='materials': auto-created from inventory allocation
+--
 -- project_net_profit: (computed) SUM(income) - SUM(expenses)
+--   Materials margin captured automatically:
+--     income from materials = unit_price × qty (what client pays)
+--     expense from materials = cost_price × qty (what store paid)
+--     profit on materials = (unit_price - cost_price) × qty
 ```
 
 ### 8. Financial (Simplified — no double-entry)

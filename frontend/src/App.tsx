@@ -10,6 +10,8 @@ import { CustomersPage } from './pages/Customers';
 import { ProductsPage } from './pages/Products';
 import { InventoryPage } from './pages/Inventory';
 import { StockTakePage } from './pages/StockTake';
+import { PurchasesPage } from './pages/Purchases';
+import { SuppliersPage } from './pages/Suppliers';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -19,6 +21,8 @@ import {
   Package,
   Boxes,
   ClipboardCheck,
+  ShoppingBag,
+  Truck,
   LogOut
 } from 'lucide-react';
 
@@ -32,6 +36,8 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
     { label: 'Sales & Invoices', path: '/sales', icon: Receipt },
     { label: 'Quotations', path: '/pre-sales', icon: FileCheck2 },
     { label: 'Customers', path: '/customers', icon: Users },
+    { label: 'Purchases & GRN', path: '/purchases', icon: ShoppingBag },
+    { label: 'Suppliers', path: '/suppliers', icon: Truck },
     { label: 'Products', path: '/products', icon: Package },
     { label: 'Inventory', path: '/inventory', icon: Boxes },
     { label: 'Stock Take', path: '/stock-take', icon: ClipboardCheck },
@@ -120,6 +126,8 @@ export function App() {
             <Route path="/sales" element={<NavigationLayout><SalesListPage /></NavigationLayout>} />
             <Route path="/pre-sales" element={<NavigationLayout><PreSalesPage /></NavigationLayout>} />
             <Route path="/customers" element={<NavigationLayout><CustomersPage /></NavigationLayout>} />
+            <Route path="/purchases" element={<NavigationLayout><PurchasesPage /></NavigationLayout>} />
+            <Route path="/suppliers" element={<NavigationLayout><SuppliersPage /></NavigationLayout>} />
             <Route path="/products" element={<NavigationLayout><ProductsPage /></NavigationLayout>} />
             <Route path="/inventory" element={<NavigationLayout><InventoryPage /></NavigationLayout>} />
             <Route path="/stock-take" element={<NavigationLayout><StockTakePage /></NavigationLayout>} />

@@ -1,0 +1,153 @@
+from typing import List, Optional
+from decimal import Decimal
+from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
+from app.models.supplier import Supplier, SupplierPayment
+from app.models.purchase import GoodsReceivedNote
+from app.schemas.supplier import SupplierCreate, SupplierUpdate, SupplierPaymentCreate, SupplierLedgerResponse, SupplierLedgerEntry
+
+
+def create_supplier(db: Session, store_id: int, supplier_in: SupplierCreate) -> Supplier:
+    supplier = Supplier(
+        store_id=store_id,
+        name=supplier_in.name.strip(),
+        contact_person=supplier_in.contact_person.strip() if supplier_in.contact_person else None,
+        phone=supplier_in.phone.strip() if supplier_in.phone else None,
+        email=supplier_in.email.strip() if supplier_in.email else None,
+        address=supplier_in.address.strip() if supplier_in.address else None,
+        tax_pin=supplier_in.tax_pin.strip() if supplier_in.tax_pin else None,
+        balance=Decimal("0.00"),
+        is_active=True
+    )
+    db.add(supplier)
+    db.commit()
+    db.refresh(supplier)
+    return supplier
+
+
+def list_suppliers(db: Session, store_id: int, q: Optional[str] = None, is_active: Optional[bool] = None) -> List[Supplier]:
+    query = db.query(Supplier).filter(Supplier.store_id == store_id)
+    if is_active is not None:
+        query = query.filter(Supplier.is_active == is_active)
+    if q:
+        search = f"%{q.strip()}%"
+        query = query.filter(
+            (Supplier.name.ilike(search)) |
+            (Supplier.phone.ilike(search)) |
+            (Supplier.tax_pin.ilike(search))
+        )
+    return query.order_by(Supplier.name.asc()).all()
+
+
+def get_supplier_by_id(db: Session, store_id: int, supplier_id: int) -> Supplier:
+    supplier = db.query(Supplier).filter(
+        Supplier.id == supplier_id,
+        Supplier.store_id == store_id
+    ).first()
+    if not supplier:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+    return supplier
+
+
+def update_supplier(db: Session, store_id: int, supplier_id: int, supplier_in: SupplierUpdate) -> Supplier:
+    supplier = get_supplier_by_id(db, store_id, supplier_id)
+    update_data = supplier_in.model_dump(exclude_unset=True)
+    for field, val in update_data.items():
+        if isinstance(val, str):
+            val = val.strip()
+        setattr(supplier, field, val)
+    db.commit()
+    db.refresh(supplier)
+    return supplier
+
+
+def record_supplier_payment(db: Session, store_id: int, user_id: int, supplier_id: int, payment_in: SupplierPaymentCreate) -> SupplierPayment:
+    supplier = get_supplier_by_id(db, store_id, supplier_id)
+    if payment_in.amount <= Decimal("0.00"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment amount must be greater than zero")
+
+    payment = SupplierPayment(
+        store_id=store_id,
+        supplier_id=supplier_id,
+        po_id=payment_in.po_id,
+        user_id=user_id,
+        amount=payment_in.amount,
+        payment_method=payment_in.payment_method,
+        reference=payment_in.reference.strip() if payment_in.reference else None,
+        notes=payment_in.notes.strip() if payment_in.notes else None
+    )
+    db.add(payment)
+
+    # Payments to suppliers reduce our outstanding liability/balance
+    supplier.balance = max(Decimal("0.00"), Decimal(str(supplier.balance)) - Decimal(str(payment_in.amount)))
+
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+def get_supplier_ledger(db: Session, store_id: int, supplier_id: int) -> SupplierLedgerResponse:
+    supplier = get_supplier_by_id(db, store_id, supplier_id)
+
+    # 1. Fetch GRNs for this supplier (Goods Received increase payables)
+    grns = db.query(GoodsReceivedNote).filter(
+        GoodsReceivedNote.store_id == store_id,
+        GoodsReceivedNote.supplier_id == supplier_id
+    ).all()
+
+    # 2. Fetch Supplier Payments (Payments reduce payables)
+    payments = db.query(SupplierPayment).filter(
+        SupplierPayment.store_id == store_id,
+        SupplierPayment.supplier_id == supplier_id
+    ).all()
+
+    timeline = []
+    for g in grns:
+        timeline.append({
+            "date": g.created_at,
+            "type": "grn",
+            "reference": g.grn_no + (f" (Inv: {g.invoice_number})" if g.invoice_number else ""),
+            "debit": Decimal("0.00"),
+            "credit": Decimal(str(g.total_amount)),
+            "notes": g.notes or "Goods Received Note"
+        })
+
+    for p in payments:
+        timeline.append({
+            "date": p.created_at,
+            "type": "payment",
+            "reference": f"Payment ({p.payment_method.upper()})" + (f": {p.reference}" if p.reference else ""),
+            "debit": Decimal(str(p.amount)),
+            "credit": Decimal("0.00"),
+            "notes": p.notes or f"Paid via {p.payment_method.upper()}"
+        })
+
+    # Sort chronologically
+    timeline.sort(key=lambda x: x["date"])
+
+    running_bal = Decimal("0.00")
+    entries: List[SupplierLedgerEntry] = []
+    for item in timeline:
+        running_bal += item["credit"]  # Inbound goods increase liability
+        running_bal -= item["debit"]   # Payments decrease liability
+        if running_bal < Decimal("0.00"):
+            running_bal = Decimal("0.00")
+
+        entries.append(SupplierLedgerEntry(
+            date=item["date"],
+            type=item["type"],
+            reference=item["reference"],
+            debit=item["debit"],
+            credit=item["credit"],
+            running_balance=running_bal,
+            notes=item["notes"]
+        ))
+
+    return SupplierLedgerResponse(
+        supplier_id=supplier.id,
+        supplier_name=supplier.name,
+        contact_person=supplier.contact_person,
+        phone=supplier.phone,
+        current_balance=supplier.balance,
+        entries=entries
+    )

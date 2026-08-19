@@ -1,0 +1,690 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { apiFetch } from '../services/api';
+import type { Supplier, SupplierLedgerResponse } from '../types';
+import {
+  Truck,
+  Plus,
+  Search,
+  DollarSign,
+  Phone,
+  Mail,
+  MapPin,
+  FileText,
+  Printer,
+  X,
+  User,
+  Hash
+} from 'lucide-react';
+
+export const SuppliersPage: React.FC = () => {
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Supplier Modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [contactPerson, setContactPerson] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [taxPin, setTaxPin] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Live Statement Ledger Modal
+  const [ledgerSupplier, setLedgerSupplier] = useState<Supplier | null>(null);
+  const [ledgerData, setLedgerData] = useState<SupplierLedgerResponse | null>(null);
+  const [loadingLedger, setLoadingLedger] = useState(false);
+  const ledgerPrintRef = useRef<HTMLDivElement>(null);
+
+  // Payment Modal
+  const [paymentSupplier, setPaymentSupplier] = useState<Supplier | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('bank');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadSuppliers();
+  }, [searchQuery]);
+
+  const loadSuppliers = async () => {
+    setLoading(true);
+    try {
+      let url = '/api/v1/suppliers/';
+      if (searchQuery) url += `?q=${encodeURIComponent(searchQuery)}`;
+      const data = await apiFetch<Supplier[]>(url);
+      setSuppliers(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadLedger = async (supp: Supplier) => {
+    setLedgerSupplier(supp);
+    setLoadingLedger(true);
+    try {
+      const data = await apiFetch<SupplierLedgerResponse>(`/api/v1/suppliers/${supp.id}/ledger`);
+      setLedgerData(data);
+    } catch (e) {
+      console.error('Failed to load ledger', e);
+    } finally {
+      setLoadingLedger(false);
+    }
+  };
+
+  const handleCreateSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    setFormError(null);
+
+    try {
+      await apiFetch('/api/v1/suppliers/', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: name.trim(),
+          contact_person: contactPerson.trim() || null,
+          phone: phone.trim() || null,
+          email: email.trim() || null,
+          address: address.trim() || null,
+          tax_pin: taxPin.trim() || null
+        })
+      });
+      setIsModalOpen(false);
+      setName('');
+      setContactPerson('');
+      setPhone('');
+      setEmail('');
+      setAddress('');
+      setTaxPin('');
+      loadSuppliers();
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to save supplier');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRecordPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paymentSupplier) return;
+    const amt = parseFloat(paymentAmount);
+    if (!amt || amt <= 0) {
+      setPayError('Please enter a valid positive payment amount');
+      return;
+    }
+
+    setPaying(true);
+    setPayError(null);
+    try {
+      await apiFetch(`/api/v1/suppliers/${paymentSupplier.id}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: amt,
+          payment_method: paymentMethod,
+          reference: paymentReference.trim() || null,
+          notes: paymentNotes.trim() || null
+        })
+      });
+      setPaymentSupplier(null);
+      setPaymentAmount('');
+      setPaymentReference('');
+      setPaymentNotes('');
+      loadSuppliers();
+      if (ledgerSupplier?.id === paymentSupplier.id) {
+        loadLedger(paymentSupplier);
+      }
+    } catch (err: any) {
+      setPayError(err.message || 'Failed to record payment');
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const handlePrintLedger = () => {
+    window.print();
+  };
+
+  const totalOutstanding = suppliers.reduce((sum, s) => sum + Number(s.balance || 0), 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2.5">
+            <div className="p-2 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100">
+              <Truck className="h-6 w-6" />
+            </div>
+            Suppliers & Payables
+          </h1>
+          <p className="text-sm text-slate-500 mt-1 font-medium">
+            Manage vendor directories, track inbound deliveries, payables, and live statement ledgers
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold shadow-sm transition-all duration-150 active:scale-[0.98]"
+          >
+            <Plus className="h-4 w-4" />
+            Add Supplier
+          </button>
+        </div>
+      </div>
+
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Suppliers</div>
+          <div className="text-2xl font-black text-slate-900 mt-2 font-mono">
+            {suppliers.filter(s => s.is_active).length}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Total registered suppliers</div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <div className="text-xs font-bold text-rose-600 uppercase tracking-wider">Total Payables Debt</div>
+          <div className="text-2xl font-black text-rose-600 mt-2 font-mono">
+            KES {totalOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Outstanding vendor liability</div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Suppliers with Balance</div>
+          <div className="text-2xl font-black text-emerald-600 mt-2 font-mono">
+            {suppliers.filter(s => Number(s.balance) > 0).length}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Vendors pending settlement</div>
+        </div>
+      </div>
+
+      {/* Search Toolbar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search suppliers by name, phone, or KRA PIN..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+          />
+        </div>
+      </div>
+
+      {/* Suppliers Table */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="bg-slate-50/75 border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-500">
+                <th className="py-3.5 px-4">Supplier Name</th>
+                <th className="py-3.5 px-4">Contact Info</th>
+                <th className="py-3.5 px-4">Address / PIN</th>
+                <th className="py-3.5 px-4 text-right">Payable Balance</th>
+                <th className="py-3.5 px-4 text-center">Status</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400 font-normal">
+                    Loading suppliers...
+                  </td>
+                </tr>
+              ) : suppliers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400 font-normal">
+                    No suppliers found matching your query.
+                  </td>
+                </tr>
+              ) : (
+                suppliers.map((supp) => (
+                  <tr key={supp.id} className="hover:bg-slate-50/75 transition-colors">
+                    <td className="py-3.5 px-4">
+                      <div className="font-bold text-slate-900">{supp.name}</div>
+                      {supp.contact_person && (
+                        <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                          <User className="h-3 w-3 text-slate-400" />
+                          {supp.contact_person}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-600">
+                      {supp.phone && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-700">
+                          <Phone className="h-3 w-3 text-slate-400" />
+                          {supp.phone}
+                        </div>
+                      )}
+                      {supp.email && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
+                          <Mail className="h-3 w-3 text-slate-400" />
+                          {supp.email}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-600">
+                      {supp.address && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                          <MapPin className="h-3 w-3 text-slate-400" />
+                          {supp.address}
+                        </div>
+                      )}
+                      {supp.tax_pin && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 font-mono">
+                          <Hash className="h-3 w-3 text-slate-400" />
+                          PIN: {supp.tax_pin}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-right font-mono font-bold">
+                      {Number(supp.balance) > 0 ? (
+                        <span className="text-rose-600">
+                          KES {Number(supp.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">KES 0.00</span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        supp.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {supp.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-right space-x-2">
+                      <button
+                        onClick={() => loadLedger(supp)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
+                        title="View Statement Ledger"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        Ledger
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPaymentSupplier(supp);
+                          setPaymentAmount(supp.balance > 0 ? String(supp.balance) : '');
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors"
+                        title="Record Payment"
+                      >
+                        <DollarSign className="h-3.5 w-3.5" />
+                        Pay
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Create Supplier Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Truck className="h-5 w-5 text-indigo-600" />
+                Add New Supplier
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="mb-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200 font-medium">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateSupplier} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Supplier / Company Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. SolarTech Kenya Ltd"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Contact Person
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. John Mwangi"
+                    value={contactPerson}
+                    onChange={(e) => setContactPerson(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. +254712345678"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="sales@supplier.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    KRA Tax PIN
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. P051234567Z"
+                    value={taxPin}
+                    onChange={(e) => setTaxPin(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium uppercase font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Physical Address / Warehouse Location
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Industrial Area, Enterprise Road, Nairobi"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save Supplier'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Record Payment Modal */}
+      {paymentSupplier && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-emerald-600" />
+                Record Supplier Payment
+              </h3>
+              <button onClick={() => setPaymentSupplier(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 mb-4 text-xs">
+              <div className="text-slate-500">Paying Supplier:</div>
+              <div className="font-bold text-slate-900 text-sm">{paymentSupplier.name}</div>
+              <div className="text-slate-500 mt-1">Outstanding Liability:</div>
+              <div className="font-mono font-black text-rose-600 text-sm">
+                KES {Number(paymentSupplier.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+
+            {payError && (
+              <div className="mb-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200 font-medium">
+                {payError}
+              </div>
+            )}
+
+            <form onSubmit={handleRecordPayment} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Payment Amount (KES) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  placeholder="0.00"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-lg font-mono font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Payment Method
+                </label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                >
+                  <option value="bank">Bank Transfer / EFT / RTGS</option>
+                  <option value="mpesa">M-Pesa Paybill / Till</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="cash">Cash Tender</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Reference / Transaction No / Cheque #
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. EFT-992109 or CHQ-0012"
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Partial settlement for invoice DN-88192"
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setPaymentSupplier(null)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={paying}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {paying ? 'Recording...' : 'Record Payment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Live Statement Ledger Modal */}
+      {ledgerSupplier && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 print:p-0 print:bg-white print:static">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 print:max-h-none print:shadow-none print:border-none">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between print:hidden">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-50 text-indigo-700 rounded-xl">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Supplier Statement Ledger</h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {ledgerSupplier.name} {ledgerSupplier.tax_pin && `• PIN: ${ledgerSupplier.tax_pin}`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrintLedger}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+                >
+                  <Printer className="h-4 w-4" />
+                  Print Statement
+                </button>
+                <button onClick={() => setLedgerSupplier(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content for Print & Screen */}
+            <div ref={ledgerPrintRef} className="p-6 overflow-y-auto flex-1 font-mono text-xs">
+              {/* Print Header */}
+              <div className="hidden print:block mb-6 border-b pb-4">
+                <div className="text-xl font-black uppercase tracking-wider text-slate-900">SUPPLIER STATEMENT OF ACCOUNT</div>
+                <div className="text-sm font-bold text-slate-800 mt-1">{ledgerSupplier.name}</div>
+                {ledgerSupplier.phone && <div>Tel: {ledgerSupplier.phone}</div>}
+                {ledgerSupplier.tax_pin && <div>Tax PIN: {ledgerSupplier.tax_pin}</div>}
+                <div className="text-slate-500 text-[10px] mt-2">
+                  Generated on: {new Date().toLocaleString()}
+                </div>
+              </div>
+
+              {loadingLedger ? (
+                <div className="py-12 text-center text-slate-400 font-sans">Loading statement ledger...</div>
+              ) : !ledgerData || ledgerData.entries.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 font-sans">
+                  No goods received or payment transactions on record for this supplier.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-200 font-sans text-xs">
+                    <div>
+                      <span className="text-slate-500">Current Outstanding Payable:</span>
+                    </div>
+                    <div className="font-mono font-black text-rose-600 text-base">
+                      KES {Number(ledgerData.current_balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b-2 border-slate-300 text-[11px] font-bold uppercase text-slate-600">
+                          <th className="py-2 px-2">Date</th>
+                          <th className="py-2 px-2">Type</th>
+                          <th className="py-2 px-2">Reference / Note</th>
+                          <th className="py-2 px-2 text-right">Debit (Paid)</th>
+                          <th className="py-2 px-2 text-right">Credit (Received)</th>
+                          <th className="py-2 px-2 text-right">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 text-[11px]">
+                        {ledgerData.entries.map((entry, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="py-2 px-2 text-slate-600 whitespace-nowrap">
+                              {new Date(entry.date).toLocaleDateString()}
+                            </td>
+                            <td className="py-2 px-2 uppercase font-bold text-slate-700">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                entry.type === 'grn' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {entry.type}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2 text-slate-800">
+                              <div className="font-semibold">{entry.reference}</div>
+                              {entry.notes && <div className="text-[10px] text-slate-500 font-normal">{entry.notes}</div>}
+                            </td>
+                            <td className="py-2 px-2 text-right font-semibold text-emerald-700">
+                              {entry.debit > 0 ? Number(entry.debit).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'}
+                            </td>
+                            <td className="py-2 px-2 text-right font-semibold text-amber-800">
+                              {entry.credit > 0 ? Number(entry.credit).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'}
+                            </td>
+                            <td className="py-2 px-2 text-right font-bold text-slate-900">
+                              KES {Number(entry.running_balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-between items-center print:hidden">
+              <div className="text-xs text-slate-500 font-medium">
+                {ledgerData?.entries.length || 0} ledger transactions
+              </div>
+              <button
+                onClick={() => setLedgerSupplier(null)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-colors"
+              >
+                Close Statement
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

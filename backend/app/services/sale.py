@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_
 from fastapi import HTTPException, status
 
 from app.models.sale import Customer, Sale, SaleItem, Payment, PreSaleDocument, PreSaleItem
@@ -627,10 +627,33 @@ def list_sales(
     limit: int = 50
 ) -> List[Sale]:
     query = db.query(Sale).filter(Sale.store_id == store_id)
-    if q:
-        query = query.filter(Sale.invoice_no.ilike(f"%{q.strip()}%"))
-    if customer_id:
-        query = query.filter(Sale.customer_id == customer_id)
+    
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        query = query.outerjoin(Customer, Sale.customer_id == Customer.id)\
+                     .outerjoin(SaleItem, Sale.id == SaleItem.sale_id)\
+                     .outerjoin(Product, SaleItem.product_id == Product.id)\
+                     .outerjoin(Payment, Sale.id == Payment.sale_id)\
+                     .filter(
+                         or_(
+                             Sale.invoice_no.ilike(term),
+                             Sale.notes.ilike(term),
+                             Customer.name.ilike(term),
+                             Customer.phone.ilike(term),
+                             Product.name.ilike(term),
+                             Product.sku.ilike(term),
+                             Payment.reference.ilike(term),
+                             Payment.notes.ilike(term)
+                         )
+                     ).distinct()
+
+    if customer_id is not None:
+        if customer_id == -1:
+            # -1 represents Walk-in customer sales (no customer attached)
+            query = query.filter(Sale.customer_id.is_(None))
+        elif customer_id > 0:
+            query = query.filter(Sale.customer_id == customer_id)
+
     if is_etr is not None:
         query = query.filter(Sale.is_etr.is_(is_etr))
     if status_filter and status_filter != "all":

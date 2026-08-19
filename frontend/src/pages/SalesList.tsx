@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { apiFetch } from '../services/api';
 import type { Sale, Customer } from '../types';
 import { ReceiptModal } from '../components/ReceiptModal';
@@ -15,7 +15,12 @@ import {
   Banknote,
   Split,
   Loader2,
-  Eye
+  Eye,
+  Users,
+  User,
+  X,
+  ChevronDown,
+  Check
 } from 'lucide-react';
 
 export const SalesListPage: React.FC = () => {
@@ -27,11 +32,16 @@ export const SalesListPage: React.FC = () => {
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
 
+  // Searchable Customer Combobox State
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+  const [customerPickerSearch, setCustomerPickerSearch] = useState('');
+  const [customerPickerTab, setCustomerPickerTab] = useState<'all' | 'debt' | 'walkin'>('all');
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
+
   const [selectedSaleForDrawer, setSelectedSaleForDrawer] = useState<Sale | null>(null);
   const [drawerFormat, setDrawerFormat] = useState<'a4' | 'thermal'>('a4');
   const [selectedSaleForReceipt, setSelectedSaleForReceipt] = useState<Sale | null>(null);
 
-  
   // Void Modal State
   const [voidingSale, setVoidingSale] = useState<Sale | null>(null);
   const [voidReason, setVoidReason] = useState('');
@@ -86,6 +96,38 @@ export const SalesListPage: React.FC = () => {
       console.error(e);
     }
   };
+
+  // Close customer dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
+        setCustomerDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const debtCustomersCount = useMemo(() => {
+    return customers.filter(c => Number(c.balance) > 0).length;
+  }, [customers]);
+
+  const filteredCustomersForPicker = useMemo(() => {
+    let list = customers;
+    if (customerPickerTab === 'debt') {
+      list = list.filter(c => Number(c.balance) > 0);
+    }
+    if (customerPickerSearch.trim()) {
+      const q = customerPickerSearch.toLowerCase();
+      list = list.filter(c => c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q)));
+    }
+    return list;
+  }, [customers, customerPickerSearch, customerPickerTab]);
+
+  const selectedCustomerObj = useMemo(() => {
+    if (selectedCustomerId === 'all' || selectedCustomerId === '-1') return null;
+    return customers.find(c => String(c.id) === String(selectedCustomerId)) || null;
+  }, [customers, selectedCustomerId]);
 
   const handleVoidSale = async () => {
     if (!voidingSale) return;
@@ -203,18 +245,29 @@ export const SalesListPage: React.FC = () => {
 
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+          {/* Universal Search Bar */}
           <div className="md:col-span-4 relative">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search invoice # (e.g. INV-20260819-0001)..."
+              placeholder="Search invoice #, client name, phone, product..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && reloadSales()}
-              className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+              className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
+                title="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
+          {/* Date Range Picker */}
           <div className="md:col-span-3 flex items-center space-x-1.5">
             <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
             <input
@@ -222,7 +275,7 @@ export const SalesListPage: React.FC = () => {
               title="Date From"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono"
+              className="w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono shadow-2xs"
             />
             <span className="text-slate-400 text-xs">to</span>
             <input
@@ -230,30 +283,173 @@ export const SalesListPage: React.FC = () => {
               title="Date To"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono"
+              className="w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono shadow-2xs"
             />
           </div>
 
-          <div className="md:col-span-3">
-            <select
-              value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+          {/* Searchable Customer Combobox */}
+          <div className="md:col-span-3 relative" ref={customerDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setCustomerDropdownOpen(!customerDropdownOpen)}
+              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl border text-xs transition-all cursor-pointer shadow-2xs ${
+                selectedCustomerId !== 'all'
+                  ? 'border-amber-500 bg-amber-50/50 text-slate-900 font-bold'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
             >
-              <option value="all">All Customers</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name} {c.phone ? `(${c.phone})` : ''}
-                </option>
-              ))}
-            </select>
+              <div className="flex items-center gap-1.5 truncate">
+                <Users className={`h-3.5 w-3.5 shrink-0 ${selectedCustomerId !== 'all' ? 'text-amber-600' : 'text-slate-400'}`} />
+                <span className="truncate">
+                  {selectedCustomerId === 'all'
+                    ? `All Customers (${customers.length})`
+                    : selectedCustomerId === '-1'
+                    ? 'Walk-in Only'
+                    : selectedCustomerObj
+                    ? selectedCustomerObj.name
+                    : `Customer #${selectedCustomerId}`}
+                </span>
+                {selectedCustomerObj && Number(selectedCustomerObj.balance) > 0 && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-700 font-mono font-bold shrink-0">
+                    Debt: KES {Number(selectedCustomerObj.balance).toLocaleString()}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0 ml-1">
+                {selectedCustomerId !== 'all' && (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedCustomerId('all');
+                    }}
+                    className="p-0.5 text-slate-400 hover:text-rose-600 rounded-full cursor-pointer"
+                    title="Reset customer filter"
+                  >
+                    <X className="h-3 w-3" />
+                  </span>
+                )}
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              </div>
+            </button>
+
+            {/* Dropdown Popover */}
+            {customerDropdownOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white rounded-xl border border-slate-200 shadow-xl p-2 space-y-2 max-w-sm w-[320px] animate-in fade-in zoom-in-95 duration-100">
+                {/* Search in Dropdown */}
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2 h-3 w-3 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Filter customer name or phone..."
+                    value={customerPickerSearch}
+                    onChange={(e) => setCustomerPickerSearch(e.target.value)}
+                    autoFocus
+                    className="w-full pl-8 pr-2 py-1 text-xs rounded-lg border border-slate-200 bg-slate-50 text-slate-900 focus:bg-white focus:outline-none focus:border-amber-600"
+                  />
+                </div>
+
+                {/* Quick Segment Filter Chips */}
+                <div className="flex items-center gap-1 text-[10px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setCustomerPickerTab('all')}
+                    className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
+                      customerPickerTab === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    All ({customers.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerPickerTab('debt')}
+                    className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
+                      customerPickerTab === 'debt' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                    }`}
+                  >
+                    With Debt ({debtCustomersCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustomerId('-1');
+                      setCustomerDropdownOpen(false);
+                    }}
+                    className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
+                      selectedCustomerId === '-1' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Walk-in Only
+                  </button>
+                </div>
+
+                {/* Customer List */}
+                <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustomerId('all');
+                      setCustomerDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
+                      selectedCustomerId === 'all' ? 'bg-amber-50 font-bold text-amber-900' : 'text-slate-700'
+                    }`}
+                  >
+                    <span>All Customers</span>
+                    {selectedCustomerId === 'all' && <Check className="h-3.5 w-3.5 text-amber-600" />}
+                  </button>
+
+                  {filteredCustomersForPicker.length === 0 ? (
+                    <div className="py-4 text-center text-[11px] text-slate-400">
+                      No matching customers found
+                    </div>
+                  ) : (
+                    filteredCustomersForPicker.map((c) => {
+                      const isSelected = String(c.id) === String(selectedCustomerId);
+                      const debt = Number(c.balance);
+
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomerId(String(c.id));
+                            setCustomerDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors ${
+                            isSelected ? 'bg-amber-50 font-bold text-amber-900' : 'text-slate-700'
+                          }`}
+                        >
+                          <div className="truncate mr-2">
+                            <div className="truncate font-semibold">{c.name}</div>
+                            {c.phone && <div className="text-[10px] text-slate-400">{c.phone}</div>}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {debt > 0 ? (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 font-mono font-bold border border-rose-200">
+                                KES {debt.toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] text-emerald-600 font-medium">Clean</span>
+                            )}
+                            {isSelected && <Check className="h-3.5 w-3.5 text-amber-600" />}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
+          {/* Fiscal Type Filter & Reset */}
           <div className="md:col-span-2 flex items-center justify-end space-x-2">
             <select
               value={etrFilter}
               onChange={(e) => setEtrFilter(e.target.value)}
-              className="rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+              className="rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
             >
               <option value="all">All Fiscal Types</option>
               <option value="etr">ETR Only</option>
@@ -262,7 +458,7 @@ export const SalesListPage: React.FC = () => {
 
             <button
               onClick={resetFilters}
-              className="p-1.5 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer"
+              className="p-1.5 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs"
               title="Reset Filters"
             >
               <RotateCcw className="h-4 w-4" />
@@ -369,8 +565,35 @@ export const SalesListPage: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-3">
-                        <div className="font-bold text-slate-900">{s.customer_name || 'Walk-in Customer'}</div>
-                        <div className="text-[10px] text-slate-400">Cashier: {s.cashier_name || 'Staff'}</div>
+                        {s.customer_name ? (
+                          <div className="space-y-0.5">
+                            <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                              <User className="h-3 w-3 text-slate-400 shrink-0" />
+                              <span>{s.customer_name}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px]">
+                              <span className="text-slate-400">Cashier: {s.cashier_name || 'Staff'}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (s.customer_id) {
+                                    setSelectedCustomerId(String(s.customer_id));
+                                  }
+                                }}
+                                className="text-amber-700 hover:text-amber-800 font-semibold underline decoration-dotted cursor-pointer"
+                                title="Filter all sales to this customer"
+                              >
+                                Filter client
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            <div className="font-semibold text-slate-500 italic">Walk-in Customer</div>
+                            <div className="text-[10px] text-slate-400">Cashier: {s.cashier_name || 'Staff'}</div>
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-4 py-3">

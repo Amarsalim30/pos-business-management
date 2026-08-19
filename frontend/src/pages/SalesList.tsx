@@ -72,17 +72,55 @@ export const SalesListPage: React.FC = () => {
       if (etrFilter === 'etr') url += `&is_etr=true`;
       if (etrFilter === 'non_etr') url += `&is_etr=false`;
       if (selectedCustomerId !== 'all') url += `&customer_id=${selectedCustomerId}`;
-      if (dateFrom) url += `&date_from=${encodeURIComponent(new Date(dateFrom).toISOString())}`;
-      if (dateTo) {
-        const endOfDay = new Date(dateTo);
-        endOfDay.setHours(23, 59, 59, 999);
-        url += `&date_to=${encodeURIComponent(endOfDay.toISOString())}`;
+      if (dateFrom && !dateTo) {
+        url += `&date_from=${encodeURIComponent(`${dateFrom}T00:00:00`)}`;
+        url += `&date_to=${encodeURIComponent(`${dateFrom}T23:59:59`)}`;
+      } else if (dateTo && !dateFrom) {
+        url += `&date_from=${encodeURIComponent(`${dateTo}T00:00:00`)}`;
+        url += `&date_to=${encodeURIComponent(`${dateTo}T23:59:59`)}`;
+      } else {
+        if (dateFrom) url += `&date_from=${encodeURIComponent(`${dateFrom}T00:00:00`)}`;
+        if (dateTo) url += `&date_to=${encodeURIComponent(`${dateTo}T23:59:59`)}`;
       }
       return await apiFetch<Sale[]>(url);
     },
     limit: 25,
     dependencies: [searchQuery, statusFilter, etrFilter, selectedCustomerId, dateFrom, dateTo]
   });
+
+  const setDatePreset = (preset: 'today' | 'yesterday' | 'week' | 'month' | 'all') => {
+    const now = new Date();
+    const formatYMD = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    if (preset === 'today') {
+      const todayStr = formatYMD(now);
+      setDateFrom(todayStr);
+      setDateTo(todayStr);
+    } else if (preset === 'yesterday') {
+      const y = new Date(now);
+      y.setDate(y.getDate() - 1);
+      const yStr = formatYMD(y);
+      setDateFrom(yStr);
+      setDateTo(yStr);
+    } else if (preset === 'week') {
+      const w = new Date(now);
+      w.setDate(w.getDate() - 7);
+      setDateFrom(formatYMD(w));
+      setDateTo(formatYMD(now));
+    } else if (preset === 'month') {
+      const m = new Date(now.getFullYear(), now.getMonth(), 1);
+      setDateFrom(formatYMD(m));
+      setDateTo(formatYMD(now));
+    } else if (preset === 'all') {
+      setDateFrom('');
+      setDateTo('');
+    }
+  };
 
   useEffect(() => {
     loadCustomers();
@@ -466,27 +504,54 @@ export const SalesListPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
-          <span className="text-[11px] font-bold text-slate-500 mr-1">Status:</span>
-          {[
-            { id: 'all', label: 'All Invoices' },
-            { id: 'paid', label: 'Paid' },
-            { id: 'partial', label: 'Partial Debt' },
-            { id: 'unpaid', label: 'Unpaid / Credit' },
-            { id: 'voided', label: 'Voided' }
-          ].map(st => (
-            <button
-              key={st.id}
-              onClick={() => setStatusFilter(st.id)}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                statusFilter === st.id
-                  ? 'bg-slate-900 text-white shadow-2xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {st.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+          {/* Status Pills */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold text-slate-500 mr-1">Status:</span>
+            {[
+              { id: 'all', label: 'All Invoices' },
+              { id: 'paid', label: 'Paid' },
+              { id: 'partial', label: 'Partial Debt' },
+              { id: 'unpaid', label: 'Unpaid / Credit' },
+              { id: 'voided', label: 'Voided' }
+            ].map(st => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setStatusFilter(st.id)}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  statusFilter === st.id
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {st.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Date Quick Presets */}
+          <div className="flex flex-wrap items-center gap-1 text-[11px]">
+            <span className="text-[11px] font-bold text-slate-400 mr-1">Quick Dates:</span>
+            {[
+              { id: 'all', label: 'All Time' },
+              { id: 'today', label: 'Today' },
+              { id: 'yesterday', label: 'Yesterday' },
+              { id: 'week', label: 'Last 7 Days' },
+              { id: 'month', label: 'This Month' }
+            ].map(dp => {
+              return (
+                <button
+                  key={dp.id}
+                  type="button"
+                  onClick={() => setDatePreset(dp.id as any)}
+                  className="px-2 py-0.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors shadow-2xs"
+                >
+                  {dp.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

@@ -660,11 +660,13 @@ def list_sales(
     if status_filter and status_filter != "all":
         query = query.filter(Sale.status == status_filter)
     if date_from:
-        query = query.filter(Sale.created_at >= date_from)
+        dt_from = date_from.replace(tzinfo=None) if date_from.tzinfo else date_from
+        query = query.filter(Sale.created_at >= dt_from)
     if date_to:
-        query = query.filter(Sale.created_at <= date_to)
+        dt_to = date_to.replace(tzinfo=None) if date_to.tzinfo else date_to
+        query = query.filter(Sale.created_at <= dt_to)
 
-    return query.order_by(desc(Sale.id)).offset(offset).limit(limit).all()
+    return query.order_by(desc(Sale.created_at), desc(Sale.id)).offset(offset).limit(limit).all()
 
 
 def void_sale(db: Session, store_id: int, user_id: int, sale_id: int, reason: Optional[str] = None) -> Sale:

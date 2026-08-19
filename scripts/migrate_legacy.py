@@ -210,15 +210,8 @@ def migrate_products(conn, grp_map):
 
         prod_map[item_code] = prod_id
 
-        # Create inventory record
-        stock_qty = safe_decimal(row.get("StockQnty"))
-        cur.execute(
-            """INSERT INTO inventory (product_id, store_id, quantity, last_updated)
-               VALUES (%s, %s, %s, %s)
-               ON CONFLICT (product_id, store_id)
-               DO UPDATE SET quantity = EXCLUDED.quantity, last_updated = EXCLUDED.last_updated""",
-            (prod_id, STORE_ID, stock_qty, datetime.now(timezone.utc)),
-        )
+        # Inventory will be populated by fix_inventory.py from movements
+        # (Legacy StockQnty field was never maintained — always 0)
         count += 1
 
     conn.commit()

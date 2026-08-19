@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../services/api';
 import type {
   PettyCashEntry,
@@ -22,7 +23,23 @@ import {
 
 
 export const AccountsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'petty_cash' | 'banks' | 'mpesa'>('petty_cash');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const initialTab = (tabParam === 'mpesa' || tabParam === 'banks' || tabParam === 'petty_cash') ? tabParam : 'petty_cash';
+  const [activeTab, setActiveTab] = useState<'petty_cash' | 'banks' | 'mpesa'>(initialTab);
+
+  useEffect(() => {
+    if (tabParam && (tabParam === 'mpesa' || tabParam === 'banks' || tabParam === 'petty_cash')) {
+      if (tabParam !== activeTab) {
+        setActiveTab(tabParam);
+      }
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (tab: 'petty_cash' | 'banks' | 'mpesa') => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
   const [overview, setOverview] = useState<AccountsOverview | null>(null);
 
   // Petty Cash State
@@ -298,7 +315,7 @@ export const AccountsPage: React.FC = () => {
       {/* Tabs Bar */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
         <button
-          onClick={() => setActiveTab('petty_cash')}
+          onClick={() => handleTabChange('petty_cash')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'petty_cash'
               ? 'bg-slate-900 text-white shadow-xs'
@@ -310,7 +327,7 @@ export const AccountsPage: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab('banks')}
+          onClick={() => handleTabChange('banks')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'banks'
               ? 'bg-slate-900 text-white shadow-xs'
@@ -322,7 +339,7 @@ export const AccountsPage: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab('mpesa')}
+          onClick={() => handleTabChange('mpesa')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'mpesa'
               ? 'bg-slate-900 text-white shadow-xs'

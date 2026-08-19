@@ -547,9 +547,9 @@ export const POSPage: React.FC = () => {
   const selectedCustomerObj = customers.find(c => c.id === selectedCustomerId);
 
   return (
-    <div className="space-y-4">
+    <div className="h-[calc(100vh-105px)] flex flex-col space-y-2.5 overflow-hidden">
       {/* Top Ergonomic Action Bar */}
-      <div className="bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white px-4 py-2.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3 shrink-0">
         {/* Left: Terminal Title & Cashier Hotkey Indicator */}
         <div className="flex items-center space-x-3">
           <div className="h-9 w-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 shrink-0">
@@ -654,11 +654,11 @@ export const POSPage: React.FC = () => {
       </div>
 
       {/* Main Cashier Workspace Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 flex-1 min-h-0 items-stretch">
         {/* Left: Product Search, Category Pills & Catalog Grid (7 Cols) */}
-        <div className="lg:col-span-7 space-y-3">
+        <div className="lg:col-span-7 flex flex-col h-full min-h-0 space-y-2.5">
           {/* Quick Search Bar */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
             <input
               ref={searchInputRef}
@@ -684,7 +684,7 @@ export const POSPage: React.FC = () => {
           </div>
 
           {/* Category Filter Pills */}
-          <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+          <div className="flex items-center space-x-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs shrink-0">
             <button
               onClick={() => setSelectedCategory('all')}
               className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
@@ -710,24 +710,25 @@ export const POSPage: React.FC = () => {
             ))}
           </div>
 
-          {/* Product Cards Grid with Infinite Scroll & Skeletons */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {productsLoading && products.length === 0 ? (
-              Array.from({ length: 6 }).map((_, idx) => (
-                <div key={`skel-${idx}`} className="rounded-2xl border border-slate-100 bg-white p-3.5 space-y-3 animate-pulse shadow-2xs">
-                  <div className="h-4 bg-slate-200 rounded w-3/4" />
-                  <div className="h-3 bg-slate-100 rounded w-1/2" />
-                  <div className="h-6 bg-slate-100 rounded-lg w-full" />
-                  <div className="h-8 bg-slate-200 rounded-xl w-full" />
+          {/* Product Cards Grid with Dedicated Inner Scroll */}
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {productsLoading && products.length === 0 ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <div key={`skel-${idx}`} className="rounded-2xl border border-slate-100 bg-white p-3.5 space-y-3 animate-pulse shadow-2xs">
+                    <div className="h-4 bg-slate-200 rounded w-3/4" />
+                    <div className="h-3 bg-slate-100 rounded w-1/2" />
+                    <div className="h-6 bg-slate-100 rounded-lg w-full" />
+                    <div className="h-8 bg-slate-200 rounded-xl w-full" />
+                  </div>
+                ))
+              ) : products.length === 0 ? (
+                <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-400 space-y-2">
+                  <Search className="h-8 w-8 mx-auto text-slate-300" />
+                  <p className="text-xs font-medium">No products found matching your search</p>
+                  <p className="text-[11px] text-slate-400">Try changing categories or clearing search keywords</p>
                 </div>
-              ))
-            ) : products.length === 0 ? (
-              <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-400 space-y-2">
-                <Search className="h-8 w-8 mx-auto text-slate-300" />
-                <p className="text-xs font-medium">No products found matching your search</p>
-                <p className="text-[11px] text-slate-400">Try changing categories or clearing search keywords</p>
-              </div>
-            ) : (
+              ) : (
               products.map(p => {
                 const cartItem = cart.find(i => i.product.id === p.id);
                 const isRoll = p.unit_type === 'roll';
@@ -826,19 +827,21 @@ export const POSPage: React.FC = () => {
             <div ref={productsSentinelRef} className="h-4 w-full col-span-full" />
 
             {/* End of Products Indicator */}
+            {/* End of Products Indicator */}
             {!productsHasMore && products.length > 0 && (
               <div className="col-span-full py-2 text-center text-[11px] text-slate-400 font-medium">
                 Showing all {products.length} products
               </div>
             )}
+            </div>
           </div>
         </div>
 
         {/* Right: Cart & Tender Settlement Console (5 Cols) */}
-        <div className="lg:col-span-5 space-y-3">
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden flex flex-col">
+        <div className="lg:col-span-5 flex flex-col h-full min-h-0">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden flex flex-col h-full min-h-0">
             {/* Dark Slate Cart Header */}
-            <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between">
+            <div className="p-3 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2">
                 <div className="h-6 w-6 rounded-lg bg-amber-500 flex items-center justify-center text-slate-950">
                   <ShoppingCart className="h-3.5 w-3.5 fill-slate-950" />
@@ -872,9 +875,9 @@ export const POSPage: React.FC = () => {
             </div>
 
             {/* Cart Items List */}
-            <div className="p-3.5 divide-y divide-slate-100 max-h-[300px] overflow-y-auto space-y-2.5">
+            <div className="p-3 divide-y divide-slate-100 flex-1 min-h-0 overflow-y-auto space-y-2.5">
               {cart.length === 0 ? (
-                <div className="py-10 text-center text-slate-400 space-y-2">
+                <div className="py-8 text-center text-slate-400 space-y-2">
                   <ShoppingCart className="h-8 w-8 mx-auto text-slate-300" />
                   <p className="text-xs font-medium">Your cashier cart is empty</p>
                   <p className="text-[10px] text-slate-400">Click products or press F2 to scan and add items</p>
@@ -1090,7 +1093,7 @@ export const POSPage: React.FC = () => {
             </div>
 
             {/* Financial Summary & Settlement Box */}
-            <div className="p-3.5 bg-slate-50 border-t border-slate-200 space-y-3">
+            <div className="p-3.5 bg-slate-50 border-t border-slate-200 space-y-2.5 shrink-0 overflow-y-auto max-h-[50vh]">
               <div className="space-y-1.5 text-xs text-slate-600">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>

@@ -289,11 +289,11 @@ export const SalesListPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden max-h-[calc(100vh-275px)] flex flex-col">
+        <div className="overflow-x-auto overflow-y-auto flex-1">
           <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+            <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-2xs">
+              <tr className="border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                 <th className="px-4 py-3">Invoice No</th>
                 <th className="px-4 py-3">Date & Time</th>
                 <th className="px-4 py-3">Customer</th>
@@ -463,17 +463,17 @@ export const SalesListPage: React.FC = () => {
               )}
             </tbody>
           </table>
+
+          {/* Intersection Observer Sentinel */}
+          <div ref={salesSentinelRef} className="h-4 w-full" />
+
+          {!salesHasMore && sales.length > 0 && (
+            <div className="text-center py-2.5 text-[11px] text-slate-400 font-medium border-t border-slate-100 bg-slate-50/50">
+              Showing all {sales.length} transactions
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Intersection Observer Sentinel */}
-      <div ref={salesSentinelRef} className="h-4 w-full" />
-
-      {!salesHasMore && sales.length > 0 && (
-        <div className="text-center py-2 text-[11px] text-slate-400 font-medium">
-          Showing all {sales.length} transactions
-        </div>
-      )}
 
       {/* Record Invoice Payment Modal */}
       {payingSale && (

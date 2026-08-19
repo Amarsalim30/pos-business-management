@@ -314,19 +314,20 @@ export const ProductsPage: React.FC = () => {
       </div>
 
       {/* Products Table */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
-        <table className="w-full text-left text-xs">
-          <thead className="border-b border-slate-200 bg-slate-50 text-slate-500 font-bold uppercase tracking-wider">
-            <tr>
-              <th className="p-3.5">Product & SKU</th>
-              <th className="p-3.5">Type & Unit</th>
-              <th className="p-3.5 text-right">Buying Price (BP)</th>
-              <th className="p-3.5 text-right">Selling Price (SP)</th>
-              <th className="p-3.5 text-right">Current Stock</th>
-              <th className="p-3.5 text-center">Status</th>
-              <th className="p-3.5 text-right">Actions</th>
-            </tr>
-          </thead>
+      <div className="rounded-xl border border-slate-200 bg-white shadow-xs max-h-[calc(100vh-275px)] flex flex-col overflow-hidden">
+        <div className="overflow-x-auto overflow-y-auto flex-1">
+          <table className="w-full text-left text-xs">
+            <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider shadow-2xs">
+              <tr>
+                <th className="p-3.5">Product & SKU</th>
+                <th className="p-3.5">Type & Unit</th>
+                <th className="p-3.5 text-right">Buying Price (BP)</th>
+                <th className="p-3.5 text-right">Selling Price (SP)</th>
+                <th className="p-3.5 text-right">Current Stock</th>
+                <th className="p-3.5 text-center">Status</th>
+                <th className="p-3.5 text-right">Actions</th>
+              </tr>
+            </thead>
           <tbody className="divide-y divide-slate-100 font-medium">
             {productsLoading && products.length === 0 ? (
               <tr>
@@ -433,16 +434,17 @@ export const ProductsPage: React.FC = () => {
             )}
           </tbody>
         </table>
+
+        {/* Intersection Observer Sentinel */}
+        <div ref={productsSentinelRef} className="h-4 w-full" />
+
+        {!productsHasMore && products.length > 0 && (
+          <div className="text-center py-2.5 text-[11px] text-slate-400 font-medium border-t border-slate-100 bg-slate-50/50">
+            Showing all {products.length} products
+          </div>
+        )}
       </div>
-
-      {/* Intersection Observer Sentinel */}
-      <div ref={productsSentinelRef} className="h-4 w-full" />
-
-      {!productsHasMore && products.length > 0 && (
-        <div className="text-center py-2 text-[11px] text-slate-400 font-medium">
-          Showing all {products.length} products
-        </div>
-      )}
+    </div>
 
       {/* Product Create / Edit Modal */}
       {isModalOpen && (

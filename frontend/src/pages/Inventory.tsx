@@ -393,11 +393,11 @@ export const InventoryPage: React.FC = () => {
           </div>
 
           {/* Stock Table */}
-          <div className="rounded-xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="rounded-xl border border-slate-200/80 bg-white shadow-xs max-h-[calc(100vh-290px)] flex flex-col overflow-hidden">
+            <div className="overflow-x-auto overflow-y-auto flex-1">
               <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-100 shadow-2xs">
+                  <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3">Product Name</th>
                     <th className="px-4 py-3">SKU</th>
                     <th className="px-4 py-3">Type</th>
@@ -511,16 +511,16 @@ export const InventoryPage: React.FC = () => {
                   )}
                 </tbody>
               </table>
+
+              {/* Sentinel */}
+              <div ref={itemsSentinelRef} className="h-4 w-full" />
+
+              {!itemsHasMore && items.length > 0 && (
+                <div className="text-center py-2.5 text-[11px] text-slate-400 font-medium border-t border-slate-100 bg-slate-50/50">
+                  Showing all {items.length} inventory items
+                </div>
+              )}
             </div>
-
-            {/* Sentinel */}
-            <div ref={itemsSentinelRef} className="h-4 w-full" />
-
-            {!itemsHasMore && items.length > 0 && (
-              <div className="text-center py-2 text-[11px] text-slate-400 font-medium">
-                Showing all {items.length} inventory items
-              </div>
-            )}
           </div>
         </>
       ) : (
@@ -564,11 +564,11 @@ export const InventoryPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="rounded-xl border border-slate-200/80 bg-white shadow-xs max-h-[calc(100vh-290px)] flex flex-col overflow-hidden">
+            <div className="overflow-x-auto overflow-y-auto flex-1">
               <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-100 shadow-2xs">
+                  <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3">Timestamp</th>
                     <th className="px-4 py-3">Delivered Product</th>
                     <th className="px-4 py-3">Type</th>
@@ -658,16 +658,16 @@ export const InventoryPage: React.FC = () => {
                   )}
                 </tbody>
               </table>
+
+              {/* Sentinel */}
+              <div ref={movementsSentinelRef} className="h-4 w-full" />
+
+              {!movementsHasMore && movements.length > 0 && (
+                <div className="text-center py-2.5 text-[11px] text-slate-400 font-medium border-t border-slate-100 bg-slate-50/50">
+                  Showing all {movements.length} stock movements
+                </div>
+              )}
             </div>
-
-            {/* Sentinel */}
-            <div ref={movementsSentinelRef} className="h-4 w-full" />
-
-            {!movementsHasMore && movements.length > 0 && (
-              <div className="text-center py-2 text-[11px] text-slate-400 font-medium">
-                Showing all {movements.length} stock movements
-              </div>
-            )}
           </div>
         </div>
       )}

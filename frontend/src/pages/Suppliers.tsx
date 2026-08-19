@@ -219,11 +219,11 @@ export const SuppliersPage: React.FC = () => {
       </div>
 
       {/* Suppliers Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden max-h-[calc(100vh-270px)] flex flex-col">
+        <div className="overflow-x-auto overflow-y-auto flex-1">
           <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="bg-slate-50/75 border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-500">
+            <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-2xs">
+              <tr className="border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-500">
                 <th className="py-3.5 px-4">Supplier Name</th>
                 <th className="py-3.5 px-4">Contact Info</th>
                 <th className="py-3.5 px-4">Address / PIN</th>
@@ -342,16 +342,16 @@ export const SuppliersPage: React.FC = () => {
               )}
             </tbody>
           </table>
+
+          {/* Sentinel */}
+          <div ref={suppliersSentinelRef} className="h-4 w-full" />
+
+          {!suppliersHasMore && suppliers.length > 0 && (
+            <div className="text-center py-2.5 text-[11px] text-slate-400 font-medium border-t border-slate-100 bg-slate-50/50">
+              Showing all {suppliers.length} suppliers
+            </div>
+          )}
         </div>
-
-        {/* Sentinel */}
-        <div ref={suppliersSentinelRef} className="h-4 w-full" />
-
-        {!suppliersHasMore && suppliers.length > 0 && (
-          <div className="text-center py-2 text-[11px] text-slate-400 font-medium border-t border-slate-100">
-            Showing all {suppliers.length} suppliers
-          </div>
-        )}
       </div>
 
       {/* Create Supplier Modal */}

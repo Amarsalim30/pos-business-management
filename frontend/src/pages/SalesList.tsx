@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
 import type { Sale, Customer } from '../types';
 import { ReceiptModal } from '../components/ReceiptModal';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import {
   FileText,
   Search,
@@ -11,11 +12,11 @@ import {
   AlertCircle,
   Calendar,
   Banknote,
-  Split
+  Split,
+  Loader2
 } from 'lucide-react';
 
 export const SalesListPage: React.FC = () => {
-  const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -40,26 +41,17 @@ export const SalesListPage: React.FC = () => {
   const [recordingPay, setRecordingPay] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadCustomers();
-  }, []);
-
-  useEffect(() => {
-    loadSales();
-  }, [statusFilter, etrFilter, selectedCustomerId, dateFrom, dateTo]);
-
-  const loadCustomers = async () => {
-    try {
-      const data = await apiFetch<Customer[]>('/api/v1/customers/');
-      setCustomers(data);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const loadSales = async () => {
-    try {
-      let url = '/api/v1/sales/?limit=100';
+  // Infinite Scroll Sales State
+  const {
+    items: sales,
+    loading: salesLoading,
+    loadingMore: salesLoadingMore,
+    hasMore: salesHasMore,
+    sentinelRef: salesSentinelRef,
+    reload: reloadSales
+  } = useInfiniteScroll<Sale>({
+    fetchFn: async (offset, limit) => {
+      let url = `/api/v1/sales/?limit=${limit}&offset=${offset}`;
       if (searchQuery.trim()) url += `&q=${encodeURIComponent(searchQuery.trim())}`;
       if (statusFilter !== 'all') url += `&status_filter=${statusFilter}`;
       if (etrFilter === 'etr') url += `&is_etr=true`;
@@ -71,9 +63,20 @@ export const SalesListPage: React.FC = () => {
         endOfDay.setHours(23, 59, 59, 999);
         url += `&date_to=${encodeURIComponent(endOfDay.toISOString())}`;
       }
+      return await apiFetch<Sale[]>(url);
+    },
+    limit: 25,
+    dependencies: [searchQuery, statusFilter, etrFilter, selectedCustomerId, dateFrom, dateTo]
+  });
 
-      const data = await apiFetch<Sale[]>(url);
-      setSales(data);
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
+  const loadCustomers = async () => {
+    try {
+      const data = await apiFetch<Customer[]>('/api/v1/customers/');
+      setCustomers(data);
     } catch (e) {
       console.error(e);
     }
@@ -89,7 +92,7 @@ export const SalesListPage: React.FC = () => {
       });
       setVoidingSale(null);
       setVoidReason('');
-      loadSales();
+      reloadSales();
     } catch (err: any) {
       alert(err.message || 'Failed to void sale');
     } finally {
@@ -123,7 +126,7 @@ export const SalesListPage: React.FC = () => {
       setInvoicePayAmount('');
       setInvoicePayRef('');
       setInvoicePayNotes('');
-      loadSales();
+      reloadSales();
     } catch (err: any) {
       setPayError(err.message || 'Failed to record invoice payment');
     } finally {
@@ -202,7 +205,7 @@ export const SalesListPage: React.FC = () => {
               placeholder="Search invoice # (e.g. INV-20260819-0001)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && loadSales()}
+              onKeyDown={(e) => e.key === 'Enter' && reloadSales()}
               className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
             />
           </div>
@@ -302,7 +305,16 @@ export const SalesListPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-              {sales.length === 0 ? (
+              {salesLoading && sales.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <Loader2 className="h-6 w-6 animate-spin text-amber-600" />
+                      <span>Loading sales transactions...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : sales.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
                     No transactions match your search filter criteria.
@@ -437,10 +449,31 @@ export const SalesListPage: React.FC = () => {
                   );
                 })
               )}
+
+              {/* Loading More Rows Indicator */}
+              {salesLoadingMore && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-3 text-center text-amber-600 bg-amber-50/40 text-xs font-bold">
+                    <div className="flex items-center justify-center space-x-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                      <span>Loading more transactions...</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Intersection Observer Sentinel */}
+      <div ref={salesSentinelRef} className="h-4 w-full" />
+
+      {!salesHasMore && sales.length > 0 && (
+        <div className="text-center py-2 text-[11px] text-slate-400 font-medium">
+          Showing all {sales.length} transactions
+        </div>
+      )}
 
       {/* Record Invoice Payment Modal */}
       {payingSale && (

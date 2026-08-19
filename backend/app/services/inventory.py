@@ -22,7 +22,9 @@ from app.utils.roll_conversion import format_roll_display, roll_count_to_meters
 def list_inventory(
     db: Session,
     store_id: int,
-    low_stock_only: bool = False
+    low_stock_only: bool = False,
+    limit: Optional[int] = None,
+    offset: int = 0
 ) -> List[InventoryItemResponse]:
     query = (
         db.query(Product, Inventory)
@@ -30,13 +32,20 @@ def list_inventory(
         .filter(Product.store_id == store_id, Product.is_active == True)
     )
 
-    results = query.order_by(Product.name.asc()).all()
+    if low_stock_only:
+        query = query.filter(Inventory.quantity <= Product.reorder_level)
+
+    query = query.order_by(Product.name.asc())
+    if offset:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+
+    results = query.all()
     items = []
     for prod, inv in results:
         qty = Decimal(str(inv.quantity or "0.00"))
         is_low = qty <= prod.reorder_level
-        if low_stock_only and not is_low:
-            continue
         
         formatted = format_roll_display(qty, prod.meters_per_roll) if prod.unit_type == "roll" else str(qty).rstrip("0").rstrip(".")
         items.append(
@@ -371,12 +380,18 @@ def list_stock_movements(
     db: Session,
     store_id: int,
     product_id: Optional[int] = None,
-    limit: int = 50
+    limit: Optional[int] = 50,
+    offset: int = 0
 ) -> List[StockMovement]:
     query = db.query(StockMovement).filter(StockMovement.store_id == store_id)
     if product_id is not None:
         query = query.filter(StockMovement.product_id == product_id)
-    return query.order_by(StockMovement.created_at.desc()).limit(limit).all()
+    query = query.order_by(StockMovement.created_at.desc())
+    if offset:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+    return query.all()
 
 
 # =========================================================================

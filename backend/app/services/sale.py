@@ -59,7 +59,13 @@ def get_customer(db: Session, customer_id: int) -> Customer:
     return cust
 
 
-def list_customers(db: Session, q: Optional[str] = None, active_only: bool = True) -> List[Customer]:
+def list_customers(
+    db: Session,
+    q: Optional[str] = None,
+    active_only: bool = True,
+    limit: Optional[int] = None,
+    offset: int = 0
+) -> List[Customer]:
     query = db.query(Customer)
     if active_only:
         query = query.filter(Customer.is_active.is_(True))
@@ -68,7 +74,13 @@ def list_customers(db: Session, q: Optional[str] = None, active_only: bool = Tru
             Customer.name.ilike(f"%{q.strip()}%") | 
             Customer.phone.ilike(f"%{q.strip()}%")
         )
-    customers = query.order_by(Customer.name.asc()).all()
+    query = query.order_by(Customer.name.asc())
+    if offset:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+
+    customers = query.all()
     
     # Synchronize balances with live sales & payments
     changed = False

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../services/api';
 import type { Product, Category } from '../types';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { 
   Package, 
   Search, 
@@ -15,14 +16,31 @@ import {
 } from 'lucide-react';
 
 export const ProductsPage: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
   const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Infinite Scroll Products State
+  const {
+    items: products,
+    loading: productsLoading,
+    loadingMore: productsLoadingMore,
+    hasMore: productsHasMore,
+    sentinelRef: productsSentinelRef,
+    reload: reloadProducts
+  } = useInfiniteScroll<Product>({
+    fetchFn: async (offset, limit) => {
+      let url = `/api/v1/products/?low_stock_only=${lowStockOnly}&limit=${limit}&offset=${offset}`;
+      if (searchQuery.trim()) url += `&q=${encodeURIComponent(searchQuery.trim())}`;
+      if (selectedCategory !== 'all') url += `&category_id=${selectedCategory}`;
+      return await apiFetch<Product[]>(url);
+    },
+    limit: 25,
+    dependencies: [searchQuery, selectedCategory, lowStockOnly]
+  });
 
   // Form State
   const [name, setName] = useState('');
@@ -50,8 +68,7 @@ export const ProductsPage: React.FC = () => {
 
   useEffect(() => {
     loadCategories();
-    loadProducts();
-  }, [searchQuery, selectedCategory, lowStockOnly]);
+  }, []);
 
   const loadCategories = async () => {
     try {
@@ -59,21 +76,6 @@ export const ProductsPage: React.FC = () => {
       setCategories(data);
     } catch (e) {
       console.error(e);
-    }
-  };
-
-  const loadProducts = async () => {
-    setLoading(true);
-    try {
-      let url = `/api/v1/products/?low_stock_only=${lowStockOnly}`;
-      if (searchQuery) url += `&q=${encodeURIComponent(searchQuery)}`;
-      if (selectedCategory !== 'all') url += `&category_id=${selectedCategory}`;
-      const data = await apiFetch<Product[]>(url);
-      setProducts(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -99,7 +101,7 @@ export const ProductsPage: React.FC = () => {
       await apiFetch(`/api/v1/categories/${catId}`, { method: 'DELETE' });
       if (selectedCategory === catId) setSelectedCategory('all');
       loadCategories();
-      loadProducts();
+      reloadProducts();
     } catch (err: any) {
       alert(err.message || 'Failed to delete category');
     }
@@ -157,7 +159,7 @@ export const ProductsPage: React.FC = () => {
     }
     try {
       await apiFetch(`/api/v1/products/${p.id}`, { method: 'DELETE' });
-      loadProducts();
+      reloadProducts();
     } catch (err: any) {
       alert(err.message || 'Failed to deactivate product');
     }
@@ -216,7 +218,7 @@ export const ProductsPage: React.FC = () => {
       }
       setIsModalOpen(false);
       resetForm();
-      loadProducts();
+      reloadProducts();
     } catch (err: any) {
       setFormError(err.message || 'Failed to save product');
     }
@@ -326,7 +328,7 @@ export const ProductsPage: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium">
-            {loading ? (
+            {productsLoading && products.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-slate-400">
                   <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-amber-600" />
@@ -417,9 +419,30 @@ export const ProductsPage: React.FC = () => {
                 </tr>
               ))
             )}
+
+            {/* Loading More Rows Indicator */}
+            {productsLoadingMore && (
+              <tr>
+                <td colSpan={7} className="p-4 text-center text-amber-600 bg-amber-50/40 text-xs font-bold">
+                  <div className="flex items-center justify-center space-x-2">
+                    <RefreshCw className="h-4 w-4 animate-spin text-amber-600" />
+                    <span>Loading more products...</span>
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* Intersection Observer Sentinel */}
+      <div ref={productsSentinelRef} className="h-4 w-full" />
+
+      {!productsHasMore && products.length > 0 && (
+        <div className="text-center py-2 text-[11px] text-slate-400 font-medium">
+          Showing all {products.length} products
+        </div>
+      )}
 
       {/* Product Create / Edit Modal */}
       {isModalOpen && (

@@ -28,10 +28,12 @@ def create_new_customer(
 def get_customers(
     q: Optional[str] = None,
     active_only: bool = True,
+    limit: Optional[int] = None,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return sale_service.list_customers(db, q=q, active_only=active_only)
+    return sale_service.list_customers(db, q=q, active_only=active_only, limit=limit, offset=offset)
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)

@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { apiFetch } from '../services/api';
 import type { Supplier, SupplierLedgerResponse } from '../types';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import {
   Truck,
   Plus,
@@ -13,13 +14,12 @@ import {
   Printer,
   X,
   User,
-  Hash
+  Hash,
+  Loader2
 } from 'lucide-react';
 
 export const SuppliersPage: React.FC = () => {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
 
   // Supplier Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -47,23 +47,23 @@ export const SuppliersPage: React.FC = () => {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadSuppliers();
-  }, [searchQuery]);
-
-  const loadSuppliers = async () => {
-    setLoading(true);
-    try {
-      let url = '/api/v1/suppliers/';
-      if (searchQuery) url += `?q=${encodeURIComponent(searchQuery)}`;
-      const data = await apiFetch<Supplier[]>(url);
-      setSuppliers(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Infinite Scroll Suppliers State
+  const {
+    items: suppliers,
+    loading: suppliersLoading,
+    loadingMore: suppliersLoadingMore,
+    hasMore: suppliersHasMore,
+    sentinelRef: suppliersSentinelRef,
+    reload: reloadSuppliers
+  } = useInfiniteScroll<Supplier>({
+    fetchFn: async (offset, limit) => {
+      let url = `/api/v1/suppliers/?limit=${limit}&offset=${offset}`;
+      if (searchQuery.trim()) url += `&q=${encodeURIComponent(searchQuery.trim())}`;
+      return await apiFetch<Supplier[]>(url);
+    },
+    limit: 25,
+    dependencies: [searchQuery]
+  });
 
   const loadLedger = async (supp: Supplier) => {
     setLedgerSupplier(supp);
@@ -103,7 +103,7 @@ export const SuppliersPage: React.FC = () => {
       setEmail('');
       setAddress('');
       setTaxPin('');
-      loadSuppliers();
+      reloadSuppliers();
     } catch (err: any) {
       setFormError(err.message || 'Failed to save supplier');
     } finally {
@@ -136,7 +136,7 @@ export const SuppliersPage: React.FC = () => {
       setPaymentAmount('');
       setPaymentReference('');
       setPaymentNotes('');
-      loadSuppliers();
+      reloadSuppliers();
       if (ledgerSupplier?.id === paymentSupplier.id) {
         loadLedger(paymentSupplier);
       }
@@ -233,10 +233,13 @@ export const SuppliersPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {loading ? (
+              {suppliersLoading && suppliers.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400 font-normal">
-                    Loading suppliers...
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                      <span>Loading suppliers...</span>
+                    </div>
                   </td>
                 </tr>
               ) : suppliers.length === 0 ? (
@@ -325,9 +328,30 @@ export const SuppliersPage: React.FC = () => {
                   </tr>
                 ))
               )}
+
+              {/* Loading More Suppliers */}
+              {suppliersLoadingMore && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/40 text-xs font-bold">
+                    <div className="flex items-center justify-center space-x-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                      <span>Loading more suppliers...</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
+
+        {/* Sentinel */}
+        <div ref={suppliersSentinelRef} className="h-4 w-full" />
+
+        {!suppliersHasMore && suppliers.length > 0 && (
+          <div className="text-center py-2 text-[11px] text-slate-400 font-medium border-t border-slate-100">
+            Showing all {suppliers.length} suppliers
+          </div>
+        )}
       </div>
 
       {/* Create Supplier Modal */}

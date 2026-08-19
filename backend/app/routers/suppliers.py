@@ -21,11 +21,15 @@ router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 def get_suppliers(
     q: Optional[str] = None,
     is_active: Optional[bool] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     target_store_id = current_user.store_id or 1
-    suppliers = supplier_service.list_suppliers(db, target_store_id, q=q, is_active=is_active)
+    suppliers = supplier_service.list_suppliers(
+        db, target_store_id, q=q, is_active=is_active, limit=limit, offset=offset
+    )
     return [SupplierResponse.model_validate(s) for s in suppliers]
 
 

@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { apiFetch } from '../services/api';
 import type { Customer, CustomerLedgerResponse } from '../types';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import {
   Users,
   UserPlus,
@@ -13,11 +14,11 @@ import {
   Printer,
   X,
   ArrowDownRight,
-  ArrowUpRight
+  ArrowUpRight,
+  Loader2
 } from 'lucide-react';
 
 export const CustomersPage: React.FC = () => {
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Customer Modal
@@ -44,20 +45,23 @@ export const CustomersPage: React.FC = () => {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadCustomers();
-  }, [searchQuery]);
-
-  const loadCustomers = async () => {
-    try {
-      let url = '/api/v1/customers/';
-      if (searchQuery) url += `?q=${encodeURIComponent(searchQuery)}`;
-      const data = await apiFetch<Customer[]>(url);
-      setCustomers(data);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  // Infinite Scroll Customers State
+  const {
+    items: customers,
+    loading: customersLoading,
+    loadingMore: customersLoadingMore,
+    hasMore: customersHasMore,
+    sentinelRef: customersSentinelRef,
+    reload: reloadCustomers
+  } = useInfiniteScroll<Customer>({
+    fetchFn: async (offset, limit) => {
+      let url = `/api/v1/customers/?limit=${limit}&offset=${offset}`;
+      if (searchQuery.trim()) url += `&q=${encodeURIComponent(searchQuery.trim())}`;
+      return await apiFetch<Customer[]>(url);
+    },
+    limit: 24,
+    dependencies: [searchQuery]
+  });
 
   const loadLedger = async (cust: Customer) => {
     setLedgerCustomer(cust);
@@ -93,7 +97,7 @@ export const CustomersPage: React.FC = () => {
       setPhone('');
       setEmail('');
       setAddress('');
-      loadCustomers();
+      reloadCustomers();
     } catch (err: any) {
       setFormError(err.message || 'Failed to save customer');
     } finally {
@@ -128,7 +132,7 @@ export const CustomersPage: React.FC = () => {
       setPaymentAmount('');
       setPaymentReference('');
       setPaymentNotes('');
-      await loadCustomers();
+      reloadCustomers();
       if (ledgerCustomer && ledgerCustomer.id === updatedCust.id) {
         loadLedger(updatedCust);
       }
@@ -184,7 +188,12 @@ export const CustomersPage: React.FC = () => {
 
       {/* Customer Directory Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {customers.length === 0 ? (
+        {customersLoading && customers.length === 0 ? (
+          <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-400 space-y-2">
+            <Loader2 className="h-8 w-8 mx-auto text-amber-600 animate-spin" />
+            <p className="text-xs">Loading customer directory...</p>
+          </div>
+        ) : customers.length === 0 ? (
           <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-400 space-y-2">
             <Users className="h-8 w-8 mx-auto text-slate-300" />
             <p className="text-xs">No customer accounts registered yet.</p>
@@ -250,6 +259,23 @@ export const CustomersPage: React.FC = () => {
           })
         )}
       </div>
+
+      {/* Loading More Indicator */}
+      {customersLoadingMore && (
+        <div className="flex items-center justify-center space-x-2 py-4 text-amber-600 text-xs font-bold">
+          <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+          <span>Loading more customers...</span>
+        </div>
+      )}
+
+      {/* Sentinel */}
+      <div ref={customersSentinelRef} className="h-4 w-full" />
+
+      {!customersHasMore && customers.length > 0 && (
+        <div className="text-center py-2 text-[11px] text-slate-400 font-medium">
+          Showing all {customers.length} customer accounts
+        </div>
+      )}
 
       {/* Live Customer Statement Ledger Modal */}
       {ledgerCustomer && (

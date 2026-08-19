@@ -28,12 +28,14 @@ stock_takes_router = APIRouter(prefix="/stock-takes", tags=["stock-takes"])
 @inventory_router.get("/", response_model=List[InventoryItemResponse])
 def get_inventory(
     low_stock_only: bool = False,
+    limit: Optional[int] = None,
+    offset: int = 0,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     target_store_id = store_id or current_user.store_id or 1
-    return inventory_service.list_inventory(db, target_store_id, low_stock_only=low_stock_only)
+    return inventory_service.list_inventory(db, target_store_id, low_stock_only=low_stock_only, limit=limit, offset=offset)
 
 
 @inventory_router.post("/adjust", status_code=status.HTTP_200_OK)
@@ -87,13 +89,14 @@ def post_batch_stock_receive(
 @inventory_router.get("/movements", response_model=List[StockMovementResponse])
 def get_stock_movements(
     product_id: Optional[int] = None,
-    limit: int = 50,
+    limit: Optional[int] = 50,
+    offset: int = 0,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     target_store_id = store_id or current_user.store_id or 1
-    movements = inventory_service.list_stock_movements(db, target_store_id, product_id=product_id, limit=limit)
+    movements = inventory_service.list_stock_movements(db, target_store_id, product_id=product_id, limit=limit, offset=offset)
     res = []
     for m in movements:
         item = StockMovementResponse.model_validate(m)

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../services/api';
 import type { Product, Customer, Sale, Category } from '../types';
 import { ReceiptModal } from '../components/ReceiptModal';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import {
   ShoppingCart,
   Search,
@@ -23,7 +24,8 @@ import {
   UserPlus,
   Split,
   ShieldAlert,
-  Zap
+  Zap,
+  Loader2
 } from 'lucide-react';
 
 interface CartItem {
@@ -59,11 +61,31 @@ interface SplitPaymentLine {
 const LOCAL_STORAGE_PARKED_KEY = 'pos_parked_carts';
 
 export const POSPage: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Infinite Scrolling Products State
+  const {
+    items: products,
+    loading: productsLoading,
+    loadingMore: productsLoadingMore,
+    hasMore: productsHasMore,
+    sentinelRef: productsSentinelRef,
+    reload: reloadProducts
+  } = useInfiniteScroll<Product>({
+    fetchFn: async (offset, limit) => {
+      const params = new URLSearchParams();
+      if (searchQuery.trim()) params.append('q', searchQuery.trim());
+      if (selectedCategory !== 'all') params.append('category_id', String(selectedCategory));
+      params.append('limit', String(limit));
+      params.append('offset', String(offset));
+      return await apiFetch<Product[]>(`/api/v1/products/?${params.toString()}`);
+    },
+    limit: 24,
+    dependencies: [searchQuery, selectedCategory]
+  });
   
   // Customer & Fiscal Controls
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | ''>('');
@@ -107,7 +129,6 @@ export const POSPage: React.FC = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadProducts();
     loadCategories();
     loadCustomers();
     loadParkedCartsFromStorage();
@@ -128,15 +149,6 @@ export const POSPage: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cart, selectedCustomerId, isWalkIn, isETR, notes, discountAmount]);
-
-  const loadProducts = async () => {
-    try {
-      const data = await apiFetch<Product[]>('/api/v1/products/');
-      setProducts(data);
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   const loadCategories = async () => {
     try {
@@ -175,23 +187,6 @@ export const POSPage: React.FC = () => {
       console.error('Failed to save parked carts to storage', e);
     }
   };
-
-  // Filter products by category and search
-  const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      // Category filter
-      if (selectedCategory !== 'all' && p.category_id !== selectedCategory) {
-        return false;
-      }
-      // Search filter
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        p.name.toLowerCase().includes(q) ||
-        (p.sku && p.sku.toLowerCase().includes(q))
-      );
-    });
-  }, [products, selectedCategory, searchQuery]);
 
   // Calculate line item total
   const computeLineTotal = (item: CartItem): number => {
@@ -541,7 +536,7 @@ export const POSPage: React.FC = () => {
       setNotes('');
       setAmountTendered('');
       setSplitLines([{ id: 'split_1', payment_method: 'mpesa', amount: '', reference: '' }]);
-      loadProducts();
+      reloadProducts();
     } catch (err: any) {
       setCheckoutError(err.message || 'Checkout failed');
     } finally {
@@ -672,8 +667,8 @@ export const POSPage: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && filteredProducts.length > 0) {
-                  handleAddToCart(filteredProducts[0]);
+                if (e.key === 'Enter' && products.length > 0) {
+                  handleAddToCart(products[0]);
                 }
               }}
               className="w-full rounded-2xl border border-slate-300 bg-white pl-10 pr-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs font-medium"
@@ -698,36 +693,42 @@ export const POSPage: React.FC = () => {
                   : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
             >
-              All Items ({products.length})
+              All Items
             </button>
-            {categories.map(cat => {
-              const count = products.filter(p => p.category_id === cat.id).length;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
-                    selectedCategory === cat.id
-                      ? 'bg-amber-600 text-white shadow-2xs border border-amber-600'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {cat.name} ({count})
-                </button>
-              );
-            })}
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  selectedCategory === cat.id
+                    ? 'bg-amber-600 text-white shadow-2xs border border-amber-600'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {cat.name}
+              </button>
+            ))}
           </div>
 
-          {/* Product Cards Grid */}
+          {/* Product Cards Grid with Infinite Scroll & Skeletons */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {filteredProducts.length === 0 ? (
+            {productsLoading && products.length === 0 ? (
+              Array.from({ length: 6 }).map((_, idx) => (
+                <div key={`skel-${idx}`} className="rounded-2xl border border-slate-100 bg-white p-3.5 space-y-3 animate-pulse shadow-2xs">
+                  <div className="h-4 bg-slate-200 rounded w-3/4" />
+                  <div className="h-3 bg-slate-100 rounded w-1/2" />
+                  <div className="h-6 bg-slate-100 rounded-lg w-full" />
+                  <div className="h-8 bg-slate-200 rounded-xl w-full" />
+                </div>
+              ))
+            ) : products.length === 0 ? (
               <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-400 space-y-2">
                 <Search className="h-8 w-8 mx-auto text-slate-300" />
                 <p className="text-xs font-medium">No products found matching your search</p>
                 <p className="text-[11px] text-slate-400">Try changing categories or clearing search keywords</p>
               </div>
             ) : (
-              filteredProducts.slice(0, 15).map(p => {
+              products.map(p => {
                 const cartItem = cart.find(i => i.product.id === p.id);
                 const isRoll = p.unit_type === 'roll';
                 const isOutOfStock = (Number(p.current_stock) || 0) <= 0;
@@ -761,24 +762,29 @@ export const POSPage: React.FC = () => {
                           BP: {Number(p.cost_price).toLocaleString()}
                         </span>
                       </div>
+
+                      {/* Price Section */}
+                      <div className="mt-2.5">
+                        <div className="text-sm font-black text-slate-900 font-mono">
+                          KES {Number(p.selling_price).toLocaleString()}
+                        </div>
+                        {isRoll && p.price_per_meter && (
+                          <div className="text-[10px] text-amber-700 font-medium font-mono">
+                            KES {Number(p.price_per_meter).toFixed(0)}/meter
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Price & Action Buttons */}
-                    <div className="mt-3 pt-2.5 border-t border-slate-100">
-                      <div className="flex items-baseline justify-between mb-2">
-                        <span className="text-[10px] text-slate-500 uppercase font-semibold">Selling:</span>
-                        <span className="font-extrabold text-xs text-slate-950 font-mono">
-                          KES {Number(p.selling_price).toLocaleString()}
-                        </span>
-                      </div>
-
+                    {/* Action Button: Dual Mode for Roll Products */}
+                    <div className="mt-3 pt-2 border-t border-slate-100">
                       {isRoll ? (
                         <div className="grid grid-cols-2 gap-1.5">
                           <button
                             type="button"
                             disabled={isOutOfStock}
                             onClick={() => handleAddToCart(p, false)}
-                            className="py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-[11px] font-bold cursor-pointer transition-colors shadow-2xs active:scale-95"
+                            className="py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-[11px] font-bold cursor-pointer transition-colors shadow-2xs active:scale-95 text-center"
                           >
                             + Roll
                           </button>
@@ -786,7 +792,7 @@ export const POSPage: React.FC = () => {
                             type="button"
                             disabled={isOutOfStock}
                             onClick={() => handleAddToCart(p, true)}
-                            className="py-1.5 rounded-xl border border-sky-300 bg-sky-50 hover:bg-sky-100 disabled:opacity-40 text-sky-800 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs active:scale-95"
+                            className="py-1.5 rounded-xl border border-sky-300 bg-sky-50 hover:bg-sky-100 disabled:opacity-40 text-sky-800 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs active:scale-95 text-center"
                           >
                             + Meters
                           </button>
@@ -806,6 +812,24 @@ export const POSPage: React.FC = () => {
                   </div>
                 );
               })
+            )}
+
+            {/* Loading More Spinner */}
+            {productsLoadingMore && (
+              <div className="col-span-full py-3 flex items-center justify-center space-x-2 text-xs text-amber-600 font-bold bg-amber-50/50 rounded-xl border border-amber-100">
+                <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                <span>Loading more products...</span>
+              </div>
+            )}
+
+            {/* Intersection Observer Sentinel */}
+            <div ref={productsSentinelRef} className="h-4 w-full col-span-full" />
+
+            {/* End of Products Indicator */}
+            {!productsHasMore && products.length > 0 && (
+              <div className="col-span-full py-2 text-center text-[11px] text-slate-400 font-medium">
+                Showing all {products.length} products
+              </div>
             )}
           </div>
         </div>

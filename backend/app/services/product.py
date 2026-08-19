@@ -48,7 +48,9 @@ def list_products(
     query_str: Optional[str] = None,
     category_id: Optional[int] = None,
     low_stock_only: bool = False,
-    is_active: bool = True
+    is_active: bool = True,
+    limit: Optional[int] = None,
+    offset: int = 0
 ) -> List[Tuple[Product, Decimal, str, bool]]:
     query = (
         db.query(Product, Inventory.quantity)
@@ -57,7 +59,7 @@ def list_products(
     )
 
     if query_str:
-        search_pattern = f"%{query_str}%"
+        search_pattern = f"%{query_str.strip()}%"
         query = query.filter(
             or_(
                 Product.name.ilike(search_pattern),
@@ -68,7 +70,18 @@ def list_products(
     if category_id is not None:
         query = query.filter(Product.category_id == category_id)
 
-    results = query.order_by(Product.name.asc()).all()
+    if low_stock_only:
+        query = query.filter(
+            (Inventory.quantity <= Product.reorder_level) | (Inventory.quantity.is_(None))
+        )
+
+    query = query.order_by(Product.name.asc())
+    if offset:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+
+    results = query.all()
     
     enriched = []
     for prod, stock_qty in results:
@@ -76,9 +89,6 @@ def list_products(
         formatted = format_roll_display(current_qty, prod.meters_per_roll) if prod.unit_type == "roll" else str(current_qty).rstrip("0").rstrip(".")
         is_low = current_qty <= prod.reorder_level
         
-        if low_stock_only and not is_low:
-            continue
-            
         enriched.append((prod, current_qty, formatted, is_low))
 
     return enriched

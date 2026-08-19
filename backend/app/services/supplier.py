@@ -25,7 +25,14 @@ def create_supplier(db: Session, store_id: int, supplier_in: SupplierCreate) -> 
     return supplier
 
 
-def list_suppliers(db: Session, store_id: int, q: Optional[str] = None, is_active: Optional[bool] = None) -> List[Supplier]:
+def list_suppliers(
+    db: Session,
+    store_id: int,
+    q: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    limit: Optional[int] = None,
+    offset: int = 0
+) -> List[Supplier]:
     query = db.query(Supplier).filter(Supplier.store_id == store_id)
     if is_active is not None:
         query = query.filter(Supplier.is_active == is_active)
@@ -36,7 +43,12 @@ def list_suppliers(db: Session, store_id: int, q: Optional[str] = None, is_activ
             (Supplier.phone.ilike(search)) |
             (Supplier.tax_pin.ilike(search))
         )
-    return query.order_by(Supplier.name.asc()).all()
+    query = query.order_by(Supplier.name.asc())
+    if offset:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+    return query.all()
 
 
 def get_supplier_by_id(db: Session, store_id: int, supplier_id: int) -> Supplier:

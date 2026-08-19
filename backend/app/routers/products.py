@@ -59,6 +59,8 @@ def get_products(
     q: Optional[str] = None,
     category_id: Optional[int] = None,
     low_stock_only: bool = False,
+    limit: Optional[int] = None,
+    offset: int = 0,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -69,7 +71,9 @@ def get_products(
         store_id=target_store_id,
         query_str=q,
         category_id=category_id,
-        low_stock_only=low_stock_only
+        low_stock_only=low_stock_only,
+        limit=limit,
+        offset=offset
     )
     
     responses = []

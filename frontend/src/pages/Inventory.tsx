@@ -1,16 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { apiFetch } from '../services/api';
 import type { InventoryItem, StockMovement } from '../types';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { 
   Boxes, 
   Search, 
   AlertTriangle, 
   ArrowDownUp, 
   History, 
-  RefreshCw,
-  Download,
-  Truck,
-  Check
+  RefreshCw, 
+  Download, 
+  Truck, 
+  Check,
+  Loader2
 } from 'lucide-react';
 
 interface GRNLineItem {
@@ -28,12 +30,47 @@ interface GRNLineItem {
 }
 
 export const InventoryPage: React.FC = () => {
-  const [items, setItems] = useState<InventoryItem[]>([]);
-  const [movements, setMovements] = useState<StockMovement[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'levels' | 'history'>('levels');
+  const [movementProductFilter, setMovementProductFilter] = useState<number | 'all'>('all');
+
+  // Infinite Scroll for Inventory Items
+  const {
+    items,
+    loading: itemsLoading,
+    loadingMore: itemsLoadingMore,
+    hasMore: itemsHasMore,
+    sentinelRef: itemsSentinelRef,
+    reload: reloadItems
+  } = useInfiniteScroll<InventoryItem>({
+    fetchFn: async (offset, limit) => {
+      let url = `/api/v1/inventory/?low_stock_only=${lowStockOnly}&limit=${limit}&offset=${offset}`;
+      return await apiFetch<InventoryItem[]>(url);
+    },
+    limit: 25,
+    dependencies: [lowStockOnly]
+  });
+
+  // Infinite Scroll for Stock Movements
+  const {
+    items: movements,
+    loading: movementsLoading,
+    loadingMore: movementsLoadingMore,
+    hasMore: movementsHasMore,
+    sentinelRef: movementsSentinelRef,
+    reload: reloadMovements
+  } = useInfiniteScroll<StockMovement>({
+    fetchFn: async (offset, limit) => {
+      let url = `/api/v1/inventory/movements?limit=${limit}&offset=${offset}`;
+      if (movementProductFilter !== 'all') {
+        url += `&product_id=${movementProductFilter}`;
+      }
+      return await apiFetch<StockMovement[]>(url);
+    },
+    limit: 30,
+    dependencies: [activeTab, movementProductFilter]
+  });
 
   // Adjustment Modal
   const [adjustModalItem, setAdjustModalItem] = useState<InventoryItem | null>(null);
@@ -51,41 +88,6 @@ export const InventoryPage: React.FC = () => {
   const [productSearchToAdd, setProductSearchToAdd] = useState('');
   const [receiveError, setReceiveError] = useState<string | null>(null);
   const [submittingGRN, setSubmittingGRN] = useState(false);
-
-  const [movementProductFilter, setMovementProductFilter] = useState<number | 'all'>('all');
-  const [movementLimit, setMovementLimit] = useState<number>(100);
-
-  useEffect(() => {
-    loadInventory();
-    if (activeTab === 'history') {
-      loadMovements();
-    }
-  }, [lowStockOnly, activeTab, movementProductFilter, movementLimit]);
-
-  const loadInventory = async () => {
-    setLoading(true);
-    try {
-      const data = await apiFetch<InventoryItem[]>(`/api/v1/inventory/?low_stock_only=${lowStockOnly}`);
-      setItems(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMovements = async () => {
-    try {
-      let url = `/api/v1/inventory/movements?limit=${movementLimit}`;
-      if (movementProductFilter !== 'all') {
-        url += `&product_id=${movementProductFilter}`;
-      }
-      const data = await apiFetch<StockMovement[]>(url);
-      setMovements(data);
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   const exportMovementsCSV = () => {
     if (movements.length === 0) return;
@@ -140,7 +142,8 @@ export const InventoryPage: React.FC = () => {
       setAdjustModalItem(null);
       setAdjustQuantity('');
       setAdjustNote('');
-      loadInventory();
+      reloadItems();
+      reloadMovements();
     } catch (err: any) {
       setAdjustError(err.message || 'Failed to adjust stock');
     }
@@ -285,8 +288,8 @@ export const InventoryPage: React.FC = () => {
       });
 
       setIsReceiveModalOpen(false);
-      loadInventory();
-      if (activeTab === 'history') loadMovements();
+      reloadItems();
+      reloadMovements();
     } catch (err: any) {
       setReceiveError(err.message || 'Failed to post Goods Received Note');
     } finally {
@@ -379,12 +382,12 @@ export const InventoryPage: React.FC = () => {
               </button>
 
               <button
-                onClick={loadInventory}
-                disabled={loading}
+                onClick={reloadItems}
+                disabled={itemsLoading}
                 className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer"
                 title="Refresh Inventory"
               >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${itemsLoading ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
@@ -405,7 +408,7 @@ export const InventoryPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                  {loading ? (
+                  {itemsLoading && items.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                         <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-amber-600" />
@@ -494,9 +497,30 @@ export const InventoryPage: React.FC = () => {
                       </tr>
                     ))
                   )}
+
+                  {/* Loading More Rows */}
+                  {itemsLoadingMore && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-3 text-center text-amber-600 bg-amber-50/40 text-xs font-bold">
+                        <div className="flex items-center justify-center space-x-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                          <span>Loading more stock records...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+
+            {/* Sentinel */}
+            <div ref={itemsSentinelRef} className="h-4 w-full" />
+
+            {!itemsHasMore && items.length > 0 && (
+              <div className="text-center py-2 text-[11px] text-slate-400 font-medium">
+                Showing all {items.length} inventory items
+              </div>
+            )}
           </div>
         </>
       ) : (
@@ -519,20 +543,6 @@ export const InventoryPage: React.FC = () => {
                   ))}
                 </select>
               </div>
-
-              <div className="flex items-center space-x-2">
-                <label className="text-xs font-bold text-slate-700">Rows:</label>
-                <select
-                  value={movementLimit}
-                  onChange={(e) => setMovementLimit(Number(e.target.value))}
-                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 bg-slate-50/50"
-                >
-                  <option value={50}>50 rows</option>
-                  <option value={100}>100 rows</option>
-                  <option value={200}>200 rows</option>
-                  <option value={500}>500 rows</option>
-                </select>
-              </div>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -545,7 +555,7 @@ export const InventoryPage: React.FC = () => {
                 <span>Export CSV</span>
               </button>
               <button
-                onClick={loadMovements}
+                onClick={reloadMovements}
                 className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer"
                 title="Refresh Movements"
               >
@@ -570,7 +580,14 @@ export const InventoryPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                  {movements.length === 0 ? (
+                  {movementsLoading && movements.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                        <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-amber-600" />
+                        Loading movement history...
+                      </td>
+                    </tr>
+                  ) : movements.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
                         No audit movements recorded.
@@ -627,9 +644,30 @@ export const InventoryPage: React.FC = () => {
                       </tr>
                     ))
                   )}
+
+                  {/* Loading More Rows */}
+                  {movementsLoadingMore && (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-3 text-center text-amber-600 bg-amber-50/40 text-xs font-bold">
+                        <div className="flex items-center justify-center space-x-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                          <span>Loading more movements...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+
+            {/* Sentinel */}
+            <div ref={movementsSentinelRef} className="h-4 w-full" />
+
+            {!movementsHasMore && movements.length > 0 && (
+              <div className="text-center py-2 text-[11px] text-slate-400 font-medium">
+                Showing all {movements.length} stock movements
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
 import type { PurchaseOrder, GoodsReceivedNote, Supplier, Product } from '../types';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import {
   ShoppingBag,
   Plus,
@@ -12,21 +13,56 @@ import {
   Trash2,
   CheckCircle2,
   Clock,
-  Ban
+  Ban,
+  Loader2
 } from 'lucide-react';
 
 export const PurchasesPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'orders' | 'grn'>('orders');
-  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
-  const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Infinite Scroll Orders State
+  const {
+    items: orders,
+    loading: ordersLoading,
+    loadingMore: ordersLoadingMore,
+    hasMore: ordersHasMore,
+    sentinelRef: ordersSentinelRef,
+    reload: reloadOrders
+  } = useInfiniteScroll<PurchaseOrder>({
+    fetchFn: async (offset, limit) => {
+      let url = `/api/v1/purchases/orders?limit=${limit}&offset=${offset}`;
+      if (statusFilter !== 'all') url += `&status_filter=${statusFilter}`;
+      if (supplierFilter !== 'all') url += `&supplier_id=${supplierFilter}`;
+      return await apiFetch<PurchaseOrder[]>(url);
+    },
+    limit: 25,
+    dependencies: [activeTab, statusFilter, supplierFilter]
+  });
+
+  // Infinite Scroll GRNs State
+  const {
+    items: grns,
+    loading: grnsLoading,
+    loadingMore: grnsLoadingMore,
+    hasMore: grnsHasMore,
+    sentinelRef: grnsSentinelRef,
+    reload: reloadGRNs
+  } = useInfiniteScroll<GoodsReceivedNote>({
+    fetchFn: async (offset, limit) => {
+      let url = `/api/v1/purchases/grn?limit=${limit}&offset=${offset}`;
+      if (supplierFilter !== 'all') url += `&supplier_id=${supplierFilter}`;
+      return await apiFetch<GoodsReceivedNote[]>(url);
+    },
+    limit: 25,
+    dependencies: [activeTab, supplierFilter]
+  });
 
   // Create PO Modal
   const [isPOModalOpen, setIsPOModalOpen] = useState(false);
@@ -69,14 +105,6 @@ export const PurchasesPage: React.FC = () => {
     loadPrerequisites();
   }, []);
 
-  useEffect(() => {
-    if (activeTab === 'orders') {
-      loadOrders();
-    } else {
-      loadGRNs();
-    }
-  }, [activeTab, statusFilter, supplierFilter]);
-
   const loadPrerequisites = async () => {
     try {
       const [suppData, prodData] = await Promise.all([
@@ -87,35 +115,6 @@ export const PurchasesPage: React.FC = () => {
       setProducts(prodData);
     } catch (e) {
       console.error(e);
-    }
-  };
-
-  const loadOrders = async () => {
-    setLoading(true);
-    try {
-      let url = '/api/v1/purchases/orders?limit=100';
-      if (statusFilter !== 'all') url += `&status_filter=${statusFilter}`;
-      if (supplierFilter !== 'all') url += `&supplier_id=${supplierFilter}`;
-      const data = await apiFetch<PurchaseOrder[]>(url);
-      setOrders(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadGRNs = async () => {
-    setLoading(true);
-    try {
-      let url = '/api/v1/purchases/grn?limit=100';
-      if (supplierFilter !== 'all') url += `&supplier_id=${supplierFilter}`;
-      const data = await apiFetch<GoodsReceivedNote[]>(url);
-      setGrns(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -172,7 +171,7 @@ export const PurchasesPage: React.FC = () => {
       setPOIsEtr(false);
       setPONotes('');
       setPOItems([]);
-      loadOrders();
+      reloadOrders();
     } catch (err: any) {
       setPOError(err.message || 'Failed to create purchase order');
     } finally {
@@ -238,8 +237,8 @@ export const PurchasesPage: React.FC = () => {
       setIsGRNModalOpen(false);
       setSelectedPOForGRN(null);
       setGRNItems([]);
-      if (activeTab === 'orders') loadOrders();
-      else loadGRNs();
+      reloadOrders();
+      reloadGRNs();
       loadPrerequisites();
     } catch (err: any) {
       setGRNError(err.message || 'Failed to process goods receipt');
@@ -274,7 +273,7 @@ export const PurchasesPage: React.FC = () => {
       setExpDescription('');
       setExpAmount('');
       setExpReference('');
-      loadOrders();
+      reloadOrders();
     } catch (err: any) {
       setExpError(err.message || 'Failed to add expense');
     } finally {
@@ -426,10 +425,13 @@ export const PurchasesPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
-                {loading ? (
+                {ordersLoading && orders.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-slate-400 font-normal">
-                      Loading purchase orders...
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                        <span>Loading purchase orders...</span>
+                      </div>
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (
@@ -507,9 +509,30 @@ export const PurchasesPage: React.FC = () => {
                     );
                   })
                 )}
+
+                {/* Loading More Orders */}
+                {ordersLoadingMore && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/40 text-xs font-bold">
+                      <div className="flex items-center justify-center space-x-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                        <span>Loading more purchase orders...</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* Sentinel */}
+          <div ref={ordersSentinelRef} className="h-4 w-full" />
+
+          {!ordersHasMore && orders.length > 0 && (
+            <div className="text-center py-2 text-[11px] text-slate-400 font-medium border-t border-slate-100">
+              Showing all {orders.length} purchase orders
+            </div>
+          )}
         </div>
       )}
 
@@ -529,10 +552,13 @@ export const PurchasesPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
-                {loading ? (
+                {grnsLoading && grns.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-slate-400 font-normal">
-                      Loading goods received notes...
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                        <span>Loading goods received notes...</span>
+                      </div>
                     </td>
                   </tr>
                 ) : grns.length === 0 ? (
@@ -577,9 +603,30 @@ export const PurchasesPage: React.FC = () => {
                     </tr>
                   ))
                 )}
+
+                {/* Loading More GRNs */}
+                {grnsLoadingMore && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/40 text-xs font-bold">
+                      <div className="flex items-center justify-center space-x-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                        <span>Loading more GRNs...</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* Sentinel */}
+          <div ref={grnsSentinelRef} className="h-4 w-full" />
+
+          {!grnsHasMore && grns.length > 0 && (
+            <div className="text-center py-2 text-[11px] text-slate-400 font-medium border-t border-slate-100">
+              Showing all {grns.length} Goods Received Notes
+            </div>
+          )}
         </div>
       )}
 

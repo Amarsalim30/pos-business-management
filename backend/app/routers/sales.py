@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_permission
 from app.models.user import User
 from app.schemas.sale import (
     SaleCreate, SaleResponse, SaleItemResponse, VoidSaleRequest, PaymentCreate, PaymentResponse
@@ -81,7 +81,7 @@ def checkout_sale(
     sale_in: SaleCreate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("pos:sell"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     sale = sale_service.create_sale(db, target_store_id, current_user.id, sale_in)
@@ -142,7 +142,7 @@ def void_sale_transaction(
     void_in: VoidSaleRequest,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("pos:void"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     sale = sale_service.void_sale(db, target_store_id, current_user.id, sale_id, reason=void_in.reason)

@@ -14,7 +14,7 @@ from app.schemas.inventory import (
     StockTakeItemResponse
 )
 from app.services import inventory as inventory_service
-from app.dependencies import get_current_user, require_owner, require_staff
+from app.dependencies import get_current_user, require_permission
 from app.models.user import User
 
 inventory_router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -32,7 +32,7 @@ def get_inventory(
     offset: int = 0,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("inventory:view"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     return inventory_service.list_inventory(db, target_store_id, low_stock_only=low_stock_only, limit=limit, offset=offset)
@@ -43,7 +43,7 @@ def post_stock_adjustment(
     adj_in: StockAdjustmentCreate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("inventory:adjust"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     prev_qty, new_qty = inventory_service.adjust_stock(db, target_store_id, current_user.id, adj_in)
@@ -59,7 +59,7 @@ def post_stock_receive(
     rec_in: StockReceiveCreate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("purchases:receive_grn"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     prev_qty, received_qty, new_qty = inventory_service.receive_stock(db, target_store_id, current_user.id, rec_in)
@@ -76,7 +76,7 @@ def post_batch_stock_receive(
     batch_in: BatchStockReceiveCreate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("purchases:receive_grn"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     results = inventory_service.receive_batch_stock(db, target_store_id, current_user.id, batch_in)
@@ -93,7 +93,7 @@ def get_stock_movements(
     offset: int = 0,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("inventory:view"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     movements = inventory_service.list_stock_movements(db, target_store_id, product_id=product_id, limit=limit, offset=offset)
@@ -115,7 +115,7 @@ def get_stock_movements(
 def get_stock_takes(
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("inventory:stock_take"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     sessions = inventory_service.list_stock_takes(db, target_store_id)
@@ -154,7 +154,7 @@ def post_stock_take(
     st_in: StockTakeCreate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("inventory:stock_take"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     st = inventory_service.start_stock_take(db, target_store_id, current_user.id, notes=st_in.notes)
@@ -189,7 +189,7 @@ def get_stock_take_by_id(
     stock_take_id: int,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("inventory:stock_take"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     st = inventory_service.get_stock_take(db, target_store_id, stock_take_id)
@@ -224,7 +224,7 @@ def post_stock_take_count(
     item_count: StockTakeItemCreate,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("inventory:stock_take"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     item = inventory_service.record_stock_take_count(db, target_store_id, stock_take_id, item_count)
@@ -245,7 +245,7 @@ def post_reconcile_stock_take(
     stock_take_id: int,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("inventory:stock_take"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     st = inventory_service.reconcile_stock_take(db, target_store_id, current_user.id, stock_take_id)
@@ -279,7 +279,7 @@ def post_cancel_stock_take(
     stock_take_id: int,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("inventory:stock_take"))
 ):
     target_store_id = store_id or current_user.store_id or 1
     st = inventory_service.cancel_stock_take(db, target_store_id, current_user.id, stock_take_id)

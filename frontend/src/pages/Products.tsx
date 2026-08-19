@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../services/api';
+import { usePermissions } from '../hooks/usePermissions';
 import type { Product, Category } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { 
@@ -18,6 +19,10 @@ import {
 import { ProductHistoryDrawer } from '../components/ProductHistoryDrawer';
 
 export const ProductsPage: React.FC = () => {
+  const { hasPermission, isOwner } = usePermissions();
+  const canViewMargin = isOwner || hasPermission('pos:view_margin');
+  const canEditCatalog = isOwner || hasPermission('catalog:edit');
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
@@ -258,23 +263,25 @@ export const ProductsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setIsCategoryModalOpen(true)}
-            className="flex items-center space-x-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-xs cursor-pointer active:scale-[0.98]"
-          >
-            <FolderPlus className="h-4 w-4 text-slate-500" />
-            <span>Manage Categories</span>
-          </button>
+        {canEditCatalog && (
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setIsCategoryModalOpen(true)}
+              className="flex items-center space-x-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-xs cursor-pointer active:scale-[0.98]"
+            >
+              <FolderPlus className="h-4 w-4 text-slate-500" />
+              <span>Manage Categories</span>
+            </button>
 
-          <button
-            onClick={handleOpenCreateModal}
-            className="flex items-center space-x-1.5 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-500 transition-all shadow-xs active:scale-[0.98] cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            <span>New Product</span>
-          </button>
-        </div>
+            <button
+              onClick={handleOpenCreateModal}
+              className="flex items-center space-x-1.5 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-500 transition-all shadow-xs active:scale-[0.98] cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>New Product</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Filter & Search Bar */}
@@ -373,9 +380,15 @@ export const ProductsPage: React.FC = () => {
                     )}
                   </td>
                   <td className="p-3.5 text-right font-mono text-slate-600">
-                    KES {Number(p.cost_price).toLocaleString()}
-                    {p.unit_type === 'roll' && p.cost_per_meter && (
-                      <div className="text-[10px] text-slate-400">({Number(p.cost_per_meter).toFixed(0)}/m)</div>
+                    {canViewMargin ? (
+                      <>
+                        KES {Number(p.cost_price).toLocaleString()}
+                        {p.unit_type === 'roll' && p.cost_per_meter && (
+                          <div className="text-[10px] text-slate-400">({Number(p.cost_per_meter).toFixed(0)}/m)</div>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-slate-400 italic">KES •••••</span>
                     )}
                   </td>
                   <td className="p-3.5 text-right font-mono font-bold text-slate-900">
@@ -419,20 +432,24 @@ export const ProductsPage: React.FC = () => {
                       >
                         <History className="h-3.5 w-3.5" />
                       </button>
-                      <button
-                        onClick={() => handleOpenEditModal(p)}
-                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-amber-700 transition-all cursor-pointer shadow-2xs"
-                        title="Edit Product Details & Pricing"
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProduct(p)}
-                        className="rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-all cursor-pointer shadow-2xs"
-                        title="Deactivate Product"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {canEditCatalog && (
+                        <>
+                          <button
+                            onClick={() => handleOpenEditModal(p)}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-amber-700 transition-all cursor-pointer shadow-2xs"
+                            title="Edit Product Details & Pricing"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProduct(p)}
+                            className="rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-all cursor-pointer shadow-2xs"
+                            title="Deactivate Product"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

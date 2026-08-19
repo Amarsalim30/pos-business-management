@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../services/api';
+import { usePermissions } from '../hooks/usePermissions';
 import type {
   PettyCashEntry,
   PettyCashSummary,
@@ -18,25 +19,33 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   X,
-  Loader2
+  Loader2,
+  ShieldAlert
 } from 'lucide-react';
 
 
 export const AccountsPage: React.FC = () => {
+  const { hasPermission, isOwner } = usePermissions();
+  const canBanking = isOwner || hasPermission('accounts:banking_mpesa');
+  const canPettyCash = isOwner || hasPermission('accounts:petty_cash');
+
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const initialTab = (tabParam === 'mpesa' || tabParam === 'banks' || tabParam === 'petty_cash') ? tabParam : 'petty_cash';
+  const initialTab = (canBanking && (tabParam === 'mpesa' || tabParam === 'banks')) ? tabParam : 'petty_cash';
   const [activeTab, setActiveTab] = useState<'petty_cash' | 'banks' | 'mpesa'>(initialTab);
 
   useEffect(() => {
     if (tabParam && (tabParam === 'mpesa' || tabParam === 'banks' || tabParam === 'petty_cash')) {
-      if (tabParam !== activeTab) {
+      if (!canBanking && (tabParam === 'banks' || tabParam === 'mpesa')) {
+        setActiveTab('petty_cash');
+      } else if (tabParam !== activeTab) {
         setActiveTab(tabParam);
       }
     }
-  }, [tabParam]);
+  }, [tabParam, canBanking]);
 
   const handleTabChange = (tab: 'petty_cash' | 'banks' | 'mpesa') => {
+    if (!canBanking && (tab === 'banks' || tab === 'mpesa')) return;
     setActiveTab(tab);
     setSearchParams({ tab });
   };
@@ -91,11 +100,13 @@ export const AccountsPage: React.FC = () => {
   const [mpesaError, setMpesaError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadOverview();
-    if (activeTab === 'petty_cash') loadPettyCash();
-    if (activeTab === 'banks') loadBankAccounts();
-    if (activeTab === 'mpesa') loadMpesaIncomes();
-  }, [activeTab, pettyTypeFilter, pettyCategoryFilter]);
+    if (canBanking || canPettyCash) {
+      loadOverview();
+      if (activeTab === 'petty_cash' && canPettyCash) loadPettyCash();
+      if (activeTab === 'banks' && canBanking) loadBankAccounts();
+      if (activeTab === 'mpesa' && canBanking) loadMpesaIncomes();
+    }
+  }, [activeTab, pettyTypeFilter, pettyCategoryFilter, canBanking, canPettyCash]);
 
   const loadOverview = async () => {
     try {
@@ -283,6 +294,20 @@ export const AccountsPage: React.FC = () => {
     }
   };
 
+  if (!canBanking && !canPettyCash) {
+    return (
+      <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-12">
+        <div className="p-3.5 bg-rose-50 text-rose-600 rounded-2xl w-12 h-12 flex items-center justify-center mx-auto mb-3 border border-rose-100">
+          <ShieldAlert className="h-6 w-6" />
+        </div>
+        <h3 className="text-base font-black text-slate-900">Accounts Access Restricted</h3>
+        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+          Your account does not have permission to view petty cash books or bank accounts. Contact the store owner to request permission.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -292,63 +317,75 @@ export const AccountsPage: React.FC = () => {
             <div className="p-2 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100">
               <Wallet className="h-6 w-6" />
             </div>
-            Financial Accounts & Petty Cash
+            {canBanking ? 'Financial Accounts & Petty Cash' : 'Store Petty Cash Book'}
           </h1>
           <p className="text-sm text-slate-500 mt-1 font-medium">
-            Manage store petty cash float, bank account deposits/withdrawals, and M-Pesa agent commission logs
+            {canBanking
+              ? 'Manage store petty cash float, bank account deposits/withdrawals, and M-Pesa agent commission logs'
+              : 'Record petty cash expenses, tea/snack allowances, and float voucher receipts'}
           </p>
         </div>
 
         {/* Global Overview Pill Badges */}
         {overview && (
           <div className="flex items-center gap-2">
-            <div className="bg-white px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold">
-              Petty Cash: <span className="font-mono font-bold text-slate-900">KES {Number(overview.petty_cash_balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="bg-white px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold">
-              Bank Total: <span className="font-mono font-bold text-indigo-600">KES {Number(overview.total_bank_balances).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
+            {canPettyCash && (
+              <div className="bg-white px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold">
+                Petty Cash: <span className="font-mono font-bold text-slate-900">KES {Number(overview.petty_cash_balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+            {canBanking && (
+              <div className="bg-white px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold">
+                Bank Total: <span className="font-mono font-bold text-indigo-600">KES {Number(overview.total_bank_balances).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* Tabs Bar */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          onClick={() => handleTabChange('petty_cash')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'petty_cash'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Wallet className="h-4 w-4" />
-          <span>Petty Cash Book</span>
-        </button>
+        {canPettyCash && (
+          <button
+            onClick={() => handleTabChange('petty_cash')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'petty_cash'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Wallet className="h-4 w-4" />
+            <span>Petty Cash Book</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => handleTabChange('banks')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'banks'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Building2 className="h-4 w-4" />
-          <span>Bank Accounts ({bankAccounts.length})</span>
-        </button>
+        {canBanking && (
+          <>
+            <button
+              onClick={() => handleTabChange('banks')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'banks'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Building2 className="h-4 w-4" />
+              <span>Bank Accounts ({bankAccounts.length})</span>
+            </button>
 
-        <button
-          onClick={() => handleTabChange('mpesa')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'mpesa'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Smartphone className="h-4 w-4 text-emerald-500" />
-          <span>M-Pesa Commission Income</span>
-        </button>
+            <button
+              onClick={() => handleTabChange('mpesa')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'mpesa'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Smartphone className="h-4 w-4 text-emerald-500" />
+              <span>M-Pesa Commission Income</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* Tab 1: Petty Cash */}

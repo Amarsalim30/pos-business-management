@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.dependencies import get_current_user, require_staff, require_owner
+from app.dependencies import get_current_user, require_permission
 from app.models.user import User
 from app.schemas.account import (
     PettyCashCreate, PettyCashResponse, PettyCashSummaryResponse,
@@ -23,7 +23,18 @@ def get_accounts_overview(
     current_user: User = Depends(get_current_user)
 ):
     target_store_id = current_user.store_id or 1
-    return account_service.get_accounts_overview(db, target_store_id)
+    overview = account_service.get_accounts_overview(db, target_store_id)
+
+    # Sanitize banking and float data if user lacks banking_mpesa permission
+    is_owner = current_user.role in ("owner", "admin")
+    can_banking = is_owner or "*" in current_user.effective_permissions or "accounts:banking_mpesa" in current_user.effective_permissions
+
+    if not can_banking:
+        overview.bank_total = 0.0
+        overview.bank_accounts = []
+        overview.mpesa_agent_income = 0.0
+
+    return overview
 
 
 # =========================================================================
@@ -35,7 +46,7 @@ def get_petty_cash_summary(
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("accounts:petty_cash"))
 ):
     target_store_id = current_user.store_id or 1
     return account_service.get_petty_cash_summary(db, target_store_id, date_from=date_from, date_to=date_to)
@@ -50,7 +61,7 @@ def get_petty_cash_entries(
     limit: Optional[int] = None,
     offset: int = 0,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("accounts:petty_cash"))
 ):
     target_store_id = current_user.store_id or 1
     entries = account_service.list_petty_cash_entries(
@@ -79,7 +90,7 @@ def get_petty_cash_entries(
 def create_petty_cash_entry(
     entry_in: PettyCashCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("accounts:petty_cash"))
 ):
     target_store_id = current_user.store_id or 1
     entry = account_service.add_petty_cash_entry(db, target_store_id, current_user.id, entry_in)
@@ -106,7 +117,7 @@ def create_petty_cash_entry(
 def get_bank_accounts(
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
 ):
     target_store_id = current_user.store_id or 1
     return account_service.list_bank_accounts(db, target_store_id, is_active=is_active)
@@ -116,7 +127,7 @@ def get_bank_accounts(
 def create_bank_account(
     account_in: BankAccountCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
 ):
     target_store_id = current_user.store_id or 1
     return account_service.create_bank_account(db, target_store_id, account_in)
@@ -126,7 +137,7 @@ def create_bank_account(
 def get_bank_account(
     account_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
 ):
     target_store_id = current_user.store_id or 1
     return account_service.get_bank_account_detail(db, target_store_id, account_id)
@@ -137,9 +148,8 @@ def update_bank_account(
     account_id: int,
     account_in: BankAccountUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
 ):
-
     target_store_id = current_user.store_id or 1
     return account_service.update_bank_account(db, target_store_id, account_id, account_in)
 
@@ -149,7 +159,7 @@ def record_bank_transaction(
     account_id: int,
     trans_in: BankTransactionCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
 ):
     target_store_id = current_user.store_id or 1
     trans = account_service.record_bank_transaction(db, target_store_id, current_user.id, account_id, trans_in)
@@ -178,7 +188,7 @@ def get_mpesa_income(
     limit: Optional[int] = None,
     offset: int = 0,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
 ):
     target_store_id = current_user.store_id or 1
     records = account_service.list_mpesa_incomes(
@@ -204,7 +214,7 @@ def get_mpesa_income(
 def create_mpesa_income(
     mpesa_in: MpesaIncomeCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff)
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
 ):
     target_store_id = current_user.store_id or 1
     record = account_service.record_mpesa_income(db, target_store_id, current_user.id, mpesa_in)

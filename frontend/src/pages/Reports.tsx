@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../services/api';
+import { usePermissions } from '../hooks/usePermissions';
 import type { NetProfitStatement, FastMovingProductItem, SalesReportSummary, Sale } from '../types';
 import { InvoiceDrawer } from '../components/InvoiceDrawer';
 import {
@@ -11,7 +12,11 @@ import {
   TrendingUp,
   Download,
   Eye,
-  X
+  X,
+  ShieldAlert,
+  Receipt,
+  ShoppingCart,
+  DollarSign
 } from 'lucide-react';
 
 interface DrilldownState {
@@ -23,6 +28,10 @@ interface DrilldownState {
 }
 
 export const ReportsPage: React.FC = () => {
+  const { hasPermission, isOwner } = usePermissions();
+  const canViewNetProfit = isOwner || hasPermission('reports:view_net_profit');
+  const canViewSales = isOwner || hasPermission('reports:view_sales') || hasPermission('pos:sell');
+
   const [period, setPeriod] = useState<'today' | 'yesterday' | '7days' | 'month' | 'last_month' | 'custom'>('month');
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
@@ -42,8 +51,10 @@ export const ReportsPage: React.FC = () => {
   const [drawerFormat, setDrawerFormat] = useState<'a4' | 'thermal'>('a4');
 
   useEffect(() => {
-    loadReports();
-  }, [period, customDateFrom, customDateTo]);
+    if (canViewNetProfit || canViewSales) {
+      loadReports();
+    }
+  }, [period, customDateFrom, customDateTo, canViewNetProfit, canViewSales]);
 
   const getDateRange = () => {
     const now = new Date();
@@ -100,17 +111,29 @@ export const ReportsPage: React.FC = () => {
       const qs = params.toString();
       if (qs) {
         netUrl += `?${qs}`;
+        fastUrl += `&${qs}`;
         salesUrl += `?${qs}`;
       }
 
-      const [netData, fastData, salesData] = await Promise.all([
-        apiFetch<NetProfitStatement>(netUrl),
-        apiFetch<FastMovingProductItem[]>(fastUrl),
-        apiFetch<SalesReportSummary>(salesUrl)
-      ]);
+      const promises: Promise<any>[] = [];
+      if (canViewNetProfit) {
+        promises.push(apiFetch<NetProfitStatement>(netUrl));
+      } else {
+        promises.push(Promise.resolve(null));
+      }
+
+      if (canViewSales) {
+        promises.push(apiFetch<FastMovingProductItem[]>(fastUrl));
+        promises.push(apiFetch<SalesReportSummary>(salesUrl));
+      } else {
+        promises.push(Promise.resolve([]));
+        promises.push(Promise.resolve(null));
+      }
+
+      const [netData, fastData, salesData] = await Promise.all(promises);
 
       setStatement(netData);
-      setFastMoving(fastData);
+      setFastMoving(fastData || []);
       setSalesSummary(salesData);
     } catch (e) {
       console.error('Failed to load reports', e);
@@ -181,6 +204,20 @@ export const ReportsPage: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  if (!canViewNetProfit && !canViewSales) {
+    return (
+      <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-12">
+        <div className="p-3.5 bg-rose-50 text-rose-600 rounded-2xl w-12 h-12 flex items-center justify-center mx-auto mb-3 border border-rose-100">
+          <ShieldAlert className="h-6 w-6" />
+        </div>
+        <h3 className="text-base font-black text-slate-900">Reports Access Restricted</h3>
+        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+          Your account does not have permission to view financial statements or sales analytics. Contact the store owner to request permission.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -190,10 +227,16 @@ export const ReportsPage: React.FC = () => {
             <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100">
               <BarChart3 className="h-6 w-6" />
             </div>
-            <span>Owner Profit Statement & Financial Intelligence</span>
+            <span>
+              {canViewNetProfit
+                ? 'Owner Profit Statement & Financial Intelligence'
+                : 'Sales Analytics & ETR Performance Reports'}
+            </span>
           </h1>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Interactive auditable P&L statement, sales velocity, and click-to-drilldown transaction ledger
+            {canViewNetProfit
+              ? 'Interactive auditable P&L statement, sales velocity, and click-to-drilldown transaction ledger'
+              : 'Daily sales turnover, tax register metrics, payment distribution, and fast-moving inventory'}
           </p>
         </div>
 
@@ -222,15 +265,17 @@ export const ReportsPage: React.FC = () => {
             ))}
           </div>
 
-          <button
-            onClick={exportSummaryCSV}
-            disabled={!statement}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer shadow-xs disabled:opacity-50"
-            title="Export Statement to CSV"
-          >
-            <Download className="h-4 w-4 text-slate-500" />
-            <span>CSV</span>
-          </button>
+          {canViewNetProfit && (
+            <button
+              onClick={exportSummaryCSV}
+              disabled={!statement}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer shadow-xs disabled:opacity-50"
+              title="Export Statement to CSV"
+            >
+              <Download className="h-4 w-4 text-slate-500" />
+              <span>CSV</span>
+            </button>
+          )}
 
           <button
             onClick={handlePrint}
@@ -267,10 +312,10 @@ export const ReportsPage: React.FC = () => {
         </div>
       )}
 
-      {loading && !statement ? (
+      {loading && (!statement && !salesSummary) ? (
         <div className="bg-white p-16 rounded-2xl border border-slate-200 text-center text-slate-400 space-y-2">
           <Loader2 className="h-8 w-8 mx-auto text-emerald-600 animate-spin" />
-          <p className="text-xs">Computing store profit calculations...</p>
+          <p className="text-xs">Computing report analytics...</p>
         </div>
       ) : (
         <div id="executive-report-container" className="space-y-6">
@@ -279,7 +324,7 @@ export const ReportsPage: React.FC = () => {
             <div className="flex justify-between items-start">
               <div>
                 <h1 className="text-xl font-black uppercase text-slate-900">SOLAR & ELECTRICAL HARDWARE SUPPLIES</h1>
-                <p className="text-xs text-slate-600">Executive Profit & Loss Statement</p>
+                <p className="text-xs text-slate-600">Executive Performance & Sales Statement</p>
               </div>
               <div className="text-right text-xs font-mono">
                 <div>Period: {period.toUpperCase()}</div>
@@ -288,90 +333,181 @@ export const ReportsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Top 4 Interactive KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Gross Revenue */}
-            <div
-              onClick={() => handleOpenDrilldown({
-                title: 'Gross Sales Invoices',
-                subtitle: 'All completed customer transactions for the selected period',
-                metricKey: 'sales'
-              })}
-              className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-amber-500 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
-            >
-              <div className="flex justify-between items-start">
-                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Gross Sales Revenue</div>
-                <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-amber-600 transition-colors" />
-              </div>
-              <div className="text-2xl font-black text-slate-900 mt-2 font-mono">
-                KES {Number(statement?.gross_sales_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[11px] text-amber-600 font-semibold mt-1 flex items-center gap-1">
-                <span>Click to drill down invoices</span>
-              </div>
-            </div>
-
-            {/* Cost of Goods Sold */}
-            <div
-              onClick={() => handleOpenDrilldown({
-                title: 'Cost of Goods Sold (COGS)',
-                subtitle: 'Inventory cost price snapshot for sold items',
-                metricKey: 'cogs'
-              })}
-              className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
-            >
-              <div className="flex justify-between items-start">
-                <div className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Cost of Goods Sold</div>
-                <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-              </div>
-              <div className="text-2xl font-black text-indigo-700 mt-2 font-mono">
-                KES {Number(statement?.cost_of_goods_sold || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[11px] text-indigo-600 font-semibold mt-1">
-                Inventory buying cost (BP)
-              </div>
-            </div>
-
-            {/* Gross Margin % */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">Gross Margin %</div>
-              <div className="text-2xl font-black text-blue-700 mt-2 font-mono">
-                {Number(statement?.gross_margin_percentage || 0).toFixed(1)}%
-              </div>
-              <div className="text-[11px] text-slate-400 mt-1">
-                Gross trading profit ratio
-              </div>
-            </div>
-
-            {/* Net Profit */}
-            <div className="bg-emerald-50/90 p-5 rounded-2xl border border-emerald-200 shadow-sm relative overflow-hidden">
-              <div className="flex justify-between items-start">
-                <div className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Store Net Profit</div>
-                <TrendingUp className="h-4 w-4 text-emerald-600" />
-              </div>
-              <div className="text-2xl font-black text-emerald-700 mt-2 font-mono">
-                KES {Number(statement?.net_profit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-[11px] text-emerald-700/90 font-medium mt-1">
-                True bottom-line business earnings
-              </div>
-            </div>
-          </div>
-
-          {/* Auditable Waterfall Net Profit Statement */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
-              <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Auditable Net Profit Waterfall Statement</h3>
-                  <p className="text-xs text-slate-500">Itemized revenue, COGS, operating costs, and secondary streams</p>
+          {/* Top KPI Cards (Net Profit Version vs Sales Overview Version) */}
+          {canViewNetProfit ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Gross Revenue */}
+              <div
+                onClick={() => handleOpenDrilldown({
+                  title: 'Gross Sales Invoices',
+                  subtitle: 'All completed customer transactions for the selected period',
+                  metricKey: 'sales'
+                })}
+                className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-amber-500 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Gross Sales Revenue</div>
+                  <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-amber-600 transition-colors" />
                 </div>
-                <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-3 py-1 rounded-lg uppercase">
-                  {period}
-                </span>
+                <div className="text-2xl font-black text-slate-900 mt-2 font-mono">
+                  KES {Number(statement?.gross_sales_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-[11px] text-amber-600 font-semibold mt-1 flex items-center gap-1">
+                  <span>Click to drill down invoices</span>
+                </div>
               </div>
 
-              {statement && (
+              {/* Cost of Goods Sold */}
+              <div
+                onClick={() => handleOpenDrilldown({
+                  title: 'Cost of Goods Sold (COGS)',
+                  subtitle: 'Inventory cost price snapshot for sold items',
+                  metricKey: 'cogs'
+                })}
+                className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Cost of Goods Sold</div>
+                  <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                </div>
+                <div className="text-2xl font-black text-indigo-700 mt-2 font-mono">
+                  KES {Number(statement?.cost_of_goods_sold || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-[11px] text-indigo-600 font-semibold mt-1">
+                  Inventory buying cost (BP)
+                </div>
+              </div>
+
+              {/* Gross Margin % */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+                <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">Gross Margin %</div>
+                <div className="text-2xl font-black text-blue-700 mt-2 font-mono">
+                  {Number(statement?.gross_margin_percentage || 0).toFixed(1)}%
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1">
+                  Gross trading profit ratio
+                </div>
+              </div>
+
+              {/* Net Profit */}
+              <div className="bg-emerald-50/90 p-5 rounded-2xl border border-emerald-200 shadow-sm relative overflow-hidden">
+                <div className="flex justify-between items-start">
+                  <div className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Store Net Profit</div>
+                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div className="text-2xl font-black text-emerald-700 mt-2 font-mono">
+                  KES {Number(statement?.net_profit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-[11px] text-emerald-700/90 font-medium mt-1">
+                  True bottom-line business earnings
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Sales Revenue */}
+              <div
+                onClick={() => handleOpenDrilldown({
+                  title: 'All Invoiced Sales',
+                  subtitle: 'Completed transactions for the period',
+                  metricKey: 'sales'
+                })}
+                className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-amber-500 hover:shadow-md transition-all cursor-pointer group"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Sales Revenue</div>
+                  <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-amber-600" />
+                </div>
+                <div className="text-2xl font-black text-slate-900 mt-2 font-mono">
+                  KES {Number(salesSummary?.total_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[11px] text-amber-600 font-semibold mt-1">
+                  {salesSummary?.total_transactions || 0} Invoices Ringed Up
+                </div>
+              </div>
+
+              {/* ETR Invoiced Revenue */}
+              <div
+                onClick={() => handleOpenDrilldown({
+                  title: 'ETR Invoiced Sales',
+                  subtitle: 'Official tax register transactions',
+                  metricKey: 'etr',
+                  isEtr: true
+                })}
+                className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-emerald-500 hover:shadow-md transition-all cursor-pointer group"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="text-xs font-bold text-emerald-700 uppercase tracking-wider">ETR Invoices</div>
+                  <Receipt className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div className="text-2xl font-black text-emerald-700 mt-2 font-mono">
+                  KES {Number(salesSummary?.etr_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[11px] text-emerald-600 font-semibold mt-1">
+                  Official fiscal receipts
+                </div>
+              </div>
+
+              {/* Non-ETR Invoiced Revenue */}
+              <div
+                onClick={() => handleOpenDrilldown({
+                  title: 'Non-ETR Sales',
+                  subtitle: 'Standard counter transactions',
+                  metricKey: 'non_etr',
+                  isEtr: false
+                })}
+                className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-slate-400 hover:shadow-md transition-all cursor-pointer group"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Non-ETR Sales</div>
+                  <ShoppingCart className="h-4 w-4 text-slate-400" />
+                </div>
+                <div className="text-2xl font-black text-slate-800 mt-2 font-mono">
+                  KES {Number(salesSummary?.non_etr_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[11px] text-slate-500 font-medium mt-1">
+                  Standard counter tickets
+                </div>
+              </div>
+
+              {/* Outstanding Debtors */}
+              <div
+                onClick={() => handleOpenDrilldown({
+                  title: 'Customer Debt Balances',
+                  subtitle: 'Unpaid and partially settled invoices',
+                  metricKey: 'credit',
+                  statusFilter: 'unpaid'
+                })}
+                className="bg-rose-50/70 p-5 rounded-2xl border border-rose-200 hover:border-rose-400 hover:shadow-md transition-all cursor-pointer group"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="text-xs font-bold text-rose-800 uppercase tracking-wider">Outstanding Debt</div>
+                  <DollarSign className="h-4 w-4 text-rose-600" />
+                </div>
+                <div className="text-2xl font-black text-rose-700 mt-2 font-mono">
+                  KES {Number(salesSummary?.total_outstanding_credit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[11px] text-rose-700 font-medium mt-1">
+                  Pending customer receivables
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Detailed Statement Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {canViewNetProfit && statement ? (
+              <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+                <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Auditable Net Profit Waterfall Statement</h3>
+                    <p className="text-xs text-slate-500">Itemized revenue, COGS, operating costs, and secondary streams</p>
+                  </div>
+                  <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-3 py-1 rounded-lg uppercase">
+                    {period}
+                  </span>
+                </div>
+
                 <div className="space-y-4 text-xs">
                   {/* 1. Sales Revenue */}
                   <div className="space-y-1.5 bg-slate-50/80 p-4 rounded-xl border border-slate-200/60">
@@ -472,15 +608,15 @@ export const ReportsPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            ) : null}
 
-            {/* Right Side: Payment Distribution & Fiscal Breakdown */}
-            <div className="space-y-6">
+            {/* Payment Distribution Card */}
+            <div className={`space-y-6 ${canViewNetProfit ? 'lg:col-span-1' : 'lg:col-span-3'}`}>
               {salesSummary && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
                   <h3 className="text-sm font-bold text-slate-900">Payment Tender Distribution</h3>
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
                     {salesSummary.payment_methods.map((pm) => (
                       <div key={pm.method} className="space-y-1">
                         <div className="flex justify-between text-xs font-semibold">

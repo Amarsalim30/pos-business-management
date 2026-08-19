@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../services/api';
+import { usePermissions } from '../hooks/usePermissions';
 import type { InventoryItem, StockMovement, Supplier, GoodsReceivedNote } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { GRNDocumentDrawer } from '../components/GRNDocumentDrawer';
@@ -39,6 +40,11 @@ interface GRNLineItem {
 }
 
 export const InventoryPage: React.FC = () => {
+  const { hasPermission, isOwner } = usePermissions();
+  const canViewMargin = isOwner || hasPermission('pos:view_margin');
+  const canReceiveGRN = isOwner || hasPermission('purchases:receive_grn');
+  const canAdjustStock = isOwner || hasPermission('inventory:adjust');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<'levels' | 'history'>('levels');
@@ -595,7 +601,11 @@ export const InventoryPage: React.FC = () => {
                           )}
                         </td>
                         <td className="px-4 py-3 font-mono text-slate-600">
-                          KES {Number(item.cost_price).toLocaleString()}
+                          {canViewMargin ? (
+                            `KES ${Number(item.cost_price).toLocaleString()}`
+                          ) : (
+                            <span className="text-slate-400 italic">KES •••••</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           {item.is_low_stock ? (
@@ -619,27 +629,31 @@ export const InventoryPage: React.FC = () => {
                               <History className="h-3 w-3" />
                               <span>History</span>
                             </button>
-                            <button
-                              onClick={() => handleOpenGRNModal(item.product_id)}
-                              className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] cursor-pointer"
-                              title="Receive stock delivery for this product"
-                            >
-                              <Truck className="h-3 w-3" />
-                              <span>Receive</span>
-                            </button>
-                            <button
-                              onClick={() => {
-                                setAdjustModalItem(item);
-                                setAdjustQuantity('');
-                                setAdjustType('add');
-                                setAdjustNote('');
-                                setAdjustError(null);
-                              }}
-                              className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] cursor-pointer"
-                            >
-                              <ArrowDownUp className="h-3 w-3" />
-                              <span>Adjust</span>
-                            </button>
+                            {canReceiveGRN && (
+                              <button
+                                onClick={() => handleOpenGRNModal(item.product_id)}
+                                className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] cursor-pointer"
+                                title="Receive stock delivery for this product"
+                              >
+                                <Truck className="h-3 w-3" />
+                                <span>Receive</span>
+                              </button>
+                            )}
+                            {canAdjustStock && (
+                              <button
+                                onClick={() => {
+                                  setAdjustModalItem(item);
+                                  setAdjustQuantity('');
+                                  setAdjustType('add');
+                                  setAdjustNote('');
+                                  setAdjustError(null);
+                                }}
+                                className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] cursor-pointer"
+                              >
+                                <ArrowDownUp className="h-3 w-3" />
+                                <span>Adjust</span>
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

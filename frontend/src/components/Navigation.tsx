@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -33,6 +34,7 @@ interface NavSubItem {
   description: string;
   badge?: string;
   badgeColor?: string;
+  permission?: string;
 }
 
 interface NavGroup {
@@ -44,6 +46,7 @@ interface NavGroup {
 
 export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
+  const { hasPermission, isOwner } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -56,142 +59,167 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Group 1: Revenue (Strictly Shop POS, Projects, M-Pesa)
+  const revenueItems: NavSubItem[] = [
+    {
+      label: 'Shop Sales (POS)',
+      path: '/pos',
+      icon: ShoppingCart,
+      description: 'Retail counter sales, barcode scanning & instant receipt checkout',
+      badge: 'Counter',
+      badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
+      permission: 'pos:sell'
+    },
+    {
+      label: 'Solar Projects',
+      path: '/projects',
+      icon: Sun,
+      description: 'Solar installation projects, BOM allocations & project profit',
+      badge: 'Projects',
+      badgeColor: 'bg-sky-100 text-sky-800 border-sky-200',
+      permission: 'projects:manage'
+    },
+    {
+      label: 'M-Pesa Services',
+      path: '/accounts?tab=mpesa',
+      icon: Smartphone,
+      description: 'M-Pesa agent commission logs & float income tracking',
+      badge: 'M-Pesa',
+      badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      permission: 'accounts:banking_mpesa'
+    }
+  ].filter(item => isOwner || !item.permission || hasPermission(item.permission));
+
   const revenueGroup: NavGroup = {
     id: 'revenue',
     label: 'Revenue',
     icon: TrendingUp,
-    items: [
-      {
-        label: 'Shop Sales (POS)',
-        path: '/pos',
-        icon: ShoppingCart,
-        description: 'Retail counter sales, barcode scanning & instant receipt checkout',
-        badge: 'Counter',
-        badgeColor: 'bg-amber-100 text-amber-800 border-amber-200'
-      },
-      {
-        label: 'Solar Projects',
-        path: '/projects',
-        icon: Sun,
-        description: 'Solar installation projects, BOM allocations & project profit',
-        badge: 'Projects',
-        badgeColor: 'bg-sky-100 text-sky-800 border-sky-200'
-      },
-      {
-        label: 'M-Pesa Services',
-        path: '/accounts?tab=mpesa',
-        icon: Smartphone,
-        description: 'M-Pesa agent commission logs & float income tracking',
-        badge: 'M-Pesa',
-        badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200'
-      }
-    ]
+    items: revenueItems
   };
 
   // Group 2: Sales & Customers
+  const salesItems: NavSubItem[] = [
+    {
+      label: 'Sales & Invoices',
+      path: '/sales',
+      icon: Receipt,
+      description: 'Completed invoice register, receipt lookups & status tracking',
+      permission: 'reports:view_sales'
+    },
+    {
+      label: 'Quotations & Proformas',
+      path: '/pre-sales',
+      icon: FileCheck2,
+      description: 'Customer pre-sales quotes, proformas & sale conversion',
+      permission: 'pos:quotes'
+    },
+    {
+      label: 'Customers',
+      path: '/customers',
+      icon: Users,
+      description: 'Customer directory, balances & credit ledgers',
+      permission: 'customers:manage'
+    }
+  ].filter(item => isOwner || !item.permission || hasPermission(item.permission) || (item.permission === 'reports:view_sales' && hasPermission('pos:sell')));
+
   const salesGroup: NavGroup = {
     id: 'sales_customers',
     label: 'Sales & Orders',
     icon: Receipt,
-    items: [
-      {
-        label: 'Sales & Invoices',
-        path: '/sales',
-        icon: Receipt,
-        description: 'Completed invoice register, receipt lookups & status tracking'
-      },
-      {
-        label: 'Quotations & Proformas',
-        path: '/pre-sales',
-        icon: FileCheck2,
-        description: 'Customer pre-sales quotes, proformas & sale conversion'
-      },
-      {
-        label: 'Customers',
-        path: '/customers',
-        icon: Users,
-        description: 'Customer directory, balances & credit ledgers'
-      }
-    ]
+    items: salesItems
   };
 
   // Group 3: Inventory & Catalog
+  const inventoryItems: NavSubItem[] = [
+    {
+      label: 'Products & Catalog',
+      path: '/products',
+      icon: Package,
+      description: 'Product SKUs, buying/selling prices, taxable status & roll parameters',
+      permission: 'inventory:view'
+    },
+    {
+      label: 'Stock Balances',
+      path: '/inventory',
+      icon: Boxes,
+      description: 'Live store stock quantities & manual adjustments',
+      permission: 'inventory:view'
+    },
+    {
+      label: 'Stock Take',
+      path: '/stock-take',
+      icon: ClipboardCheck,
+      description: 'Physical stock counts & variance reconciliation',
+      permission: 'inventory:stock_take'
+    }
+  ].filter(item => isOwner || !item.permission || hasPermission(item.permission) || (item.permission === 'inventory:view' && hasPermission('catalog:edit')));
+
   const inventoryGroup: NavGroup = {
     id: 'inventory',
     label: 'Inventory',
     icon: Boxes,
-    items: [
-      {
-        label: 'Products & Catalog',
-        path: '/products',
-        icon: Package,
-        description: 'Product SKUs, buying/selling prices, taxable status & roll parameters'
-      },
-      {
-        label: 'Stock Balances',
-        path: '/inventory',
-        icon: Boxes,
-        description: 'Live store stock quantities & manual adjustments'
-      },
-      {
-        label: 'Stock Take',
-        path: '/stock-take',
-        icon: ClipboardCheck,
-        description: 'Physical stock counts & variance reconciliation'
-      }
-    ]
+    items: inventoryItems
   };
 
   // Group 4: Procurement
+  const procurementItems: NavSubItem[] = [
+    {
+      label: 'Purchases & GRN',
+      path: '/purchases',
+      icon: ShoppingBag,
+      description: 'Purchase orders, Goods Received Notes & freight expenses',
+      permission: 'purchases:create_po'
+    },
+    {
+      label: 'Suppliers',
+      path: '/suppliers',
+      icon: Truck,
+      description: 'Supplier accounts, balances & payment records',
+      permission: 'purchases:manage_suppliers'
+    }
+  ].filter(item => isOwner || !item.permission || hasPermission(item.permission) || (item.permission === 'purchases:create_po' && hasPermission('purchases:receive_grn')));
+
   const procurementGroup: NavGroup = {
     id: 'procurement',
     label: 'Purchases',
     icon: ShoppingBag,
-    items: [
-      {
-        label: 'Purchases & GRN',
-        path: '/purchases',
-        icon: ShoppingBag,
-        description: 'Purchase orders, Goods Received Notes & freight expenses'
-      },
-      {
-        label: 'Suppliers',
-        path: '/suppliers',
-        icon: Truck,
-        description: 'Supplier accounts, balances & payment records'
-      }
-    ]
+    items: procurementItems
   };
 
-  // Group 5: Administration (Owner Only)
+  // Group 5: Administration
+  const adminItems: NavSubItem[] = [
+    {
+      label: 'Store Settings & Overheads',
+      path: '/settings',
+      icon: Settings,
+      description: 'Business profile, default VAT rates & recurring monthly expenses',
+      permission: 'admin:settings'
+    },
+    {
+      label: 'User Management (RBAC)',
+      path: '/users',
+      icon: ShieldCheck,
+      description: 'Staff accounts, roles, access permissions & password resets',
+      permission: 'admin:users'
+    }
+  ].filter(item => isOwner || !item.permission || hasPermission(item.permission));
+
   const adminGroup: NavGroup = {
     id: 'admin',
     label: 'Admin',
     icon: Settings,
-    items: [
-      {
-        label: 'Store Settings & Overheads',
-        path: '/settings',
-        icon: Settings,
-        description: 'Business profile, default VAT rates & recurring monthly expenses'
-      },
-      {
-        label: 'User Management (RBAC)',
-        path: '/users',
-        icon: ShieldCheck,
-        description: 'Staff accounts, roles, access permissions & password resets'
-      }
-    ]
+    items: adminItems
   };
 
-  const isOwner = user?.role === 'owner' || user?.role === 'admin';
   const navGroups = [
-    revenueGroup,
-    salesGroup,
-    inventoryGroup,
-    procurementGroup,
-    ...(isOwner ? [adminGroup] : [])
+    ...(revenueGroup.items.length > 0 ? [revenueGroup] : []),
+    ...(salesGroup.items.length > 0 ? [salesGroup] : []),
+    ...(inventoryGroup.items.length > 0 ? [inventoryGroup] : []),
+    ...(procurementGroup.items.length > 0 ? [procurementGroup] : []),
+    ...(adminGroup.items.length > 0 ? [adminGroup] : [])
   ];
+
+  const canFinance = isOwner || hasPermission('accounts:petty_cash') || hasPermission('accounts:banking_mpesa');
+  const canReports = isOwner || hasPermission('reports:view_sales') || hasPermission('reports:view_net_profit');
 
   // All flat items for command palette search
   const allItems: { label: string; path: string; group: string; icon: React.ElementType }[] = [
@@ -200,9 +228,9 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
     ...salesGroup.items.map((i) => ({ ...i, group: 'Sales & Orders' })),
     ...inventoryGroup.items.map((i) => ({ ...i, group: 'Inventory' })),
     ...procurementGroup.items.map((i) => ({ ...i, group: 'Purchases' })),
-    { label: 'Accounts & Petty Cash', path: '/accounts', group: 'Finance', icon: Wallet },
-    { label: 'Reports & Analytics', path: '/reports', group: 'Analytics', icon: BarChart3 },
-    ...(isOwner ? adminGroup.items.map((i) => ({ ...i, group: 'Admin' })) : [])
+    ...(canFinance ? [{ label: 'Accounts & Petty Cash', path: '/accounts', group: 'Finance', icon: Wallet }] : []),
+    ...(canReports ? [{ label: 'Reports & Analytics', path: '/reports', group: 'Analytics', icon: BarChart3 }] : []),
+    ...adminGroup.items.map((i) => ({ ...i, group: 'Admin' }))
   ];
 
   // Click outside listener for dropdowns
@@ -387,28 +415,32 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
               })}
 
               {/* Finance Direct Link */}
-              <Link
-                to="/accounts"
-                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap ${isPathActive('/accounts') && !location.search.includes('tab=mpesa')
-                  ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                  }`}
-              >
-                <Wallet className={`h-4 w-4 shrink-0 ${isPathActive('/accounts') && !location.search.includes('tab=mpesa') ? 'text-amber-600' : 'text-slate-400'}`} />
-                <span>Finance</span>
-              </Link>
+              {canFinance && (
+                <Link
+                  to="/accounts"
+                  className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap ${isPathActive('/accounts') && !location.search.includes('tab=mpesa')
+                    ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                    }`}
+                >
+                  <Wallet className={`h-4 w-4 shrink-0 ${isPathActive('/accounts') && !location.search.includes('tab=mpesa') ? 'text-amber-600' : 'text-slate-400'}`} />
+                  <span>Finance</span>
+                </Link>
+              )}
 
               {/* Reports Direct Link */}
-              <Link
-                to="/reports"
-                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap ${isPathActive('/reports')
-                  ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                  }`}
-              >
-                <BarChart3 className={`h-4 w-4 shrink-0 ${isPathActive('/reports') ? 'text-amber-600' : 'text-slate-400'}`} />
-                <span>Reports</span>
-              </Link>
+              {canReports && (
+                <Link
+                  to="/reports"
+                  className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap ${isPathActive('/reports')
+                    ? 'bg-amber-50 text-amber-900 font-extrabold border border-amber-200/80 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                    }`}
+                >
+                  <BarChart3 className={`h-4 w-4 shrink-0 ${isPathActive('/reports') ? 'text-amber-600' : 'text-slate-400'}`} />
+                  <span>Reports</span>
+                </Link>
+              )}
             </nav>
           </div>
 
@@ -620,25 +652,29 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
 
               {/* Direct Links */}
               <div className="space-y-1 pt-2">
-                <Link
-                  to="/accounts"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center space-x-3 p-3 rounded-2xl text-xs font-bold ${isPathActive('/accounts') && !location.search.includes('tab=mpesa') ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-50 text-slate-700'
-                    }`}
-                >
-                  <Wallet className="h-4 w-4 text-indigo-600" />
-                  <span>Finance & Accounts</span>
-                </Link>
+                {canFinance && (
+                  <Link
+                    to="/accounts"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center space-x-3 p-3 rounded-2xl text-xs font-bold ${isPathActive('/accounts') && !location.search.includes('tab=mpesa') ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-50 text-slate-700'
+                      }`}
+                  >
+                    <Wallet className="h-4 w-4 text-indigo-600" />
+                    <span>Finance & Accounts</span>
+                  </Link>
+                )}
 
-                <Link
-                  to="/reports"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center space-x-3 p-3 rounded-2xl text-xs font-bold ${isPathActive('/reports') ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-50 text-slate-700'
-                    }`}
-                >
-                  <BarChart3 className="h-4 w-4 text-sky-600" />
-                  <span>Reports & Analytics</span>
-                </Link>
+                {canReports && (
+                  <Link
+                    to="/reports"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center space-x-3 p-3 rounded-2xl text-xs font-bold ${isPathActive('/reports') ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-50 text-slate-700'
+                      }`}
+                  >
+                    <BarChart3 className="h-4 w-4 text-sky-600" />
+                    <span>Reports & Analytics</span>
+                  </Link>
+                )}
               </div>
             </div>
 

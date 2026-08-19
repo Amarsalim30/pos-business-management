@@ -95,6 +95,7 @@ def get_sales(
     status_filter: Optional[str] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
+    offset: int = 0,
     limit: int = 50,
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
@@ -104,7 +105,8 @@ def get_sales(
     sales = sale_service.list_sales(
         db, target_store_id, q=q, customer_id=customer_id,
         is_etr=is_etr, status_filter=status_filter,
-        date_from=date_from, date_to=date_to, limit=limit
+        date_from=date_from, date_to=date_to,
+        offset=offset, limit=limit
     )
     return [_format_sale_response(s) for s in sales]
 

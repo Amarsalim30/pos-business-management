@@ -32,9 +32,13 @@ export function useInfiniteScroll<T>({
   const [error, setError] = useState<string | null>(null);
 
   const offsetRef = useRef<number>(0);
-  const isFetchingRef = useRef<boolean>(false);
+  const isFetchingMoreRef = useRef<boolean>(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const fetchFnRef = useRef(fetchFn);
+  const activeRequestIdRef = useRef<number>(0);
+
+  // Keep fetchFn reference synchronously fresh
+  fetchFnRef.current = fetchFn;
 
   const hasMoreRef = useRef(hasMore);
   hasMoreRef.current = hasMore;
@@ -43,56 +47,67 @@ export function useInfiniteScroll<T>({
   const loadingMoreRef = useRef(loadingMore);
   loadingMoreRef.current = loadingMore;
 
-  // Keep fetchFn reference fresh
-  useEffect(() => {
-    fetchFnRef.current = fetchFn;
-  }, [fetchFn]);
+  const loadInitial = useCallback(async () => {
+    const currentRequestId = ++activeRequestIdRef.current;
+    setLoading(true);
+    setError(null);
+    offsetRef.current = 0;
 
-  const loadBatch = useCallback(async (isInitial = false) => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
+    try {
+      const newItems = await fetchFnRef.current(0, limit);
+      // Discard if a newer request was dispatched
+      if (currentRequestId !== activeRequestIdRef.current) return;
 
-    if (isInitial) {
-      setLoading(true);
-      setError(null);
-      offsetRef.current = 0;
-    } else {
-      setLoadingMore(true);
+      setItems(newItems);
+      const moreAvailable = newItems.length >= limit && newItems.length > 0;
+      setHasMore(moreAvailable);
+      hasMoreRef.current = moreAvailable;
+      offsetRef.current = newItems.length;
+    } catch (err: any) {
+      if (currentRequestId !== activeRequestIdRef.current) return;
+      console.error('Failed to load initial batch:', err);
+      setError(err?.message || 'Failed to load items');
+    } finally {
+      if (currentRequestId === activeRequestIdRef.current) {
+        setLoading(false);
+      }
     }
+  }, [limit]);
+
+  const loadMore = useCallback(async () => {
+    if (isFetchingMoreRef.current || loadingRef.current || !hasMoreRef.current) return;
+    isFetchingMoreRef.current = true;
+    setLoadingMore(true);
+    const currentRequestId = activeRequestIdRef.current;
 
     try {
       const currentOffset = offsetRef.current;
       const newItems = await fetchFnRef.current(currentOffset, limit);
+      if (currentRequestId !== activeRequestIdRef.current) return;
 
-      if (isInitial) {
-        setItems(newItems);
-        const moreAvailable = newItems.length >= limit && newItems.length > 0;
-        setHasMore(moreAvailable);
-        hasMoreRef.current = moreAvailable;
-      } else {
-        setItems((prev) => [...prev, ...newItems]);
-        const moreAvailable = newItems.length >= limit && newItems.length > 0;
-        setHasMore(moreAvailable);
-        hasMoreRef.current = moreAvailable;
-      }
-
+      setItems((prev) => [...prev, ...newItems]);
+      const moreAvailable = newItems.length >= limit && newItems.length > 0;
+      setHasMore(moreAvailable);
+      hasMoreRef.current = moreAvailable;
       offsetRef.current = currentOffset + newItems.length;
     } catch (err: any) {
-      console.error('Failed to load batch:', err);
-      setError(err?.message || 'Failed to load items');
+      if (currentRequestId !== activeRequestIdRef.current) return;
+      console.error('Failed to load more items:', err);
+      setError(err?.message || 'Failed to load more items');
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      isFetchingRef.current = false;
+      if (currentRequestId === activeRequestIdRef.current) {
+        setLoadingMore(false);
+      }
+      isFetchingMoreRef.current = false;
     }
   }, [limit]);
 
-  const loadBatchRef = useRef(loadBatch);
-  loadBatchRef.current = loadBatch;
+  const loadMoreRef = useRef(loadMore);
+  loadMoreRef.current = loadMore;
 
   // Reset and load first page on dependency changes
   useEffect(() => {
-    loadBatch(true);
+    loadInitial();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
@@ -113,10 +128,9 @@ export function useInfiniteScroll<T>({
           entries[0].isIntersecting &&
           hasMoreRef.current &&
           !loadingRef.current &&
-          !loadingMoreRef.current &&
-          !isFetchingRef.current
+          !loadingMoreRef.current
         ) {
-          loadBatchRef.current(false);
+          loadMoreRef.current();
         }
       },
       {
@@ -130,8 +144,8 @@ export function useInfiniteScroll<T>({
   }, [threshold]);
 
   const reload = useCallback(async () => {
-    await loadBatch(true);
-  }, [loadBatch]);
+    await loadInitial();
+  }, [loadInitial]);
 
   return {
     items,

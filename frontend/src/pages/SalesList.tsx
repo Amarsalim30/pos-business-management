@@ -244,13 +244,13 @@ export const SalesListPage: React.FC = () => {
       </div>
 
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
           {/* Universal Search Bar */}
           <div className="md:col-span-4 relative">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search invoice #, client name, phone, product..."
+              placeholder="Search invoice #, customer, phone, item..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
@@ -268,22 +268,22 @@ export const SalesListPage: React.FC = () => {
           </div>
 
           {/* Date Range Picker */}
-          <div className="md:col-span-3 flex items-center space-x-1.5">
-            <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+          <div className="md:col-span-3 flex items-center space-x-1">
+            <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
             <input
               type="date"
               title="Date From"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono shadow-2xs"
+              className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono shadow-2xs"
             />
-            <span className="text-slate-400 text-xs">to</span>
+            <span className="text-slate-400 text-xs shrink-0">to</span>
             <input
               type="date"
               title="Date To"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono shadow-2xs"
+              className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono shadow-2xs"
             />
           </div>
 
@@ -292,13 +292,13 @@ export const SalesListPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setCustomerDropdownOpen(!customerDropdownOpen)}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl border text-xs transition-all cursor-pointer shadow-2xs ${
+              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl border text-xs transition-all cursor-pointer shadow-2xs min-w-0 ${
                 selectedCustomerId !== 'all'
                   ? 'border-amber-500 bg-amber-50/50 text-slate-900 font-bold'
                   : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
               }`}
             >
-              <div className="flex items-center gap-1.5 truncate">
+              <div className="flex items-center gap-1.5 truncate min-w-0 mr-1">
                 <Users className={`h-3.5 w-3.5 shrink-0 ${selectedCustomerId !== 'all' ? 'text-amber-600' : 'text-slate-400'}`} />
                 <span className="truncate">
                   {selectedCustomerId === 'all'
@@ -310,13 +310,13 @@ export const SalesListPage: React.FC = () => {
                     : `Customer #${selectedCustomerId}`}
                 </span>
                 {selectedCustomerObj && Number(selectedCustomerObj.balance) > 0 && (
-                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-700 font-mono font-bold shrink-0">
-                    Debt: KES {Number(selectedCustomerObj.balance).toLocaleString()}
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-rose-100 text-rose-700 font-mono font-bold shrink-0 truncate max-w-[90px]">
+                    {Number(selectedCustomerObj.balance).toLocaleString()} due
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center gap-1 shrink-0 ml-1">
+              <div className="flex items-center gap-1 shrink-0">
                 {selectedCustomerId !== 'all' && (
                   <span
                     onClick={(e) => {

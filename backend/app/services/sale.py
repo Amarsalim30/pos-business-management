@@ -624,6 +624,7 @@ def list_sales(
     status_filter: Optional[str] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
+    offset: int = 0,
     limit: int = 50
 ) -> List[Sale]:
     query = db.query(Sale).filter(Sale.store_id == store_id)
@@ -663,7 +664,7 @@ def list_sales(
     if date_to:
         query = query.filter(Sale.created_at <= date_to)
 
-    return query.order_by(desc(Sale.id)).limit(limit).all()
+    return query.order_by(desc(Sale.id)).offset(offset).limit(limit).all()
 
 
 def void_sale(db: Session, store_id: int, user_id: int, sale_id: int, reason: Optional[str] = None) -> Sale:

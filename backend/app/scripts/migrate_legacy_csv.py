@@ -111,7 +111,22 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
         else:
             print(f"⚠️ StockBalances.csv not found at {stock_bal_path} — falling back to SysBal")
 
-        # 4. Migrate Products from ITEMS.csv
+        # 4. Build cost price map from GRNs.csv (latest GRN cost per item)
+        grn_costs: Dict[str, Decimal] = {}
+        grns_path = os.path.join(csv_dir, "GRNs.csv")
+        if os.path.exists(grns_path):
+            with open(grns_path, "r", encoding="utf-8", errors="ignore") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    item_code = (row.get("Item") or "").strip()
+                    cost_price = _safe_decimal(row.get("CostPrice"))
+                    if item_code and cost_price > 0:
+                        grn_costs[item_code] = cost_price  # last row per item = latest GRN
+            print(f"✅ GRN costs loaded: {len(grn_costs)} items with buying prices")
+        else:
+            print(f"⚠️ GRNs.csv not found at {grns_path}")
+
+        # 5. Migrate Products from ITEMS.csv
         items_path = os.path.join(csv_dir, "ITEMS.csv")
         if not os.path.exists(items_path):
             print(f"❌ ITEMS.csv not found at {items_path}")
@@ -142,6 +157,8 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
                 # --- Prices ---
                 sp = _safe_decimal(row.get("SellingPrice01"))
                 bp = _safe_decimal(row.get("OPPrice01"))
+                if bp <= 0:
+                    bp = grn_costs.get(item_code, Decimal("0"))
                 sp_loose = _safe_decimal(row.get("SellingPriceLoose01"))
                 bp_loose = _safe_decimal(row.get("OPPriceLse01"))
                 reorder = _safe_decimal(row.get("ReOrderLevel"), "5")

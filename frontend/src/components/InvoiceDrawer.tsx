@@ -42,7 +42,7 @@ export const InvoiceDrawer: React.FC<InvoiceDrawerProps> = ({
   storeAddress = "Nairobi, Kenya",
   storeTaxId = "P051234567Z",
 }) => {
-  const [activeFormat, setActiveFormat] = useState<'a4' | 'thermal'>(defaultFormat);
+  const [activeFormat, setActiveFormat] = useState<'a4' | 'delivery' | 'thermal'>(defaultFormat);
   const [copied, setCopied] = useState(false);
   const thermalReceiptRef = useRef<HTMLDivElement>(null);
 
@@ -127,7 +127,11 @@ Thank you for your business!`;
               <div>
                 <div className="flex items-center space-x-2">
                   <span className="font-bold text-sm tracking-tight text-white">
-                    {preSaleDoc ? (preSaleDoc.type === 'proforma' ? 'Proforma Invoice' : 'Quotation') : 'Tax Invoice'} #{docNo}
+                    {activeFormat === 'delivery' 
+                      ? `Delivery Note #${docNo}` 
+                      : preSaleDoc 
+                      ? (preSaleDoc.type === 'proforma' ? 'Proforma Invoice' : 'Quotation') 
+                      : 'Tax Invoice'} #{docNo}
                   </span>
                   <button
                     onClick={handleCopyDocNo}
@@ -161,8 +165,21 @@ Thank you for your business!`;
                   }`}
                 >
                   <FileText className="h-3.5 w-3.5" />
-                  <span>A4 Business Doc</span>
+                  <span>A4 Invoice</span>
                 </button>
+                {sale && (
+                  <button
+                    onClick={() => setActiveFormat('delivery')}
+                    className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      activeFormat === 'delivery'
+                        ? 'bg-sky-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Delivery Note</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setActiveFormat('thermal')}
                   className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -195,7 +212,7 @@ Thank you for your business!`;
                 className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all cursor-pointer shadow-2xs"
               >
                 <Printer className="h-3.5 w-3.5" />
-                <span>Print ({activeFormat === 'a4' ? 'A4' : '80mm'})</span>
+                <span>Print ({activeFormat === 'a4' ? 'A4 Invoice' : activeFormat === 'delivery' ? 'Delivery Note' : '80mm Thermal'})</span>
               </button>
 
               <button
@@ -244,12 +261,13 @@ Thank you for your business!`;
 
           {/* Main Scrollable Document Canvas */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-8 print:p-0 print:overflow-visible">
-            {activeFormat === 'a4' ? (
-              /* A4 Formal Tax Invoice View */
+            {activeFormat === 'a4' || activeFormat === 'delivery' ? (
+              /* A4 Formal Tax Invoice / Delivery Note View */
               <div className="print:block">
                 <A4InvoiceDocument
                   sale={sale}
                   preSaleDoc={preSaleDoc}
+                  isDeliveryNote={activeFormat === 'delivery'}
                   storeName={storeName}
                   storePhone={storePhone}
                   storeAddress={storeAddress}

@@ -601,7 +601,7 @@ export const CustomersPage: React.FC = () => {
             </div>
 
             {/* Statement Document Body */}
-            <div ref={ledgerPrintRef} className="p-4 sm:p-6 overflow-y-auto flex-1 font-sans text-xs space-y-4 bg-slate-50/50 print:bg-white print:p-4">
+            <div ref={ledgerPrintRef} id="executive-report-container" className="p-4 sm:p-6 overflow-y-auto flex-1 font-sans text-xs space-y-4 bg-slate-50/50 print:bg-white print:p-4">
               
               {/* Executive KPI Summary Dashboard */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:grid-cols-3">

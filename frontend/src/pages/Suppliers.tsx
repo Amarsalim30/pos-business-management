@@ -808,7 +808,7 @@ export const SuppliersPage: React.FC = () => {
             </div>
 
             {/* Scrollable Statement Content */}
-            <div ref={ledgerPrintRef} className="p-5 overflow-y-auto flex-1 space-y-4">
+            <div ref={ledgerPrintRef} id="executive-report-container" className="p-5 overflow-y-auto flex-1 space-y-4">
               {/* Print Header */}
               <div className="hidden print:block mb-6 border-b pb-4">
                 <div className="text-xl font-black uppercase tracking-wider text-slate-900">SUPPLIER STATEMENT OF ACCOUNT</div>

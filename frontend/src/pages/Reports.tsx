@@ -219,7 +219,7 @@ export const ReportsPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div id="executive-report-container" className="space-y-6">
       {/* Top Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 print:hidden">
         <div>

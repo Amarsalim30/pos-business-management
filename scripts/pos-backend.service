@@ -1,0 +1,18 @@
+[Unit]
+Description=Modern POS & Business Management System - Backend API Service
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Documents/Projects/pos-business/backend
+Environment="PATH=%h/Documents/Projects/pos-business/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=%h/Documents/Projects/pos-business/backend"
+ExecStart=%h/Documents/Projects/pos-business/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

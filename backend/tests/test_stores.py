@@ -76,3 +76,32 @@ def test_delete_recurring_expense(owner_auth_client):
     del_res = owner_auth_client.delete(f"/api/v1/stores/recurring-expenses/{created['id']}")
     assert del_res.status_code == 200
     assert "deleted" in del_res.json()["message"]
+
+
+def test_download_database_backup_as_owner(owner_auth_client):
+    res = owner_auth_client.get("/api/v1/stores/backup/export")
+    assert res.status_code == 200
+    assert "application/sql" in res.headers.get("content-type", "")
+    assert "attachment; filename=" in res.headers.get("content-disposition", "")
+    content = res.text
+    assert "-- POS & Business Management System Database Backup" in content
+
+
+def test_download_database_backup_as_staff_forbidden(staff_auth_client):
+    res = staff_auth_client.get("/api/v1/stores/backup/export")
+    assert res.status_code == 403
+
+
+def test_download_database_backup_unauthenticated(client):
+    res = client.get("/api/v1/stores/backup/export")
+    assert res.status_code == 401
+
+
+def test_get_backup_status_as_owner(owner_auth_client):
+    res = owner_auth_client.get("/api/v1/stores/backup/status")
+    assert res.status_code == 200
+    data = res.json()
+    assert "backup_directory" in data
+    assert "status" in data
+    assert data["status"] == "ready"
+

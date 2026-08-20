@@ -1,5 +1,7 @@
 from typing import List, Optional
+import datetime
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.store import (
@@ -17,6 +19,7 @@ from app.services.store import (
     update_recurring_expense,
     delete_recurring_expense
 )
+from app.services.backup import export_database_sql, get_backup_metadata
 from app.dependencies import require_owner, get_current_user
 from app.models.user import User
 
@@ -89,3 +92,31 @@ def delete_expense(
 ):
     delete_recurring_expense(db, expense_id, current_user_id=current_user.id)
     return {"message": "Recurring expense deleted"}
+
+
+@router.get("/backup/export")
+def download_database_backup(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_owner)
+):
+    """Exports a complete database SQL snapshot streamed directly to the browser."""
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"pos_database_backup_{timestamp}.sql"
+    
+    return StreamingResponse(
+        content=export_database_sql(db),
+        media_type="application/sql",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-cache"
+        }
+    )
+
+
+@router.get("/backup/status")
+def get_backup_status(
+    current_user: User = Depends(require_owner)
+):
+    """Returns metadata about locally stored database backups."""
+    return get_backup_metadata()
+

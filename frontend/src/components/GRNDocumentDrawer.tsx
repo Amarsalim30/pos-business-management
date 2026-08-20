@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { GoodsReceivedNote } from '../types';
+import { COMPANY_CONSTANTS } from '../constants/companyConstants';
 import {
   Printer,
   X,
@@ -32,10 +33,10 @@ export const GRNDocumentDrawer: React.FC<GRNDocumentDrawerProps> = ({
   isOpen,
   onClose,
   defaultFormat = 'a4',
-  storeName = "SOLAR & ELECTRICAL HARDWARE SUPPLIES",
-  storePhone = "+254 700 000 000",
-  storeAddress = "Nairobi, Kenya",
-  storeTaxId = "P051234567Z",
+  storeName = COMPANY_CONSTANTS.companyName,
+  storePhone = COMPANY_CONSTANTS.phone,
+  storeAddress = COMPANY_CONSTANTS.address,
+  storeTaxId = COMPANY_CONSTANTS.taxId,
   onViewSupplierStatement
 }) => {
   const [activeFormat, setActiveFormat] = useState<'a4' | 'thermal'>(defaultFormat);

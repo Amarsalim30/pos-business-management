@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Printer, X, Zap } from 'lucide-react';
 import type { Sale } from '../types';
+import { COMPANY_CONSTANTS } from '../constants/companyConstants';
 
 interface ReceiptModalProps {
   sale: Sale | null;
@@ -13,10 +14,10 @@ interface ReceiptModalProps {
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   sale,
-  storeName = "SOLAR & ELECTRICAL HARDWARE",
-  storePhone = "+254 700 000 000",
-  storeAddress = "Nairobi, Kenya",
-  storeTaxId = "P051234567Z",
+  storeName = COMPANY_CONSTANTS.companyName,
+  storePhone = COMPANY_CONSTANTS.phone,
+  storeAddress = COMPANY_CONSTANTS.address,
+  storeTaxId = COMPANY_CONSTANTS.taxId,
   onClose
 }) => {
   const receiptRef = useRef<HTMLDivElement>(null);

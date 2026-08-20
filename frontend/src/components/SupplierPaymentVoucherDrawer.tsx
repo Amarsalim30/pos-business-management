@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { SupplierPayment } from '../types';
+import { COMPANY_CONSTANTS } from '../constants/companyConstants';
 import {
   Printer,
   X,
@@ -27,10 +28,10 @@ export const SupplierPaymentVoucherDrawer: React.FC<SupplierPaymentVoucherDrawer
   payment,
   isOpen,
   onClose,
-  storeName = "SOLAR & ELECTRICAL HARDWARE SUPPLIES",
-  storePhone = "+254 700 000 000",
-  storeAddress = "Nairobi, Kenya",
-  storeTaxId = "P051234567Z",
+  storeName = COMPANY_CONSTANTS.companyName,
+  storePhone = COMPANY_CONSTANTS.phone,
+  storeAddress = COMPANY_CONSTANTS.address,
+  storeTaxId = COMPANY_CONSTANTS.taxId,
   onViewSupplierStatement
 }) => {
   const [copied, setCopied] = useState(false);

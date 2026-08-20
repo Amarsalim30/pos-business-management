@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Sale, PreSaleDocument } from '../types';
 import { A4InvoiceDocument } from './A4InvoiceDocument';
+import { COMPANY_CONSTANTS } from '../constants/companyConstants';
 import {
   Printer,
   X,
@@ -37,10 +38,10 @@ export const InvoiceDrawer: React.FC<InvoiceDrawerProps> = ({
   defaultFormat = 'a4',
   onRecordPayment,
   onVoidSale,
-  storeName = "SOLAR & ELECTRICAL HARDWARE SUPPLIES",
-  storePhone = "+254 700 000 000",
-  storeAddress = "Nairobi, Kenya",
-  storeTaxId = "P051234567Z",
+  storeName = COMPANY_CONSTANTS.companyName,
+  storePhone = COMPANY_CONSTANTS.phone,
+  storeAddress = COMPANY_CONSTANTS.address,
+  storeTaxId = COMPANY_CONSTANTS.taxId,
 }) => {
   const [activeFormat, setActiveFormat] = useState<'a4' | 'delivery' | 'thermal'>(defaultFormat);
   const [copied, setCopied] = useState(false);

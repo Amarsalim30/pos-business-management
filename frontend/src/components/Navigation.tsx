@@ -97,6 +97,7 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Group 2: Sales & Customers
+  // Group 2: Sales & Customers
   const salesItems: NavSubItem[] = [
     {
       label: 'Sales & Invoices',
@@ -117,9 +118,9 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
       path: '/customers',
       icon: Users,
       description: 'Customer directory, balances & credit ledgers',
-      permission: 'customers:manage'
+      permission: 'customers:credit_ledger'
     }
-  ].filter(item => isOwner || !item.permission || hasPermission(item.permission) || (item.permission === 'reports:view_sales' && hasPermission('pos:sell')));
+  ].filter(item => isOwner || !item.permission || hasPermission(item.permission) || (item.permission === 'reports:view_sales' && hasPermission('pos:sell')) || (item.permission === 'customers:credit_ledger' && hasPermission('pos:sell')));
 
   const salesGroup: NavGroup = {
     id: 'sales_customers',
@@ -151,7 +152,7 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
       description: 'Physical stock counts & variance reconciliation',
       permission: 'inventory:stock_take'
     }
-  ].filter(item => isOwner || !item.permission || hasPermission(item.permission) || (item.permission === 'inventory:view' && hasPermission('catalog:edit')));
+  ].filter(item => isOwner || !item.permission || hasPermission(item.permission) || (item.permission === 'inventory:view' && hasPermission('catalog:manage')));
 
   const inventoryGroup: NavGroup = {
     id: 'inventory',
@@ -167,16 +168,16 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
       path: '/purchases',
       icon: ShoppingBag,
       description: 'Purchase orders, Goods Received Notes & freight expenses',
-      permission: 'purchases:create_po'
+      permission: 'purchases:orders'
     },
     {
       label: 'Suppliers',
       path: '/suppliers',
       icon: Truck,
       description: 'Supplier accounts, balances & payment records',
-      permission: 'purchases:manage_suppliers'
+      permission: 'suppliers:manage'
     }
-  ].filter(item => isOwner || !item.permission || hasPermission(item.permission) || (item.permission === 'purchases:create_po' && hasPermission('purchases:receive_grn')));
+  ].filter(item => isOwner || !item.permission || hasPermission(item.permission) || (item.permission === 'purchases:orders' && hasPermission('purchases:receive_grn')) || (item.permission === 'suppliers:manage' && (hasPermission('purchases:orders') || hasPermission('purchases:receive_grn'))));
 
   const procurementGroup: NavGroup = {
     id: 'procurement',

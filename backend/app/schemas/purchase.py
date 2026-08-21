@@ -30,9 +30,17 @@ class PurchaseItemResponse(BaseModel):
 # --- Purchase Expense ---
 class PurchaseExpenseCreate(BaseModel):
     category: str = "transport"  # 'transport', 'labour', 'customs', 'other'
-    description: str
+    description: Optional[str] = None
     amount: Decimal
     payment_method: str = "cash"
+    reference: Optional[str] = None
+
+
+class PurchaseExpenseUpdate(BaseModel):
+    category: Optional[str] = None
+    description: Optional[str] = None
+    amount: Optional[Decimal] = None
+    payment_method: Optional[str] = None
     reference: Optional[str] = None
 
 
@@ -58,6 +66,14 @@ class PurchaseOrderCreate(BaseModel):
     is_etr: bool = False
     notes: Optional[str] = None
     items: List[PurchaseItemCreate]
+
+
+class PurchaseOrderUpdate(BaseModel):
+    supplier_id: Optional[int] = None
+    expected_delivery_date: Optional[date] = None
+    is_etr: Optional[bool] = None
+    notes: Optional[str] = None
+    items: Optional[List[PurchaseItemCreate]] = None
 
 
 class PurchaseOrderResponse(BaseModel):
@@ -117,6 +133,12 @@ class GRNCreate(BaseModel):
     invoice_number: Optional[str] = None
     notes: Optional[str] = None
     items: List[GRNItemCreate]
+
+
+class GRNUpdate(BaseModel):
+    invoice_number: Optional[str] = None
+    notes: Optional[str] = None
+    items: Optional[List[GRNItemCreate]] = None
 
 
 class GRNResponse(BaseModel):

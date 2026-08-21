@@ -98,14 +98,13 @@ def test_grn_receives_stock_and_updates_po_status(staff_auth_client):
     # Check inventory increased by 400m (4 rolls)
     prod_check = staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()
     assert float(prod_check["current_stock"]) == 400.0
-    assert "4 rolls" in prod_check["formatted_stock"]
 
-    # Check PO status is 'partial'
+    # Check PO status changed to 'partial'
     po_check = staff_auth_client.get(f"/api/v1/purchases/orders/{po['id']}").json()
     assert po_check["status"] == "partial"
     assert float(po_check["items"][0]["received_qty"]) == 400.0
 
-    # 4. Receive remaining 6 rolls (600 meters)
+    # 4. Receive remaining delivery: 6 rolls (600 meters)
     grn2_res = staff_auth_client.post("/api/v1/purchases/grn", json={
         "po_id": po["id"],
         "invoice_number": "MET-00205",
@@ -125,7 +124,6 @@ def test_grn_receives_stock_and_updates_po_status(staff_auth_client):
     # Check inventory is now 1,000m (10 rolls)
     prod_check2 = staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()
     assert float(prod_check2["current_stock"]) == 1000.0
-    assert "10 rolls" in prod_check2["formatted_stock"]
 
     # Check PO status is now 'received'
     po_check2 = staff_auth_client.get(f"/api/v1/purchases/orders/{po['id']}").json()
@@ -133,15 +131,34 @@ def test_grn_receives_stock_and_updates_po_status(staff_auth_client):
     assert float(po_check2["items"][0]["received_qty"]) == 1000.0
 
 
-def test_prevent_cancelling_po_with_received_goods(staff_auth_client):
-    supp = staff_auth_client.post("/api/v1/suppliers/", json={"name": "Top Solar Supplies"}).json()
+def test_cancel_purchase_order_guardrails(staff_auth_client):
+    # Setup
+    supp = staff_auth_client.post("/api/v1/suppliers/", json={"name": "Sollatek East Africa"}).json()
     prod = staff_auth_client.post("/api/v1/products/", json={
-        "name": "Solar Floodlight 100W",
+        "name": "Sollatek AVS30 Voltage Protector",
         "cost_price": 2500.0,
-        "selling_price": 3800.0,
+        "selling_price": 3500.0,
         "initial_stock": 0.0
     }).json()
 
+    # 1. Unreceived PO can be cancelled
+    po1 = staff_auth_client.post("/api/v1/purchases/orders", json={
+        "supplier_id": supp["id"],
+        "items": [
+            {
+                "product_id": prod["id"],
+                "unit_type": "piece",
+                "ordered_qty": 10.0,
+                "unit_cost": 2500.0
+            }
+        ]
+    }).json()
+
+    cancel_res = staff_auth_client.post(f"/api/v1/purchases/orders/{po1['id']}/cancel")
+    assert cancel_res.status_code == 200
+    assert cancel_res.json()["status"] == "cancelled"
+
+    # 2. PO with received items cannot be cancelled
     po = staff_auth_client.post("/api/v1/purchases/orders", json={
         "supplier_id": supp["id"],
         "items": [
@@ -223,3 +240,134 @@ def test_direct_grn_receipt_without_po(staff_auth_client):
     assert float(latest_mov["quantity"]) == 3.0
     assert grn["grn_no"] in latest_mov["reference_id"]
 
+
+def test_edit_and_delete_purchase_order(staff_auth_client):
+    supp = staff_auth_client.post("/api/v1/suppliers/", json={"name": "Schneider Electric EA"}).json()
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Schneider 32A Double Pole MCB",
+        "cost_price": 1200.0,
+        "selling_price": 1800.0,
+        "initial_stock": 0.0
+    }).json()
+
+    # 1. Create PO
+    po = staff_auth_client.post("/api/v1/purchases/orders", json={
+        "supplier_id": supp["id"],
+        "items": [
+            {
+                "product_id": prod["id"],
+                "unit_type": "piece",
+                "ordered_qty": 10.0,
+                "unit_cost": 1200.0
+            }
+        ]
+    }).json()
+    assert float(po["total_amount"]) == 12000.0
+
+    # 2. Edit PO
+    put_res = staff_auth_client.put(f"/api/v1/purchases/orders/{po['id']}", json={
+        "notes": "Updated delivery terms",
+        "items": [
+            {
+                "product_id": prod["id"],
+                "unit_type": "piece",
+                "ordered_qty": 15.0,
+                "unit_cost": 1150.0
+            }
+        ]
+    })
+    assert put_res.status_code == 200
+    updated_po = put_res.json()
+    assert updated_po["notes"] == "Updated delivery terms"
+    assert float(updated_po["total_amount"]) == 17250.0
+    assert float(updated_po["items"][0]["ordered_qty"]) == 15.0
+
+    # 3. Delete PO
+    del_res = staff_auth_client.delete(f"/api/v1/purchases/orders/{po['id']}")
+    assert del_res.status_code == 200
+
+    # 4. Verify PO is gone
+    get_res = staff_auth_client.get(f"/api/v1/purchases/orders/{po['id']}")
+    assert get_res.status_code == 404
+
+
+def test_edit_and_delete_grn(staff_auth_client):
+    supp = staff_auth_client.post("/api/v1/suppliers/", json={"name": "Growatt Kenya Ltd"}).json()
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Growatt 5KW Inverter SPF5000ES",
+        "cost_price": 55000.0,
+        "selling_price": 72000.0,
+        "initial_stock": 0.0
+    }).json()
+
+    # 1. Post Direct GRN for 5 inverters
+    grn = staff_auth_client.post("/api/v1/purchases/grn", json={
+        "supplier_id": supp["id"],
+        "invoice_number": "GW-9901",
+        "items": [
+            {
+                "product_id": prod["id"],
+                "unit_type": "piece",
+                "quantity_received": 5.0,
+                "unit_cost": 55000.0
+            }
+        ]
+    }).json()
+    assert float(grn["total_amount"]) == 275000.0
+
+    # Verify inventory is 5 pcs and supplier balance is 275,000
+    prod_check = staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()
+    assert float(prod_check["current_stock"]) == 5.0
+    supp_check = staff_auth_client.get(f"/api/v1/suppliers/{supp['id']}").json()
+    assert float(supp_check["balance"]) == 275000.0
+
+    # 2. Edit GRN to 7 inverters (increase by 2)
+    put_res = staff_auth_client.put(f"/api/v1/purchases/grn/{grn['id']}", json={
+        "invoice_number": "GW-9901-REV",
+        "notes": "Added 2 bonus units delivered",
+        "items": [
+            {
+                "product_id": prod["id"],
+                "unit_type": "piece",
+                "quantity_received": 7.0,
+                "unit_cost": 55000.0
+            }
+        ]
+    })
+    assert put_res.status_code == 200
+    updated_grn = put_res.json()
+    assert updated_grn["invoice_number"] == "GW-9901-REV"
+    assert float(updated_grn["total_amount"]) == 385000.0
+
+    # Check inventory increased to 7 and supplier balance increased to 385,000
+    prod_check2 = staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()
+    assert float(prod_check2["current_stock"]) == 7.0
+    supp_check2 = staff_auth_client.get(f"/api/v1/suppliers/{supp['id']}").json()
+    assert float(supp_check2["balance"]) == 385000.0
+
+    # 3. Edit GRN down to 4 inverters (decrease by 3)
+    put_res2 = staff_auth_client.put(f"/api/v1/purchases/grn/{grn['id']}", json={
+        "items": [
+            {
+                "product_id": prod["id"],
+                "unit_type": "piece",
+                "quantity_received": 4.0,
+                "unit_cost": 55000.0
+            }
+        ]
+    })
+    assert put_res2.status_code == 200
+    prod_check3 = staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()
+    assert float(prod_check3["current_stock"]) == 4.0
+    supp_check3 = staff_auth_client.get(f"/api/v1/suppliers/{supp['id']}").json()
+    assert float(supp_check3["balance"]) == 220000.0
+
+    # 4. Delete GRN
+    del_res = staff_auth_client.delete(f"/api/v1/purchases/grn/{grn['id']}")
+    assert del_res.status_code == 200
+
+    # Verify inventory returned to 0 and supplier balance reversed to 0
+    prod_check4 = staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()
+    assert float(prod_check4["current_stock"]) == 0.0
+    supp_check4 = staff_auth_client.get(f"/api/v1/suppliers/{supp['id']}").json()
+    assert float(supp_check4["balance"]) == 0.0

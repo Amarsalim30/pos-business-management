@@ -7,7 +7,7 @@ from app.models.purchase import PurchaseOrder, PurchaseItem, PurchaseExpense, Go
 from app.models.supplier import Supplier
 from app.models.product import Product
 from app.models.inventory import Inventory, StockMovement
-from app.schemas.purchase import PurchaseOrderCreate, PurchaseExpenseCreate, GRNCreate
+from app.schemas.purchase import PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseExpenseCreate, GRNCreate, GRNUpdate
 
 
 def _generate_po_number(db: Session, store_id: int) -> str:
@@ -84,6 +84,105 @@ def create_purchase_order(db: Session, store_id: int, user_id: int, po_in: Purch
     return po
 
 
+def update_purchase_order(db: Session, store_id: int, po_id: int, po_update: PurchaseOrderUpdate) -> PurchaseOrder:
+    po = get_purchase_order_by_id(db, store_id, po_id)
+    if po.status == "cancelled":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot edit a cancelled purchase order")
+
+    if po_update.supplier_id is not None:
+        supplier = db.query(Supplier).filter(Supplier.id == po_update.supplier_id, Supplier.store_id == store_id).first()
+        if not supplier:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+        po.supplier_id = po_update.supplier_id
+
+    if po_update.expected_delivery_date is not None:
+        po.expected_delivery_date = po_update.expected_delivery_date
+
+    if po_update.is_etr is not None:
+        po.is_etr = po_update.is_etr
+
+    if po_update.notes is not None:
+        po.notes = po_update.notes.strip() if po_update.notes else None
+
+    if po_update.items is not None:
+        if not po_update.items:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Purchase order must contain at least one item")
+
+        # Check existing received quantities to prevent invalid removals or reductions
+        existing_received = {it.product_id: it.received_qty for it in po.items if it.received_qty > Decimal("0.00")}
+        new_items_by_prod = {it.product_id: it for it in po_update.items}
+
+        for prod_id, rec_qty in existing_received.items():
+            if prod_id not in new_items_by_prod:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cannot remove product ID {prod_id} because {rec_qty} items have already been received via GRN"
+                )
+            if new_items_by_prod[prod_id].ordered_qty < rec_qty:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Ordered quantity for product ID {prod_id} cannot be less than already received quantity ({rec_qty})"
+                )
+
+        subtotal = Decimal("0.00")
+        new_items = []
+        for it in po_update.items:
+            product = db.query(Product).filter(Product.id == it.product_id, Product.store_id == store_id).first()
+            if not product:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Product with ID {it.product_id} not found")
+
+            if it.ordered_qty <= Decimal("0.00"):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ordered quantity must be greater than zero")
+            if it.unit_cost <= Decimal("0.00"):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unit cost must be greater than zero")
+
+            line_total = it.ordered_qty * it.unit_cost
+            subtotal += line_total
+            rec_qty = existing_received.get(it.product_id, Decimal("0.00"))
+
+            new_items.append(PurchaseItem(
+                po_id=po_id,
+                product_id=it.product_id,
+                unit_type=it.unit_type or product.unit_type,
+                ordered_qty=it.ordered_qty,
+                received_qty=rec_qty,
+                unit_cost=it.unit_cost,
+                total_cost=line_total
+            ))
+
+        po.items.clear()
+        po.items.extend(new_items)
+        po.subtotal = subtotal
+        po.tax_amount = Decimal("0.00")
+        po.total_amount = subtotal + po.tax_amount
+
+        # Re-evaluate PO status
+        all_received = all(it.received_qty >= it.ordered_qty for it in new_items)
+        any_received = any(it.received_qty > Decimal("0.00") for it in new_items)
+        po.status = "received" if all_received else ("partial" if any_received else "ordered")
+
+    db.commit()
+    db.refresh(po)
+    return po
+
+
+def delete_purchase_order(db: Session, store_id: int, po_id: int) -> bool:
+    po = get_purchase_order_by_id(db, store_id, po_id)
+
+    any_received = any(it.received_qty > Decimal("0.00") for it in po.items)
+    grn_count = db.query(GoodsReceivedNote).filter(GoodsReceivedNote.po_id == po_id).count()
+    if any_received or grn_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete Purchase Order with received goods. Please delete the associated Goods Received Notes (GRNs) first."
+        )
+
+    # With cascade="all, delete-orphan", deleting po deletes items and expenses cleanly
+    db.delete(po)
+    db.commit()
+    return True
+
+
 def list_purchase_orders(
     db: Session,
     store_id: int,
@@ -126,12 +225,14 @@ def add_purchase_expense(db: Session, store_id: int, user_id: int, po_id: int, e
     if expense_in.amount <= Decimal("0.00"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Expense amount must be greater than zero")
 
+    desc = expense_in.description.strip() if expense_in.description else f"Purchase expense ({expense_in.category})"
+
     expense = PurchaseExpense(
         po_id=po_id,
         store_id=store_id,
         user_id=user_id,
         category=expense_in.category,
-        description=expense_in.description.strip(),
+        description=desc,
         amount=expense_in.amount,
         payment_method=expense_in.payment_method,
         reference=expense_in.reference.strip() if expense_in.reference else None
@@ -304,6 +405,221 @@ def receive_goods_grn(db: Session, store_id: int, user_id: int, grn_in: GRNCreat
     db.commit()
     db.refresh(grn)
     return grn
+
+
+def update_goods_received_note(
+    db: Session,
+    store_id: int,
+    user_id: int,
+    grn_id: int,
+    grn_update: GRNUpdate
+) -> GoodsReceivedNote:
+    grn = get_grn_by_id(db, store_id, grn_id)
+    po = db.query(PurchaseOrder).filter(PurchaseOrder.id == grn.po_id, PurchaseOrder.store_id == store_id).first() if grn.po_id else None
+    supplier = db.query(Supplier).filter(Supplier.id == grn.supplier_id, Supplier.store_id == store_id).first() if grn.supplier_id else None
+
+    if grn_update.invoice_number is not None:
+        grn.invoice_number = grn_update.invoice_number.strip() if grn_update.invoice_number else None
+
+    if grn_update.notes is not None:
+        grn.notes = grn_update.notes.strip() if grn_update.notes else None
+
+    if grn_update.items is not None:
+        if not grn_update.items:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="GRN must contain at least one item")
+
+        old_items_map = {it.product_id: it for it in grn.items}
+        all_prod_ids = sorted(list(set(list(old_items_map.keys()) + [it.product_id for it in grn_update.items])))
+
+        locked_inventories = {
+            inv.product_id: inv
+            for inv in db.query(Inventory).filter(
+                Inventory.store_id == store_id,
+                Inventory.product_id.in_(all_prod_ids)
+            ).with_for_update().all()
+        }
+
+        parsed_new_items = []
+        total_new_amount = Decimal("0.00")
+
+        for it in grn_update.items:
+            product = db.query(Product).filter(Product.id == it.product_id, Product.store_id == store_id).first()
+            if not product:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Product {it.product_id} not found")
+
+            qty_received = it.quantity_received
+            if qty_received is None or qty_received <= Decimal("0.00"):
+                if product.unit_type == "roll":
+                    from app.services.inventory import roll_count_to_meters
+                    qty_received = roll_count_to_meters(it.rolls_received or 0, it.loose_meters_received or Decimal("0.00"), product.meters_per_roll)
+                elif it.rolls_received:
+                    qty_received = Decimal(str(it.rolls_received))
+
+            if not qty_received or qty_received <= Decimal("0.00"):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Quantity received for '{product.name}' must be greater than zero")
+
+            if product.unit_type == "roll" and product.meters_per_roll and product.meters_per_roll > 0:
+                line_total = (qty_received / product.meters_per_roll) * it.unit_cost
+            else:
+                line_total = qty_received * it.unit_cost
+
+            total_new_amount += line_total
+            parsed_new_items.append((it, product, qty_received, line_total))
+
+        # Calculate per-product new quantities
+        new_prod_qty_map = {}
+        for it, prod, q, lt in parsed_new_items:
+            new_prod_qty_map[it.product_id] = new_prod_qty_map.get(it.product_id, Decimal("0.00")) + q
+
+        # Apply stock deltas
+        for prod_id in all_prod_ids:
+            old_q = sum((it.quantity_received for it in grn.items if it.product_id == prod_id), Decimal("0.00"))
+            new_q = new_prod_qty_map.get(prod_id, Decimal("0.00"))
+            delta_q = new_q - old_q
+
+            if delta_q != Decimal("0.00"):
+                inv = locked_inventories.get(prod_id)
+                if not inv:
+                    inv = Inventory(product_id=prod_id, store_id=store_id, quantity=Decimal("0.00"))
+                    db.add(inv)
+                    db.flush()
+                    locked_inventories[prod_id] = inv
+
+                prev_qty = Decimal(str(inv.quantity or "0.00"))
+                updated_qty = prev_qty + delta_q
+                if updated_qty < Decimal("0.00"):
+                    prod_obj = db.query(Product).filter(Product.id == prod_id).first()
+                    p_name = prod_obj.name if prod_obj else f"ID {prod_id}"
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Cannot reduce GRN quantity for '{p_name}' by {abs(delta_q)}: available stock would drop below zero (currently {prev_qty})"
+                    )
+
+                inv.quantity = updated_qty
+                inv.last_updated = datetime.now(timezone.utc)
+
+                product_obj = db.query(Product).filter(Product.id == prod_id).first()
+                unit_sold = "meter" if product_obj and product_obj.unit_type == "roll" else "piece"
+                mov_type = "in" if delta_q > 0 else "out"
+
+                db.add(StockMovement(
+                    product_id=prod_id,
+                    store_id=store_id,
+                    type=mov_type,
+                    quantity=abs(delta_q),
+                    unit_sold=unit_sold,
+                    previous_quantity=prev_qty,
+                    new_quantity=updated_qty,
+                    reference_id=grn.grn_no,
+                    note=f"GRN update adjustment ({grn.grn_no})",
+                    user_id=user_id
+                ))
+
+                if po:
+                    p_item = next((pi for pi in po.items if pi.product_id == prod_id), None)
+                    if p_item:
+                        p_item.received_qty = max(Decimal("0.00"), p_item.received_qty + delta_q)
+
+        # Adjust supplier balance
+        delta_total = total_new_amount - grn.total_amount
+        if supplier and delta_total != Decimal("0.00"):
+            supplier.balance = max(Decimal("0.00"), supplier.balance + delta_total)
+
+        # Replace GRN items using relationship collection
+        new_grn_items = []
+        for it, product, qty_received, line_total in parsed_new_items:
+            # Update product buying cost price if provided
+            if it.unit_cost is not None and it.unit_cost > 0:
+                product.cost_price = it.unit_cost
+                if product.unit_type == "roll" and product.meters_per_roll:
+                    product.cost_per_meter = Decimal(str(it.unit_cost)) / product.meters_per_roll
+
+            new_grn_items.append(GoodsReceivedItem(
+                grn_id=grn.id,
+                product_id=it.product_id,
+                unit_type=it.unit_type or product.unit_type,
+                quantity_received=qty_received,
+                rolls_received=it.rolls_received or 0,
+                loose_meters_received=it.loose_meters_received or Decimal("0.00"),
+                unit_cost=it.unit_cost,
+                total_cost=line_total
+            ))
+
+        grn.items.clear()
+        grn.items.extend(new_grn_items)
+        grn.total_amount = total_new_amount
+
+        # Re-evaluate PO status if linked
+        if po:
+            all_fully_received = all(p_it.received_qty >= p_it.ordered_qty for p_it in po.items)
+            any_received = any(p_it.received_qty > Decimal("0.00") for p_it in po.items)
+            po.status = "received" if all_fully_received else ("partial" if any_received else "ordered")
+
+    db.commit()
+    db.refresh(grn)
+    return grn
+
+
+def delete_goods_received_note(
+    db: Session,
+    store_id: int,
+    user_id: int,
+    grn_id: int
+) -> bool:
+    grn = get_grn_by_id(db, store_id, grn_id)
+    po = db.query(PurchaseOrder).filter(PurchaseOrder.id == grn.po_id, PurchaseOrder.store_id == store_id).first() if grn.po_id else None
+    supplier = db.query(Supplier).filter(Supplier.id == grn.supplier_id, Supplier.store_id == store_id).first() if grn.supplier_id else None
+
+    sorted_prod_ids = sorted(list(set(it.product_id for it in grn.items)))
+    locked_inventories = {
+        inv.product_id: inv
+        for inv in db.query(Inventory).filter(
+            Inventory.store_id == store_id,
+            Inventory.product_id.in_(sorted_prod_ids)
+        ).with_for_update().all()
+    }
+
+    # Reverse physical stock and PO items
+    for it in grn.items:
+        inv = locked_inventories.get(it.product_id)
+        if inv:
+            prev_qty = Decimal(str(inv.quantity or "0.00"))
+            new_qty = max(Decimal("0.00"), prev_qty - it.quantity_received)
+            inv.quantity = new_qty
+            inv.last_updated = datetime.now(timezone.utc)
+
+            prod_obj = db.query(Product).filter(Product.id == it.product_id).first()
+            unit_sold = "meter" if prod_obj and prod_obj.unit_type == "roll" else "piece"
+
+            db.add(StockMovement(
+                product_id=it.product_id,
+                store_id=store_id,
+                type="out",
+                quantity=it.quantity_received,
+                unit_sold=unit_sold,
+                previous_quantity=prev_qty,
+                new_quantity=new_qty,
+                reference_id=grn.grn_no,
+                note=f"GRN deletion stock reversal ({grn.grn_no})",
+                user_id=user_id
+            ))
+
+        if po:
+            matching_po_item = next((p_it for p_it in po.items if p_it.product_id == it.product_id), None)
+            if matching_po_item:
+                matching_po_item.received_qty = max(Decimal("0.00"), matching_po_item.received_qty - it.quantity_received)
+
+    if po:
+        all_fully_received = all(p_it.received_qty >= p_it.ordered_qty for p_it in po.items)
+        any_received = any(p_it.received_qty > Decimal("0.00") for p_it in po.items)
+        po.status = "received" if all_fully_received else ("partial" if any_received else "ordered")
+
+    if supplier:
+        supplier.balance = max(Decimal("0.00"), supplier.balance - grn.total_amount)
+
+    db.delete(grn)
+    db.commit()
+    return True
 
 
 def list_goods_received_notes(

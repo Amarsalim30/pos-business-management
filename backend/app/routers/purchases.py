@@ -5,10 +5,12 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.purchase import (
     PurchaseOrderCreate,
+    PurchaseOrderUpdate,
     PurchaseOrderResponse,
     PurchaseExpenseCreate,
     PurchaseExpenseResponse,
     GRNCreate,
+    GRNUpdate,
     GRNResponse
 )
 from app.services import purchase as purchase_service
@@ -156,6 +158,29 @@ def get_order(
     return _format_po(po)
 
 
+@router.put("/orders/{po_id}", response_model=PurchaseOrderResponse)
+def put_order(
+    po_id: int,
+    po_update: PurchaseOrderUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    po = purchase_service.update_purchase_order(db, target_store_id, po_id, po_update)
+    return _format_po(po)
+
+
+@router.delete("/orders/{po_id}")
+def delete_order(
+    po_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    purchase_service.delete_purchase_order(db, target_store_id, po_id)
+    return {"message": "Purchase order deleted successfully"}
+
+
 @router.post("/orders/{po_id}/expenses", response_model=PurchaseExpenseResponse, status_code=status.HTTP_201_CREATED)
 def post_order_expense(
     po_id: int,
@@ -215,3 +240,26 @@ def get_grn_detail(
     target_store_id = current_user.store_id or 1
     grn = purchase_service.get_grn_by_id_or_no(db, target_store_id, grn_id)
     return _format_grn(grn)
+
+
+@router.put("/grn/{grn_id}", response_model=GRNResponse)
+def put_grn(
+    grn_id: int,
+    grn_update: GRNUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    grn = purchase_service.update_goods_received_note(db, target_store_id, current_user.id, grn_id, grn_update)
+    return _format_grn(grn)
+
+
+@router.delete("/grn/{grn_id}")
+def delete_grn(
+    grn_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    purchase_service.delete_goods_received_note(db, target_store_id, current_user.id, grn_id)
+    return {"message": "Goods received note deleted successfully"}

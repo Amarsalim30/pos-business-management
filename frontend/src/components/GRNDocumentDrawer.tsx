@@ -13,7 +13,9 @@ import {
   Share2,
   Layers,
   Building2,
-  ArrowRight
+  ArrowRight,
+  Edit,
+  Trash2
 } from 'lucide-react';
 
 export interface GRNDocumentDrawerProps {
@@ -26,6 +28,8 @@ export interface GRNDocumentDrawerProps {
   storeAddress?: string;
   storeTaxId?: string;
   onViewSupplierStatement?: (supplierId: number) => void;
+  onEditGRN?: (grn: GoodsReceivedNote) => void;
+  onDeleteGRN?: (grn: GoodsReceivedNote) => void;
 }
 
 export const GRNDocumentDrawer: React.FC<GRNDocumentDrawerProps> = ({
@@ -37,7 +41,9 @@ export const GRNDocumentDrawer: React.FC<GRNDocumentDrawerProps> = ({
   storePhone = COMPANY_CONSTANTS.phone,
   storeAddress = COMPANY_CONSTANTS.address,
   storeTaxId = COMPANY_CONSTANTS.taxId,
-  onViewSupplierStatement
+  onViewSupplierStatement,
+  onEditGRN,
+  onDeleteGRN
 }) => {
   const [activeFormat, setActiveFormat] = useState<'a4' | 'thermal'>(defaultFormat);
   const [copied, setCopied] = useState(false);
@@ -211,6 +217,30 @@ Physical delivery verified and recorded in stock inventory.`;
                 <Share2 className="h-3.5 w-3.5 text-emerald-600" />
                 <span>WhatsApp</span>
               </button>
+
+              {onEditGRN && (
+                <button
+                  type="button"
+                  onClick={() => onEditGRN(grn)}
+                  className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  title="Edit GRN / Inward Stock"
+                >
+                  <Edit className="h-3.5 w-3.5 text-indigo-600" />
+                  <span>Edit GRN</span>
+                </button>
+              )}
+
+              {onDeleteGRN && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteGRN(grn)}
+                  className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  title="Delete GRN (Reverse Stock)"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                  <span>Delete GRN</span>
+                </button>
+              )}
             </div>
 
             {/* Contextual Action (Open Supplier Statement) */}

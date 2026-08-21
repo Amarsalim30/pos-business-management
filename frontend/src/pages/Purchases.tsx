@@ -20,7 +20,9 @@ import {
   Ban,
   Loader2,
   Eye,
-  Truck
+  Truck,
+  Edit,
+  Trash2
 } from 'lucide-react';
 
 export const PurchasesPage: React.FC = () => {
@@ -73,7 +75,15 @@ export const PurchasesPage: React.FC = () => {
 
   // Modals State
   const [isPOModalOpen, setIsPOModalOpen] = useState(false);
+  const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
+  const [deletingPO, setDeletingPO] = useState<PurchaseOrder | null>(null);
+  const [isDeletingPO, setIsDeletingPO] = useState(false);
+
   const [isDirectGRNModalOpen, setIsDirectGRNModalOpen] = useState(false);
+  const [editingGRN, setEditingGRN] = useState<GoodsReceivedNote | null>(null);
+  const [deletingGRN, setDeletingGRN] = useState<GoodsReceivedNote | null>(null);
+  const [isDeletingGRN, setIsDeletingGRN] = useState(false);
+
   const [isReceivePOModalOpen, setIsReceivePOModalOpen] = useState(false);
   const [selectedPOForReceive, setSelectedPOForReceive] = useState<PurchaseOrder | null>(null);
 
@@ -133,9 +143,11 @@ export const PurchasesPage: React.FC = () => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') {
         e.preventDefault();
+        setEditingPO(null);
         setIsPOModalOpen(true);
       } else if (e.key === 'F3') {
         e.preventDefault();
+        setEditingGRN(null);
         setIsDirectGRNModalOpen(true);
       }
     };
@@ -148,12 +160,13 @@ export const PurchasesPage: React.FC = () => {
     setIsReceivePOModalOpen(true);
   };
 
-  const handleAddExpense = async (e: React.FormEvent) => {
+  const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!expensePO) return;
+
     const amt = parseFloat(expAmount);
     if (!amt || amt <= 0) {
-      setExpError('Please enter a valid expense amount');
+      setExpError('Please enter a valid amount greater than 0');
       return;
     }
 
@@ -164,156 +177,228 @@ export const PurchasesPage: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({
           category: expCategory,
-          description: expDescription.trim(),
+          description: expDescription.trim() || undefined,
           amount: amt,
           payment_method: expPaymentMethod,
           reference: expReference.trim() || null
         })
       });
+
       setExpensePO(null);
-      setExpDescription('');
       setExpAmount('');
+      setExpDescription('');
       setExpReference('');
       reloadOrders();
     } catch (err: any) {
-      setExpError(err.message || 'Failed to add expense');
+      setExpError(err.message || 'Failed to save expense');
     } finally {
       setSavingExp(false);
     }
   };
 
-  const filteredOrders = orders.filter(po => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      po.po_no.toLowerCase().includes(q) ||
-      (po.supplier_name && po.supplier_name.toLowerCase().includes(q))
-    );
-  });
+  const handleDeletePO = async () => {
+    if (!deletingPO) return;
+    setIsDeletingPO(true);
+    try {
+      await apiFetch(`/api/v1/purchases/orders/${deletingPO.id}`, {
+        method: 'DELETE'
+      });
+      if (selectedPOForDrawer?.id === deletingPO.id) {
+        setSelectedPOForDrawer(null);
+        setIsPODrawerOpen(false);
+      }
+      setDeletingPO(null);
+      reloadOrders();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete Purchase Order');
+    } finally {
+      setIsDeletingPO(false);
+    }
+  };
+
+  const handleDeleteGRN = async () => {
+    if (!deletingGRN) return;
+    setIsDeletingGRN(true);
+    try {
+      await apiFetch(`/api/v1/purchases/grn/${deletingGRN.id}`, {
+        method: 'DELETE'
+      });
+      if (selectedGRNForDrawer?.id === deletingGRN.id) {
+        setSelectedGRNForDrawer(null);
+        setIsGRNDrawerOpen(false);
+      }
+      setDeletingGRN(null);
+      reloadGRNs();
+      loadPrerequisites();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete Goods Received Note');
+    } finally {
+      setIsDeletingGRN(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'received':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="h-3 w-3" /> Received</span>;
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="h-3 w-3" />
+            <span>Received</span>
+          </span>
+        );
       case 'partial':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200"><Clock className="h-3 w-3" /> Partial</span>;
-      case 'ordered':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200"><Clock className="h-3 w-3" /> Ordered</span>;
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock className="h-3 w-3" />
+            <span>Partial</span>
+          </span>
+        );
       case 'cancelled':
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200"><Ban className="h-3 w-3" /> Cancelled</span>;
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+            <Ban className="h-3 w-3" />
+            <span>Cancelled</span>
+          </span>
+        );
+      case 'ordered':
       default:
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">{status}</span>;
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            <Clock className="h-3 w-3" />
+            <span>Ordered</span>
+          </span>
+        );
     }
   };
 
+  // Client-side search query filtering
+  const filteredOrders = orders.filter(po => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      po.po_no.toLowerCase().includes(q) ||
+      (po.supplier_name && po.supplier_name.toLowerCase().includes(q)) ||
+      (po.notes && po.notes.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2.5">
             <div className="p-2 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100">
               <ShoppingBag className="h-6 w-6" />
             </div>
-            Purchases & Inbound GRN
+            Purchases & Goods Inward
           </h1>
           <p className="text-sm text-slate-500 mt-1 font-medium">
-            Create vendor purchase orders, receive shipments into inventory, and log procurement expenses
+            Manage vendor purchase orders, receive incoming inventory, and track stock landed costs.
           </p>
         </div>
 
-        {/* Dual Primary Actions: Create PO + Direct GRN Receipt */}
-        <div className="flex items-center gap-3">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2.5">
           <button
-            onClick={() => setIsDirectGRNModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl font-bold shadow-sm transition-all cursor-pointer"
-            title="Post incoming vendor goods straight into inventory without a PO (F3)"
+            onClick={() => {
+              setEditingGRN(null);
+              setIsDirectGRNModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+            title="Direct stock receipt from supplier without prior PO [Shortcut: F3]"
           >
             <PackageCheck className="h-4 w-4" />
-            <span>Direct GRN Receipt</span>
-            <kbd className="hidden sm:inline-block px-1.5 py-0.5 bg-emerald-700/60 rounded font-mono text-[10px] text-emerald-100">
-              F3
-            </kbd>
+            <span>Direct GRN [F3]</span>
           </button>
 
           <button
-            onClick={() => setIsPOModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white rounded-xl font-bold shadow-sm transition-all cursor-pointer"
-            title="Create a formal vendor Purchase Order (F2)"
+            onClick={() => {
+              setEditingPO(null);
+              setIsPOModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+            title="Draft formal purchase order [Shortcut: F2]"
           >
             <Plus className="h-4 w-4" />
-            <span>Create PO</span>
-            <kbd className="hidden sm:inline-block px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">
-              F2
-            </kbd>
+            <span>New Purchase Order [F2]</span>
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 gap-6">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
         <button
           onClick={() => setActiveTab('orders')}
-          className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'orders'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
           <ShoppingBag className="h-4 w-4" />
-          Purchase Orders
+          <span>Purchase Orders (POs)</span>
         </button>
+
         <button
           onClick={() => setActiveTab('grn')}
-          className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'grn'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
           <PackageCheck className="h-4 w-4" />
-          Goods Received (GRN)
+          <span>Goods Received Notes (GRNs)</span>
         </button>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[300px]">
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by PO #, GRN #, or Supplier..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-            />
-          </div>
+      {/* Filter / Search Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder={activeTab === 'orders' ? 'Search PO #, supplier, notes...' : 'Search GRN #, delivery note, supplier...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {activeTab === 'orders' && (
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            >
+              <option value="all">All PO Statuses</option>
+              <option value="ordered">Ordered (Pending)</option>
+              <option value="partial">Partially Received</option>
+              <option value="received">Fully Received</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          )}
 
           <select
             value={supplierFilter}
             onChange={(e) => setSupplierFilter(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
           >
             <option value="all">All Suppliers</option>
             {suppliers.map(s => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-
-          {activeTab === 'orders' && (
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            >
-              <option value="all">All Statuses</option>
-              <option value="ordered">Ordered</option>
-              <option value="partial">Partial</option>
-              <option value="received">Received</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          )}
         </div>
       </div>
 
@@ -323,10 +408,10 @@ export const PurchasesPage: React.FC = () => {
           <div className="overflow-x-auto overflow-y-auto flex-1">
             <table className="w-full text-left border-collapse text-sm">
               <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-2xs">
-                <tr className="border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-500">
+                <tr className="bg-slate-50/75 border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-500">
                   <th className="py-3.5 px-4">PO Number</th>
                   <th className="py-3.5 px-4">Supplier</th>
-                  <th className="py-3.5 px-4">Items / Progress</th>
+                  <th className="py-3.5 px-4">Items / Received</th>
                   <th className="py-3.5 px-4 text-right">Total Amount</th>
                   <th className="py-3.5 px-4 text-center">Status</th>
                   <th className="py-3.5 px-4 text-center">ETR</th>
@@ -346,7 +431,7 @@ export const PurchasesPage: React.FC = () => {
                 ) : filteredOrders.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-slate-400 font-normal">
-                      No purchase orders found matching your filters.
+                      No purchase orders match the selected filters.
                     </td>
                   </tr>
                 ) : (
@@ -404,7 +489,7 @@ export const PurchasesPage: React.FC = () => {
                             <span className="text-slate-400 text-xs">No</span>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 text-right space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                        <td className="py-3.5 px-4 text-right space-x-1" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => {
                               setSelectedPOForDrawer(po);
@@ -416,6 +501,27 @@ export const PurchasesPage: React.FC = () => {
                             <Eye className="h-3.5 w-3.5 text-indigo-600" />
                             <span>View</span>
                           </button>
+                          {po.status !== 'cancelled' && (
+                            <button
+                              onClick={() => {
+                                setEditingPO(po);
+                                setIsPOModalOpen(true);
+                              }}
+                              className="inline-flex items-center p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                              title="Edit Purchase Order"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {po.status !== 'received' && (
+                            <button
+                              onClick={() => setDeletingPO(po)}
+                              className="inline-flex items-center p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                              title="Delete Purchase Order"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           {po.status !== 'received' && po.status !== 'cancelled' && (
                             <button
                               onClick={() => openReceiveModal(po)}
@@ -478,7 +584,7 @@ export const PurchasesPage: React.FC = () => {
                   <th className="py-3.5 px-4">Items Received</th>
                   <th className="py-3.5 px-4 text-right">Value (KES)</th>
                   <th className="py-3.5 px-4">Received By</th>
-                  <th className="py-3.5 px-4 text-center">Document</th>
+                  <th className="py-3.5 px-4 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
@@ -537,24 +643,44 @@ export const PurchasesPage: React.FC = () => {
                       <td className="py-3.5 px-4 text-xs text-slate-600">
                         {g.receiver_name || 'Staff'}
                       </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewGRNDocument(g.id);
-                          }}
-                          disabled={loadingGRNId === String(g.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
-                          title="View Delivery GRN Slip"
-                        >
-                          {loadingGRNId === String(g.id) ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-700" />
-                          ) : (
-                            <Eye className="h-3.5 w-3.5 text-amber-700" />
-                          )}
-                          <span>View Doc</span>
-                        </button>
+                      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleViewGRNDocument(g.id)}
+                            disabled={loadingGRNId === String(g.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                            title="View Delivery GRN Slip"
+                          >
+                            {loadingGRNId === String(g.id) ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-700" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5 text-amber-700" />
+                            )}
+                            <span>View</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingGRN(g);
+                              setIsDirectGRNModalOpen(true);
+                            }}
+                            className="inline-flex items-center p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                            title="Edit Inward GRN Delivery"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDeletingGRN(g)}
+                            className="inline-flex items-center p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                            title="Delete GRN (Reverses Stock)"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -586,79 +712,197 @@ export const PurchasesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Upgraded Create PO Modal with RapidItemGrid */}
+      {/* --- MODALS --- */}
+
+      {/* Create / Edit Purchase Order Modal */}
       <CreatePOModal
         isOpen={isPOModalOpen}
-        onClose={() => setIsPOModalOpen(false)}
+        onClose={() => {
+          setIsPOModalOpen(false);
+          setEditingPO(null);
+        }}
         products={products}
         suppliers={suppliers}
         categories={categories}
+        initialPO={editingPO}
         onPOCreated={() => {
           reloadOrders();
-          loadPrerequisites();
+        }}
+        onPOUpdated={(updated) => {
+          if (selectedPOForDrawer?.id === updated.id) {
+            setSelectedPOForDrawer(updated);
+          }
+          reloadOrders();
         }}
         onRefreshData={loadPrerequisites}
       />
 
-      {/* Dedicated Direct GRN Receipt Modal ("Straight into posting GRN") */}
+      {/* Direct / Edit Goods Received Note Modal */}
       <DirectGRNModal
         isOpen={isDirectGRNModalOpen}
-        onClose={() => setIsDirectGRNModalOpen(false)}
+        onClose={() => {
+          setIsDirectGRNModalOpen(false);
+          setEditingGRN(null);
+        }}
         products={products}
         suppliers={suppliers}
         categories={categories}
-        onGRNPosted={(newGRN) => {
+        initialGRN={editingGRN}
+        onGRNPosted={() => {
           reloadGRNs();
-          reloadOrders();
           loadPrerequisites();
-          handleViewGRNDocument(newGRN.id);
+        }}
+        onGRNUpdated={(updated) => {
+          if (selectedGRNForDrawer?.id === updated.id) {
+            setSelectedGRNForDrawer(updated);
+          }
+          reloadGRNs();
+          loadPrerequisites();
         }}
         onRefreshData={loadPrerequisites}
       />
 
-      {/* Streamlined Receive Goods Against Existing PO Modal */}
-      <ReceivePOModal
-        isOpen={isReceivePOModalOpen}
-        onClose={() => {
-          setIsReceivePOModalOpen(false);
-          setSelectedPOForReceive(null);
-        }}
-        purchaseOrder={selectedPOForReceive}
-        products={products}
-        onGRNPosted={(newGRN) => {
-          reloadGRNs();
-          reloadOrders();
-          loadPrerequisites();
-          handleViewGRNDocument(newGRN.id);
-        }}
-      />
+      {/* Receive PO Modal */}
+      {selectedPOForReceive && (
+        <ReceivePOModal
+          isOpen={isReceivePOModalOpen}
+          onClose={() => {
+            setIsReceivePOModalOpen(false);
+            setSelectedPOForReceive(null);
+          }}
+          purchaseOrder={selectedPOForReceive}
+          products={products}
+          onGRNPosted={() => {
+            reloadOrders();
+            reloadGRNs();
+            loadPrerequisites();
+          }}
+        />
+      )}
+
+      {/* Delete Purchase Order Modal */}
+      {deletingPO && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-50 rounded-2xl">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Purchase Order</h3>
+                <p className="text-xs text-slate-500">Remove purchase order {deletingPO.po_no}</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs space-y-1.5 text-slate-700 font-medium">
+              <div>PO Number: <span className="font-bold font-mono text-slate-900">{deletingPO.po_no}</span></div>
+              <div>Supplier: <span className="font-bold text-slate-900">{deletingPO.supplier_name || 'Vendor'}</span></div>
+              <div>Total Value: <span className="font-mono font-bold text-slate-900">KES {Number(deletingPO.total_amount).toLocaleString()}</span></div>
+              <div>Status: <span className="uppercase font-bold">{deletingPO.status}</span></div>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Are you sure you want to permanently delete this purchase order? This action cannot be undone.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingPO}
+                onClick={() => setDeletingPO(null)}
+                className="px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingPO}
+                onClick={handleDeletePO}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                {isDeletingPO && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Goods Received Note Modal */}
+      {deletingGRN && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-50 rounded-2xl">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Goods Received Note</h3>
+                <p className="text-xs text-slate-500">Reverse received consignment {deletingGRN.grn_no}</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-rose-50/50 rounded-2xl border border-rose-200/80 text-xs space-y-1.5 text-slate-700 font-medium">
+              <div>GRN Number: <span className="font-bold font-mono text-slate-900">{deletingGRN.grn_no}</span></div>
+              <div>Supplier: <span className="font-bold text-slate-900">{deletingGRN.supplier_name || 'Direct Vendor'}</span></div>
+              <div>Total Value: <span className="font-mono font-bold text-slate-900">KES {Number(deletingGRN.total_amount).toLocaleString()}</span></div>
+              <div className="text-[11px] text-rose-700 font-bold mt-1">
+                ⚠️ Deleting this GRN will automatically reverse all received quantities out of store stock and reduce the supplier credit balance.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingGRN}
+                onClick={() => setDeletingGRN(null)}
+                className="px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingGRN}
+                onClick={handleDeleteGRN}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                {isDeletingGRN && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Confirm Delete & Reverse Stock
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Expense Modal */}
       {expensePO && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Banknote className="h-5 w-5 text-amber-600" />
-                Add Purchase Expense
+                Add Freight / Labour Expense
               </h3>
-              <button onClick={() => setExpensePO(null)} className="text-slate-400 hover:text-slate-600 p-1">
+              <button
+                onClick={() => setExpensePO(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 mb-4 text-xs">
-              <div className="text-slate-500">PO Reference:</div>
-              <div className="font-bold text-slate-900 font-mono">{expensePO.po_no}</div>
-            </div>
+            <form onSubmit={handleSaveExpense} className="space-y-4 mt-4">
+              {expError && (
+                <div className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">
+                  {expError}
+                </div>
+              )}
 
-            {expError && (
-              <div className="mb-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200 font-medium">
-                {expError}
+              <div className="p-3 bg-slate-50 rounded-xl text-xs space-y-1">
+                <div className="font-semibold text-slate-700">Order: {expensePO.po_no}</div>
+                <div className="text-slate-500">Supplier: {expensePO.supplier_name}</div>
               </div>
-            )}
 
-            <form onSubmit={handleAddExpense} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                   Expense Category
@@ -666,27 +910,26 @@ export const PurchasesPage: React.FC = () => {
                 <select
                   value={expCategory}
                   onChange={(e) => setExpCategory(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                 >
-                  <option value="transport">Transport / Freight</option>
-                  <option value="labour">Offloading Labour</option>
-                  <option value="customs">Customs / Border Clearance</option>
-                  <option value="loading">Loading / Handling</option>
-                  <option value="other">Other Incidental</option>
+                  <option value="transport">Transport / Logistics / Fare</option>
+                  <option value="labour">Offloading / Labour</option>
+                  <option value="customs">Customs / Clearing</option>
+                  <option value="storage">Storage / Demurrage</option>
+                  <option value="other">Other Landed Cost</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                  Description *
+                  Description (Optional)
                 </label>
                 <input
                   type="text"
-                  required
-                  placeholder="e.g. Lorry freight from Mombasa depot"
+                  placeholder="e.g. Pickup truck from Mombasa road depot"
                   value={expDescription}
                   onChange={(e) => setExpDescription(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                 />
               </div>
 
@@ -764,6 +1007,15 @@ export const PurchasesPage: React.FC = () => {
           setIsGRNDrawerOpen(false);
           setSelectedGRNForDrawer(null);
         }}
+        onEditGRN={(grn) => {
+          setIsGRNDrawerOpen(false);
+          setEditingGRN(grn);
+          setIsDirectGRNModalOpen(true);
+        }}
+        onDeleteGRN={(grn) => {
+          setIsGRNDrawerOpen(false);
+          setDeletingGRN(grn);
+        }}
       />
 
       {/* Universal Purchase Order (PO) Document Viewer Drawer */}
@@ -775,8 +1027,16 @@ export const PurchasesPage: React.FC = () => {
           setSelectedPOForDrawer(null);
         }}
         onReceivePO={openReceiveModal}
+        onEditPO={(po) => {
+          setIsPODrawerOpen(false);
+          setEditingPO(po);
+          setIsPOModalOpen(true);
+        }}
+        onDeletePO={(po) => {
+          setIsPODrawerOpen(false);
+          setDeletingPO(po);
+        }}
       />
     </div>
   );
 };
-

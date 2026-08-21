@@ -12,7 +12,9 @@ import {
   Building2,
   Truck,
   PackageCheck,
-  AlertCircle
+  AlertCircle,
+  Edit,
+  Trash2
 } from 'lucide-react';
 
 export interface PODocumentDrawerProps {
@@ -26,6 +28,8 @@ export interface PODocumentDrawerProps {
   storeTaxId?: string;
   onReceivePO?: (po: PurchaseOrder) => void;
   onViewSupplierStatement?: (supplierId: number) => void;
+  onEditPO?: (po: PurchaseOrder) => void;
+  onDeletePO?: (po: PurchaseOrder) => void;
 }
 
 export const PODocumentDrawer: React.FC<PODocumentDrawerProps> = ({
@@ -38,7 +42,9 @@ export const PODocumentDrawer: React.FC<PODocumentDrawerProps> = ({
   storeAddress = COMPANY_CONSTANTS.address,
   storeTaxId = COMPANY_CONSTANTS.taxId,
   onReceivePO,
-  onViewSupplierStatement
+  onViewSupplierStatement,
+  onEditPO,
+  onDeletePO
 }) => {
   const [activeFormat, setActiveFormat] = useState<'a4' | 'thermal'>(defaultFormat);
   const [copied, setCopied] = useState(false);
@@ -192,6 +198,28 @@ ${po.notes ? `\nInstructions: ${po.notes}` : ''}`;
             >
               <Share2 className="h-4 w-4" />
             </button>
+
+            {onEditPO && po.status !== 'cancelled' && (
+              <button
+                type="button"
+                onClick={() => onEditPO(po)}
+                className="p-2 text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+                title="Edit Purchase Order"
+              >
+                <Edit className="h-4 w-4" />
+              </button>
+            )}
+
+            {onDeletePO && po.status !== 'received' && (
+              <button
+                type="button"
+                onClick={() => onDeletePO(po)}
+                className="p-2 text-slate-600 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+                title="Delete Purchase Order"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
 
             <button
               type="button"

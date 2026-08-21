@@ -4,7 +4,7 @@ import type { Product, Supplier, Category, GoodsReceivedNote } from '../types';
 import { RapidItemGrid, type GridItem } from './RapidItemGrid';
 import { QuickProductModal } from './QuickProductModal';
 import { QuickSupplierModal } from './QuickSupplierModal';
-import { PackageCheck, X, Plus, Loader2, FileText } from 'lucide-react';
+import { PackageCheck, X, Plus, Loader2, FileText, Edit } from 'lucide-react';
 
 interface DirectGRNModalProps {
   isOpen: boolean;
@@ -12,7 +12,9 @@ interface DirectGRNModalProps {
   products: Product[];
   suppliers: Supplier[];
   categories: Category[];
+  initialGRN?: GoodsReceivedNote | null;
   onGRNPosted: (grn: GoodsReceivedNote) => void;
+  onGRNUpdated?: (grn: GoodsReceivedNote) => void;
   onRefreshData: () => void;
 }
 
@@ -22,9 +24,12 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
   products,
   suppliers,
   categories,
+  initialGRN,
   onGRNPosted,
+  onGRNUpdated,
   onRefreshData
 }) => {
+  const isEditing = Boolean(initialGRN);
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [notes, setNotes] = useState('');
@@ -39,15 +44,47 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setSupplierId('');
-      setInvoiceNumber('');
-      setNotes('');
-      setItems([]);
+      if (initialGRN) {
+        setSupplierId(initialGRN.supplier_id || '');
+        setInvoiceNumber(initialGRN.invoice_number || '');
+        setNotes(initialGRN.notes || '');
+
+        const mapped: GridItem[] = (initialGRN.items || []).map((it, idx) => {
+          const prod = products.find(p => p.id === it.product_id);
+          const isRoll = it.unit_type === 'roll';
+          const mpr = prod?.meters_per_roll || it.meters_per_roll || 100;
+          const qty = Number(it.quantity_received);
+          return {
+            id: `row_grn_${it.id || idx}_${Date.now()}`,
+            product_id: it.product_id,
+            product_name: it.product_name || prod?.name || 'Product',
+            product_sku: it.product_sku || prod?.sku || '',
+            unit_type: it.unit_type,
+            meters_per_roll: mpr,
+            quantity: qty,
+            rolls: Number(it.rolls_received || (isRoll && mpr > 0 ? Math.floor(qty / mpr) : 0)),
+            loose_meters: Number(it.loose_meters_received || (isRoll && mpr > 0 ? qty % mpr : 0)),
+            roll_mode: 'rolls',
+            unit_cost: Number(it.unit_cost),
+            cost_per_meter: isRoll && mpr > 0 ? Number(it.unit_cost) / mpr : 0,
+            total_cost: Number(it.total_cost || (qty * Number(it.unit_cost))),
+            current_stock: prod?.current_stock ?? 0,
+            formatted_stock: prod?.formatted_stock ?? `${prod?.current_stock ?? 0}`,
+            current_bp: Number(it.unit_cost)
+          };
+        });
+        setItems(mapped);
+      } else {
+        setSupplierId('');
+        setInvoiceNumber('');
+        setNotes('');
+        setItems([]);
+      }
       setError(null);
     }
-  }, [isOpen]);
+  }, [isOpen, initialGRN, products]);
 
-  // Global Ctrl+Enter shortcut to post GRN
+  // Global Ctrl+Enter shortcut to post/update GRN
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -59,7 +96,7 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, supplierId, invoiceNumber, notes, items]);
+  }, [isOpen, supplierId, invoiceNumber, notes, items, initialGRN]);
 
   if (!isOpen) return null;
 
@@ -107,7 +144,7 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
     setError(null);
     try {
       const payload = {
-        po_id: null,
+        po_id: isEditing ? undefined : null,
         supplier_id: supplierId ? Number(supplierId) : null,
         invoice_number: invoiceNumber.trim() || null,
         notes: notes.trim() || null,
@@ -121,15 +158,23 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
         }))
       };
 
-      const result = await apiFetch<GoodsReceivedNote>('/api/v1/purchases/grn', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-
-      onGRNPosted(result);
+      if (isEditing && initialGRN) {
+        const updated = await apiFetch<GoodsReceivedNote>(`/api/v1/purchases/grn/${initialGRN.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        });
+        if (onGRNUpdated) onGRNUpdated(updated);
+        else onGRNPosted(updated);
+      } else {
+        const result = await apiFetch<GoodsReceivedNote>('/api/v1/purchases/grn', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        onGRNPosted(result);
+      }
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to post Direct Goods Received Note');
+      setError(err.message || (isEditing ? 'Failed to update Goods Received Note' : 'Failed to post Direct Goods Received Note'));
     } finally {
       setSaving(false);
     }
@@ -144,12 +189,14 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
             <div>
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2.5">
                 <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100">
-                  <PackageCheck className="h-5 w-5" />
+                  {isEditing ? <Edit className="h-5 w-5" /> : <PackageCheck className="h-5 w-5" />}
                 </div>
-                Direct Goods Inward (Straight to GRN)
+                {isEditing ? `Edit Goods Received Note ${initialGRN?.grn_no}` : 'Direct Goods Inward (Straight to GRN)'}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                Post incoming vendor delivery straight into inventory stock and update supplier ledger balance
+                {isEditing
+                  ? 'Update received stock quantities, unit costs, and delivery note reference (adjusts inventory and balance automatically)'
+                  : 'Post incoming vendor delivery straight into inventory stock and update supplier ledger balance'}
               </p>
             </div>
             <button
@@ -176,19 +223,22 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                     Vendor / Supplier
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => setIsQuickSupplierOpen(true)}
-                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 cursor-pointer"
-                  >
-                    <Plus className="h-3 w-3" />
-                    New
-                  </button>
+                  {!isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => setIsQuickSupplierOpen(true)}
+                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Plus className="h-3 w-3" />
+                      New
+                    </button>
+                  )}
                 </div>
                 <select
+                  disabled={isEditing}
                   value={supplierId}
                   onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 shadow-2xs"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 shadow-2xs disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   <option value="">Direct / Cash Vendor (No Account)</option>
                   {suppliers.map(s => (
@@ -244,7 +294,7 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
           {/* Modal Footer */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100">
             <div className="text-xs text-slate-500 font-medium">
-              Shortcut: Press <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px] text-slate-800">Ctrl + Enter</kbd> to post immediately
+              Shortcut: Press <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px] text-slate-800">Ctrl + Enter</kbd> to submit
             </div>
 
             <div className="flex items-center gap-3">
@@ -264,12 +314,12 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
                 {saving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Processing Inward Stock...</span>
+                    <span>{isEditing ? 'Updating GRN Stock...' : 'Processing Inward Stock...'}</span>
                   </>
                 ) : (
                   <>
-                    <PackageCheck className="h-4 w-4" />
-                    <span>Post & Accept Inward Stock [Ctrl+Enter]</span>
+                    {isEditing ? <Edit className="h-4 w-4" /> : <PackageCheck className="h-4 w-4" />}
+                    <span>{isEditing ? 'Save Changes [Ctrl+Enter]' : 'Post & Accept Inward Stock [Ctrl+Enter]'}</span>
                   </>
                 )}
               </button>

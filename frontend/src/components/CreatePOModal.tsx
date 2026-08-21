@@ -4,7 +4,7 @@ import type { Product, Supplier, Category, PurchaseOrder } from '../types';
 import { RapidItemGrid, type GridItem } from './RapidItemGrid';
 import { QuickProductModal } from './QuickProductModal';
 import { QuickSupplierModal } from './QuickSupplierModal';
-import { ShoppingBag, X, Plus, Loader2, Calendar } from 'lucide-react';
+import { ShoppingBag, X, Plus, Loader2, Calendar, Edit } from 'lucide-react';
 
 interface CreatePOModalProps {
   isOpen: boolean;
@@ -12,7 +12,9 @@ interface CreatePOModalProps {
   products: Product[];
   suppliers: Supplier[];
   categories: Category[];
+  initialPO?: PurchaseOrder | null;
   onPOCreated: (po: PurchaseOrder) => void;
+  onPOUpdated?: (po: PurchaseOrder) => void;
   onRefreshData: () => void;
 }
 
@@ -22,9 +24,12 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
   products,
   suppliers,
   categories,
+  initialPO,
   onPOCreated,
+  onPOUpdated,
   onRefreshData
 }) => {
+  const isEditing = Boolean(initialPO);
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [expectedDate, setExpectedDate] = useState('');
   const [isEtr, setIsEtr] = useState(false);
@@ -40,16 +45,49 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setSupplierId('');
-      setExpectedDate('');
-      setIsEtr(false);
-      setNotes('');
-      setItems([]);
+      if (initialPO) {
+        setSupplierId(initialPO.supplier_id);
+        setExpectedDate(initialPO.expected_delivery_date ? String(initialPO.expected_delivery_date).split('T')[0] : '');
+        setIsEtr(initialPO.is_etr);
+        setNotes(initialPO.notes || '');
+
+        const mapped: GridItem[] = (initialPO.items || []).map((it, idx) => {
+          const prod = products.find(p => p.id === it.product_id);
+          const isRoll = it.unit_type === 'roll';
+          const mpr = prod?.meters_per_roll || 100;
+          const qty = Number(it.ordered_qty);
+          return {
+            id: `row_po_${it.id || idx}_${Date.now()}`,
+            product_id: it.product_id,
+            product_name: it.product_name || prod?.name || 'Product',
+            product_sku: it.product_sku || prod?.sku || '',
+            unit_type: it.unit_type,
+            meters_per_roll: mpr,
+            quantity: qty,
+            rolls: isRoll && mpr > 0 ? Math.floor(qty / mpr) : 0,
+            loose_meters: isRoll && mpr > 0 ? qty % mpr : 0,
+            roll_mode: 'rolls',
+            unit_cost: Number(it.unit_cost),
+            cost_per_meter: isRoll && mpr > 0 ? Number(it.unit_cost) / mpr : 0,
+            total_cost: Number(it.total_cost || (qty * Number(it.unit_cost))),
+            current_stock: prod?.current_stock ?? 0,
+            formatted_stock: prod?.formatted_stock ?? `${prod?.current_stock ?? 0}`,
+            current_bp: Number(it.unit_cost)
+          };
+        });
+        setItems(mapped);
+      } else {
+        setSupplierId('');
+        setExpectedDate('');
+        setIsEtr(false);
+        setNotes('');
+        setItems([]);
+      }
       setError(null);
     }
-  }, [isOpen]);
+  }, [isOpen, initialPO, products]);
 
-  // Global Ctrl+Enter shortcut to create PO
+  // Global Ctrl+Enter shortcut to create/update PO
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -61,7 +99,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, supplierId, expectedDate, isEtr, notes, items]);
+  }, [isOpen, supplierId, expectedDate, isEtr, notes, items, initialPO]);
 
   if (!isOpen) return null;
 
@@ -166,15 +204,23 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
         }))
       };
 
-      const result = await apiFetch<PurchaseOrder>('/api/v1/purchases/orders', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-
-      onPOCreated(result);
+      if (isEditing && initialPO) {
+        const updated = await apiFetch<PurchaseOrder>(`/api/v1/purchases/orders/${initialPO.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        });
+        if (onPOUpdated) onPOUpdated(updated);
+        else onPOCreated(updated);
+      } else {
+        const created = await apiFetch<PurchaseOrder>('/api/v1/purchases/orders', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        onPOCreated(created);
+      }
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to create Purchase Order');
+      setError(err.message || (isEditing ? 'Failed to update Purchase Order' : 'Failed to create Purchase Order'));
     } finally {
       setSaving(false);
     }
@@ -189,12 +235,14 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
             <div>
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2.5">
                 <div className="p-2 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100">
-                  <ShoppingBag className="h-5 w-5" />
+                  {isEditing ? <Edit className="h-5 w-5" /> : <ShoppingBag className="h-5 w-5" />}
                 </div>
-                Create Vendor Purchase Order (PO)
+                {isEditing ? `Edit Purchase Order ${initialPO?.po_no}` : 'Create Vendor Purchase Order (PO)'}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                Draft a formal procurement order for suppliers with expected deliveries and agreed pricing
+                {isEditing
+                  ? 'Update supplier, delivery schedule, items, and negotiated unit costs'
+                  : 'Draft a formal procurement order for suppliers with expected deliveries and agreed pricing'}
               </p>
             </div>
             <button
@@ -323,12 +371,12 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                 {saving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Saving Order...</span>
+                    <span>{isEditing ? 'Saving Changes...' : 'Saving Order...'}</span>
                   </>
                 ) : (
                   <>
-                    <ShoppingBag className="h-4 w-4" />
-                    <span>Create Purchase Order [Ctrl+Enter]</span>
+                    {isEditing ? <Edit className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
+                    <span>{isEditing ? 'Save Changes [Ctrl+Enter]' : 'Create Purchase Order [Ctrl+Enter]'}</span>
                   </>
                 )}
               </button>

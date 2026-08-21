@@ -82,11 +82,20 @@ class StockTakeItemCreate(BaseModel):
 
 class StockTakeItemResponse(BaseModel):
     id: int
+    stock_take_id: int
     product_id: int
     product_name: str
+    product_sku: Optional[str] = None
+    category_name: Optional[str] = None
+    unit: str = "pcs"
+    unit_type: str = "piece"
+    meters_per_roll: Optional[Decimal] = None
+    cost_price: Decimal = Decimal("0.00")
     expected_quantity: Decimal
     counted_quantity: Decimal
     variance: Decimal
+    variance_value: Decimal = Decimal("0.00")
+    is_counted: bool = False
     rolls_counted: Optional[int] = None
     loose_meters_counted: Optional[Decimal] = None
 
@@ -95,16 +104,53 @@ class StockTakeItemResponse(BaseModel):
 
 class StockTakeCreate(BaseModel):
     notes: Optional[str] = None
+    category_id: Optional[int] = None
+
+
+class StockTakeSummaryResponse(BaseModel):
+    id: int
+    store_id: int
+    user_id: int
+    category_id: Optional[int] = None
+    category_name: Optional[str] = None
+    status: str
+    notes: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    total_items: int = 0
+    counted_items: int = 0
+    discrepancy_count: int = 0
+    total_variance_value: Decimal = Decimal("0.00")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StockTakeItemsPaginatedResponse(BaseModel):
+    items: List[StockTakeItemResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+    total_items: int
+    counted_items: int
+    discrepancy_count: int
+    total_variance_value: Decimal
 
 
 class StockTakeResponse(BaseModel):
     id: int
     store_id: int
     user_id: int
+    category_id: Optional[int] = None
+    category_name: Optional[str] = None
     status: str
     notes: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
+    total_items: int = 0
+    counted_items: int = 0
+    discrepancy_count: int = 0
+    total_variance_value: Decimal = Decimal("0.00")
     items: List[StockTakeItemResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

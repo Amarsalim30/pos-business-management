@@ -13,8 +13,7 @@ import {
   Layers,
   Edit3,
   Trash2,
-  FolderPlus,
-  History
+  FolderPlus
 } from 'lucide-react';
 import { ProductHistoryDrawer } from '../components/ProductHistoryDrawer';
 
@@ -354,18 +353,18 @@ export const ProductsPage: React.FC = () => {
               </tr>
             ) : (
               products.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
+                <tr
+                  key={p.id}
+                  onClick={() => setHistoryDrawerProductId(p.id)}
+                  className="hover:bg-amber-50/40 transition-colors cursor-pointer group"
+                >
                   <td className="p-3.5">
-                    <button
-                      onClick={() => setHistoryDrawerProductId(p.id)}
-                      className="text-left group cursor-pointer"
-                      title="Click to view purchase & sales telemetry"
-                    >
-                      <div className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors">
+                    <div className="text-left">
+                      <div className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors underline decoration-slate-300 group-hover:decoration-amber-400 underline-offset-2">
                         {p.name}
                       </div>
                       <div className="text-[11px] font-mono text-slate-400 mt-0.5">{p.sku || '---'}</div>
-                    </button>
+                    </div>
                   </td>
                   <td className="p-3.5">
                     {p.unit_type === 'roll' ? (
@@ -425,24 +424,23 @@ export const ProductsPage: React.FC = () => {
                   </td>
                   <td className="p-3.5 text-right">
                     <div className="flex items-center justify-end space-x-1.5">
-                      <button
-                        onClick={() => setHistoryDrawerProductId(p.id)}
-                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-all cursor-pointer shadow-2xs"
-                        title="View Sales, Purchase & Movement History"
-                      >
-                        <History className="h-3.5 w-3.5" />
-                      </button>
                       {canEditCatalog && (
                         <>
                           <button
-                            onClick={() => handleOpenEditModal(p)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditModal(p);
+                            }}
                             className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-amber-700 transition-all cursor-pointer shadow-2xs"
                             title="Edit Product Details & Pricing"
                           >
                             <Edit3 className="h-3.5 w-3.5" />
                           </button>
                           <button
-                            onClick={() => handleDeleteProduct(p)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteProduct(p);
+                            }}
                             className="rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-all cursor-pointer shadow-2xs"
                             title="Deactivate Product"
                           >

@@ -562,17 +562,17 @@ export const InventoryPage: React.FC = () => {
                     </tr>
                   ) : (
                     filteredItems.map((item) => (
-                      <tr key={item.product_id} className="hover:bg-slate-50/60 transition-colors">
+                      <tr
+                        key={item.product_id}
+                        onClick={() => setHistoryDrawerProductId(item.product_id)}
+                        className="hover:bg-amber-50/40 transition-colors cursor-pointer group"
+                      >
                         <td className="px-4 py-3 font-semibold text-slate-900">
-                          <button
-                            onClick={() => setHistoryDrawerProductId(item.product_id)}
-                            className="text-left group cursor-pointer"
-                            title="Click to view purchase, sales & movement telemetry"
-                          >
-                            <span className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors">
+                          <div className="text-left">
+                            <span className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors underline decoration-slate-300 group-hover:decoration-amber-400 underline-offset-2">
                               {item.product_name}
                             </span>
-                          </button>
+                          </div>
                         </td>
                         <td className="px-4 py-3 font-mono text-[11px] text-slate-500">
                           {item.sku || '—'}
@@ -621,18 +621,13 @@ export const InventoryPage: React.FC = () => {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end space-x-2">
-                            <button
-                              onClick={() => setHistoryDrawerProductId(item.product_id)}
-                              className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 font-semibold text-[11px] cursor-pointer"
-                              title="View sales & purchase history"
-                            >
-                              <History className="h-3 w-3" />
-                              <span>History</span>
-                            </button>
                             {canReceiveGRN && (
                               <button
-                                onClick={() => handleOpenGRNModal(item.product_id)}
-                                className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenGRNModal(item.product_id);
+                                }}
+                                className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] cursor-pointer shadow-2xs"
                                 title="Receive stock delivery for this product"
                               >
                                 <Truck className="h-3 w-3" />
@@ -641,7 +636,8 @@ export const InventoryPage: React.FC = () => {
                             )}
                             {canAdjustStock && (
                               <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setAdjustModalItem(item);
                                   setAdjustQuantity('');
                                   setAdjustType('add');

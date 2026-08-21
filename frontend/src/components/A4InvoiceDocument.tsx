@@ -93,22 +93,24 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
   return (
     <div
       id="a4-invoice-container"
-      className="bg-white text-slate-900 font-sans p-6 md:p-8 max-w-[210mm] mx-auto shadow-sm border border-slate-200 print:border-none print:shadow-none print:p-0 print:m-0 print:max-w-none text-xs leading-normal print:text-[11px]"
+      className="bg-white text-slate-900 font-sans p-6 sm:p-8 max-w-[210mm] mx-auto shadow-sm border border-slate-200 print:border-none print:shadow-none print:p-0 print:m-0 print:max-w-none text-xs leading-normal print:text-[11px]"
       style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
     >
       {/* 1. TOP HEADER SOLAR BANNER (1:1 with Quotation_QT-0163.pdf) */}
-      <div className="w-full flex flex-col items-center">
+      <div className="w-full overflow-hidden mb-3">
         {headerBanner ? (
           <img
             src={headerBanner}
             alt={storeName}
-            className="w-full max-h-[110px] object-contain"
+            className="w-full h-auto block object-cover"
             onError={(e) => {
               e.currentTarget.style.display = 'none';
             }}
           />
         ) : logo ? (
-          <img src={logo} alt={storeName} className="h-16 object-contain" />
+          <div className="text-center py-2">
+            <img src={logo} alt={storeName} className="h-16 object-contain mx-auto" />
+          </div>
         ) : (
           <div className="text-center py-2">
             <h1 className="text-2xl font-black tracking-tight text-[#0F2A4A] uppercase">
@@ -116,12 +118,10 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
             </h1>
           </div>
         )}
-        {/* Orange Accent Bar Under Banner */}
-        <div className="w-14 h-[2.5px] bg-[#F58220] mt-1 mb-3 rounded-full" />
       </div>
 
       {/* 2. CONTACT DETAILS (LEFT) | ORANGE SEPARATOR | METADATA (RIGHT) */}
-      <div className="flex items-stretch justify-between gap-2 py-1">
+      <div className="flex flex-row items-stretch justify-between gap-2 py-1">
         {/* Left: Company Contact Info with Circular Navy Badges */}
         <div className="flex-1 space-y-2">
           {/* Address & Landmark */}
@@ -376,8 +376,8 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
         </table>
       </div>
 
-      {/* 5. BOTTOM SECTION: BANK DETAILS & FINANCIAL TOTALS GRID */}
-      <div className="my-3.5 flex flex-col md:flex-row items-stretch justify-between gap-4">
+      {/* 5. BOTTOM SECTION: BANK DETAILS & FINANCIAL TOTALS GRID (ALWAYS SIDE-BY-SIDE) */}
+      <div className="my-3.5 flex flex-row items-stretch justify-between gap-4">
         {/* Left: Bank Details Box (or Delivery Certification) */}
         <div className="flex-1">
           {isDeliveryNote ? (
@@ -452,9 +452,9 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
           )}
         </div>
 
-        {/* Right: Financial Summary Grid Box (1:1 Geometry) */}
+        {/* Right: Financial Summary Grid Box (Fixed Width, Never Stacking) */}
         {!isDeliveryNote && (
-          <div className="w-full md:w-64 border border-slate-300 rounded-lg overflow-hidden shrink-0 self-start">
+          <div className="w-72 border border-slate-300 rounded-lg overflow-hidden shrink-0 self-start">
             <table className="w-full text-xs font-mono border-collapse">
               <tbody>
                 <tr className="border-b border-slate-200">
@@ -501,7 +501,7 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
         )}
       </div>
 
-      {/* 6. FOOTER TERMS BOX (3 PILLARS) */}
+      {/* 6. FOOTER TERMS BOX (ALWAYS 3 EQUAL COLUMNS) */}
       <div className="my-3.5 border border-slate-300 rounded-lg p-3 bg-white">
         {isDeliveryNote ? (
           <div className="grid grid-cols-3 gap-4 text-center">
@@ -519,9 +519,9 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+          <div className="grid grid-cols-3 gap-3 divide-x divide-slate-200">
             {/* Pillar 1: Validity */}
-            <div className="space-y-1 md:pr-2">
+            <div className="space-y-1 pr-2">
               <div className="text-[10px] font-bold text-[#0F2A4A] uppercase">VALIDITY</div>
               <div className="text-[9.5px] text-slate-600 leading-snug">
                 {COMPANY_CONSTANTS.validityText}
@@ -529,7 +529,7 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
             </div>
 
             {/* Pillar 2: VAT */}
-            <div className="space-y-1 md:px-2 pt-2 md:pt-0">
+            <div className="space-y-1 px-2">
               <div className="text-[10px] font-bold text-[#0F2A4A] uppercase">VAT</div>
               <div className="text-[9.5px] text-slate-600 leading-snug">
                 {COMPANY_CONSTANTS.vatText}
@@ -537,7 +537,7 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
             </div>
 
             {/* Pillar 3: Terms & Conditions */}
-            <div className="space-y-1 md:pl-2 pt-2 md:pt-0">
+            <div className="space-y-1 pl-2">
               <div className="text-[10px] font-bold text-[#0F2A4A] uppercase">TERMS & CONDITIONS</div>
               <div className="text-[9.5px] text-slate-600 leading-snug">
                 {COMPANY_CONSTANTS.termsText}

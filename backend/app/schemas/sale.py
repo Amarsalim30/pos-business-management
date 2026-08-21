@@ -228,6 +228,17 @@ class PreSaleDocumentCreate(BaseModel):
     items: List[PreSaleItemCreate] = Field(..., min_length=1)
 
 
+class PreSaleDocumentUpdate(BaseModel):
+    type: Optional[str] = None
+    customer_id: Optional[int] = None
+    discount_amount: Optional[Decimal] = Field(None, ge=0)
+    site_name: Optional[str] = None
+    valid_until: Optional[datetime] = None
+    notes: Optional[str] = None
+    items: Optional[List[PreSaleItemCreate]] = None
+
+
+
 class PreSaleDocumentResponse(BaseModel):
     id: int
     document_no: str

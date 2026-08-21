@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { apiFetch } from '../services/api';
-import type { Sale, Customer } from '../types';
+import type { Sale, Customer, Product } from '../types';
 import { ReceiptModal } from '../components/ReceiptModal';
 import { InvoiceDrawer } from '../components/InvoiceDrawer';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
@@ -11,7 +11,6 @@ import {
   RotateCcw,
   Download,
   AlertCircle,
-  Calendar,
   Banknote,
   Split,
   Loader2,
@@ -20,12 +19,28 @@ import {
   User,
   X,
   ChevronDown,
-  Check,
-  MapPin
+  MapPin,
+  Pencil,
+  Trash2
 } from 'lucide-react';
+
+interface SaleEditLine {
+  product_id: number;
+  product_name: string;
+  sku: string | null;
+  unit_type: 'piece' | 'roll';
+  unit: string;
+  meters_per_roll: number | null;
+  unit_sold: 'piece' | 'roll';
+  rolls: string;
+  loose: string;
+  qty: string;
+  unit_price: string;
+}
 
 export const SalesListPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [etrFilter, setEtrFilter] = useState<string>('all');
@@ -47,6 +62,22 @@ export const SalesListPage: React.FC = () => {
   const [voidingSale, setVoidingSale] = useState<Sale | null>(null);
   const [voidReason, setVoidReason] = useState('');
   const [voidLoading, setVoidLoading] = useState(false);
+
+  // Edit Sale Modal State
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [editCustomerId, setEditCustomerId] = useState<number | ''>('');
+  const [editSiteName, setEditSiteName] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editDiscount, setEditDiscount] = useState('0');
+  const [editIsEtr, setEditIsEtr] = useState(false);
+  const [editLines, setEditLines] = useState<SaleEditLine[]>([]);
+  const [editProductToAdd, setEditProductToAdd] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete Sale Confirmation State
+  const [deletingSale, setDeletingSale] = useState<Sale | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Direct Invoice Payment Modal State
   const [payingSale, setPayingSale] = useState<Sale | null>(null);
@@ -125,12 +156,22 @@ export const SalesListPage: React.FC = () => {
 
   useEffect(() => {
     loadCustomers();
+    loadProducts();
   }, []);
 
   const loadCustomers = async () => {
     try {
       const data = await apiFetch<Customer[]>('/api/v1/customers/');
       setCustomers(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const loadProducts = async () => {
+    try {
+      const data = await apiFetch<Product[]>('/api/v1/products/');
+      setProducts(data);
     } catch (e) {
       console.error(e);
     }
@@ -167,6 +208,149 @@ export const SalesListPage: React.FC = () => {
     if (selectedCustomerId === 'all' || selectedCustomerId === '-1') return null;
     return customers.find(c => String(c.id) === String(selectedCustomerId)) || null;
   }, [customers, selectedCustomerId]);
+
+  const handleOpenEditModal = (sale: Sale) => {
+    if (sale.status === 'voided') {
+      alert('Cannot edit a voided sale transaction');
+      return;
+    }
+
+    setEditingSale(sale);
+    setEditCustomerId(sale.customer_id || '');
+    setEditSiteName(sale.site_name || '');
+    setEditNotes(sale.notes || '');
+    setEditDiscount(String(sale.discount_amount || 0));
+    setEditIsEtr(sale.is_etr || false);
+    setEditLines(
+      (sale.items || []).map(it => {
+        const prod = products.find(p => p.id === it.product_id);
+        const mpr = Number(it.unit_type === 'roll' ? (prod?.meters_per_roll || 100) : 100);
+        return {
+          product_id: it.product_id,
+          product_name: it.product_name || `Product #${it.product_id}`,
+          sku: it.sku || prod?.sku || null,
+          unit_type: it.unit_type as any,
+          unit: prod?.unit || 'pcs',
+          meters_per_roll: mpr,
+          unit_sold: it.unit_sold as any,
+          rolls: String(it.rolls_qty || Math.floor(Number(it.quantity) / mpr)),
+          loose: String(it.loose_meters || (Number(it.quantity) % mpr)),
+          qty: String(it.quantity),
+          unit_price: String(it.unit_price)
+        };
+      })
+    );
+    setEditError(null);
+  };
+
+  const handleAddProductToEdit = (productId: number) => {
+    const prod = products.find(p => p.id === productId);
+    if (!prod) return;
+    if (editLines.some(l => l.product_id === productId)) return;
+
+    setEditLines(prev => [
+      ...prev,
+      {
+        product_id: prod.id,
+        product_name: prod.name,
+        sku: prod.sku,
+        unit_type: prod.unit_type,
+        unit: prod.unit,
+        meters_per_roll: prod.meters_per_roll,
+        unit_sold: prod.unit_type === 'roll' ? 'roll' : 'piece',
+        rolls: '1',
+        loose: '0',
+        qty: '1',
+        unit_price: String(prod.selling_price)
+      }
+    ]);
+    setEditProductToAdd('');
+  };
+
+  const calculateEditLineQuantity = (line: SaleEditLine): number => {
+    if (line.unit_type === 'roll') {
+      const rolls = parseInt(line.rolls || '0', 10) || 0;
+      const loose = parseFloat(line.loose || '0') || 0;
+      const mpr = Number(line.meters_per_roll) || 100;
+      return (rolls * mpr) + loose;
+    }
+    return parseFloat(line.qty || '0') || 0;
+  };
+
+  const calculateTotalEditValue = (): number => {
+    return editLines.reduce((acc, line) => {
+      const totalQty = calculateEditLineQuantity(line);
+      const price = parseFloat(line.unit_price || '0') || 0;
+      if (line.unit_type === 'roll') {
+        const mpr = Number(line.meters_per_roll) || 100;
+        return acc + ((totalQty / mpr) * price);
+      }
+      return acc + (totalQty * price);
+    }, 0);
+  };
+
+  const handleSaveEditSale = async () => {
+    if (!editingSale) return;
+    if (editLines.length === 0) {
+      setEditError('Invoice must contain at least one item');
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+
+    const payload = {
+      customer_id: editCustomerId ? Number(editCustomerId) : null,
+      site_name: editSiteName.trim() || null,
+      notes: editNotes.trim() || null,
+      discount_amount: parseFloat(editDiscount) || 0,
+      is_etr: editIsEtr,
+      items: editLines.map(line => ({
+        product_id: line.product_id,
+        unit_type: line.unit_type,
+        unit_sold: line.unit_sold,
+        quantity: calculateEditLineQuantity(line),
+        rolls_qty: line.unit_type === 'roll' ? parseInt(line.rolls || '0', 10) : null,
+        loose_meters: line.unit_type === 'roll' ? parseFloat(line.loose || '0') : null,
+        unit_price: parseFloat(line.unit_price || '0')
+      }))
+    };
+
+    try {
+      const updated = await apiFetch<Sale>(`/api/v1/sales/${editingSale.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+      setEditingSale(null);
+      if (selectedSaleForDrawer?.id === updated.id) {
+        setSelectedSaleForDrawer(updated);
+      }
+      reloadSales();
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to update sale invoice');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteSale = async () => {
+    if (!deletingSale) return;
+    setIsDeleting(true);
+    try {
+      await apiFetch(`/api/v1/sales/${deletingSale.id}`, {
+        method: 'DELETE'
+      });
+      if (selectedSaleForDrawer?.id === deletingSale.id) {
+        setSelectedSaleForDrawer(null);
+      }
+      setDeletingSale(null);
+      reloadSales();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete sale invoice');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleVoidSale = async () => {
     if (!voidingSale) return;
@@ -257,6 +441,9 @@ export const SalesListPage: React.FC = () => {
     setDateTo('');
   };
 
+  const editTotalValue = calculateTotalEditValue();
+  const editNetTotal = Math.max(0, editTotalValue - (parseFloat(editDiscount) || 0));
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -266,7 +453,7 @@ export const SalesListPage: React.FC = () => {
             <span>Sales & Invoices Registry</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Single-row invoice tracking, live payment status, reprint 80mm thermal receipts, and audit voids
+            Single-row invoice tracking, live payment status, edit details, and reprint receipts
           </p>
         </div>
 
@@ -282,61 +469,24 @@ export const SalesListPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-          {/* Universal Search Bar */}
+      {/* Advanced Filter Toolbar */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+          {/* Global Search Bar */}
           <div className="md:col-span-4 relative">
-            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+            <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search invoice #, customer, phone, item..."
+              placeholder="Search by invoice #, customer name, cashier, or reference..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
+              className="w-full pl-10 pr-8 py-1.5 rounded-xl border border-slate-300 text-xs text-slate-900 bg-slate-50 focus:bg-white focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
-                title="Clear search"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Date Range Picker */}
-          <div className="md:col-span-3 flex items-center space-x-1">
-            <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <input
-              type="date"
-              title="Date From"
-              value={dateFrom}
-              onChange={(e) => {
-                const val = e.target.value;
-                setDateFrom(val);
-                if (val && !dateTo) setDateTo(val);
-              }}
-              className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono shadow-2xs"
-            />
-            <span className="text-slate-400 text-xs shrink-0">to</span>
-            <input
-              type="date"
-              title="Date To"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 font-mono shadow-2xs"
-            />
-            {(dateFrom || dateTo) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setDateFrom('');
-                  setDateTo('');
-                }}
-                className="p-1 text-slate-400 hover:text-rose-600 rounded-full cursor-pointer shrink-0"
-                title="Clear date filter"
+                className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -452,70 +602,101 @@ export const SalesListPage: React.FC = () => {
                     }`}
                   >
                     <span>All Customers</span>
-                    {selectedCustomerId === 'all' && <Check className="h-3.5 w-3.5 text-amber-600" />}
+                    <span className="text-[10px] text-slate-400">{customers.length} accounts</span>
                   </button>
 
-                  {filteredCustomersForPicker.length === 0 ? (
-                    <div className="py-4 text-center text-[11px] text-slate-400">
-                      No matching customers found
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustomerId('-1');
+                      setCustomerDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
+                      selectedCustomerId === '-1' ? 'bg-amber-50 font-bold text-amber-900' : 'text-slate-700'
+                    }`}
+                  >
+                    <span className="italic text-slate-600">Walk-in Customers (No Account)</span>
+                  </button>
+
+                  {filteredCustomersForPicker.map(c => {
+                    const hasDebt = Number(c.balance) > 0;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomerId(String(c.id));
+                          setCustomerDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors ${
+                          String(selectedCustomerId) === String(c.id)
+                            ? 'bg-amber-50 font-bold text-amber-900'
+                            : 'text-slate-800'
+                        }`}
+                      >
+                        <div className="truncate pr-2">
+                          <div className="truncate font-semibold">{c.name}</div>
+                          {c.phone && <div className="text-[10px] text-slate-400 font-mono">{c.phone}</div>}
+                        </div>
+                        {hasDebt && (
+                          <div className="text-right shrink-0">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 font-mono font-bold">
+                              KES {Number(c.balance).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                  {filteredCustomersForPicker.length === 0 && (
+                    <div className="p-4 text-center text-slate-400 text-xs italic">
+                      No matching customer found
                     </div>
-                  ) : (
-                    filteredCustomersForPicker.map((c) => {
-                      const isSelected = String(c.id) === String(selectedCustomerId);
-                      const debt = Number(c.balance);
-
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedCustomerId(String(c.id));
-                            setCustomerDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors ${
-                            isSelected ? 'bg-amber-50 font-bold text-amber-900' : 'text-slate-700'
-                          }`}
-                        >
-                          <div className="truncate mr-2">
-                            <div className="truncate font-semibold">{c.name}</div>
-                            {c.phone && <div className="text-[10px] text-slate-400">{c.phone}</div>}
-                          </div>
-
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {debt > 0 ? (
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 font-mono font-bold border border-rose-200">
-                                KES {debt.toLocaleString()}
-                              </span>
-                            ) : (
-                              <span className="text-[9px] text-emerald-600 font-medium">Clean</span>
-                            )}
-                            {isSelected && <Check className="h-3.5 w-3.5 text-amber-600" />}
-                          </div>
-                        </button>
-                      );
-                    })
                   )}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Fiscal Type Filter & Reset */}
-          <div className="md:col-span-2 flex items-center justify-end space-x-2">
+          {/* ETR Filter */}
+          <div className="md:col-span-2">
             <select
               value={etrFilter}
               onChange={(e) => setEtrFilter(e.target.value)}
-              className="rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 shadow-2xs"
+              className="w-full rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 cursor-pointer"
             >
-              <option value="all">All Fiscal Types</option>
-              <option value="etr">ETR Only</option>
-              <option value="non_etr">Non-ETR</option>
+              <option value="all">All ETR / Non-ETR</option>
+              <option value="etr">ETR Invoices Only</option>
+              <option value="non_etr">Standard Invoices Only</option>
             </select>
+          </div>
 
+          {/* Date Pickers */}
+          <div className="md:col-span-3 flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:outline-none focus:border-amber-600"
+                title="Start Date"
+              />
+            </div>
+            <span className="text-slate-400 text-xs font-bold">to</span>
+            <div className="relative flex-1">
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:outline-none focus:border-amber-600"
+                title="End Date"
+              />
+            </div>
             <button
+              type="button"
               onClick={resetFilters}
-              className="p-1.5 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs"
-              title="Reset Filters"
+              className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-800 cursor-pointer transition-colors"
+              title="Reset all filters"
             >
               <RotateCcw className="h-4 w-4" />
             </button>
@@ -743,25 +924,55 @@ export const SalesListPage: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                          {/* View A4 Drawer Button */}
                           <button
                             onClick={() => {
                               setSelectedSaleForDrawer(s);
                               setDrawerFormat('a4');
                             }}
-                            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 cursor-pointer shadow-2xs"
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs"
                             title="View A4 Tax Invoice / Document Hub"
                           >
                             <Eye className="h-3.5 w-3.5 text-slate-600" />
                           </button>
 
+                          {/* Edit Invoice Button */}
+                          {!isVoided ? (
+                            <button
+                              onClick={() => handleOpenEditModal(s)}
+                              className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-300 text-slate-700 hover:text-amber-700 cursor-pointer shadow-2xs"
+                              title="Edit Invoice Details & Items"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="p-1.5 rounded-lg border border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
+                              title="Voided invoices cannot be edited"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+
+                          {/* Delete Invoice Button */}
+                          <button
+                            onClick={() => setDeletingSale(s)}
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-300 text-slate-500 hover:text-rose-600 cursor-pointer shadow-2xs"
+                            title="Delete Invoice & Restore Stock"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+
+                          {/* Record Payment Button */}
                           {(isPartial || isUnpaid) && !isVoided && (
                             <button
                               onClick={() => {
                                 setPayingSale(s);
                                 setInvoicePayAmount(String(s.balance_due || s.total_amount));
                               }}
-                              className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer shadow-2xs"
+                              className="flex items-center space-x-1 px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer shadow-2xs"
                               title="Record Payment for this Invoice"
                             >
                               <Banknote className="h-3 w-3" />
@@ -769,21 +980,23 @@ export const SalesListPage: React.FC = () => {
                             </button>
                           )}
 
+                          {/* Print Thermal Button */}
                           <button
                             onClick={() => {
                               setSelectedSaleForDrawer(s);
                               setDrawerFormat('thermal');
                             }}
-                            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 cursor-pointer shadow-2xs"
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs"
                             title="Reprint 80mm Thermal Receipt"
                           >
                             <Printer className="h-3.5 w-3.5 text-slate-600" />
                           </button>
 
+                          {/* Void Button */}
                           {!isVoided && (
                             <button
                               onClick={() => setVoidingSale(s)}
-                              className="p-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-600 cursor-pointer shadow-2xs"
+                              className="p-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 cursor-pointer shadow-2xs"
                               title="Void Sale & Restore Stock"
                             >
                               <RotateCcw className="h-3.5 w-3.5" />
@@ -820,6 +1033,289 @@ export const SalesListPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Edit Sale Modal */}
+      {editingSale && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl p-6 max-w-3xl w-full shadow-2xl border border-slate-200 space-y-4 my-8 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <FileText className="h-5 w-5 text-amber-600" />
+                <h3 className="text-base font-bold text-slate-900">
+                  Edit Invoice #{editingSale.invoice_no}
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditingSale(null)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {editError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{editError}</span>
+              </div>
+            )}
+
+            {/* Header Info */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/50 p-4 rounded-xl border border-slate-200">
+              <div>
+                <label className="text-xs font-bold text-slate-700">Customer Account:</label>
+                <select
+                  value={editCustomerId}
+                  onChange={(e) => setEditCustomerId(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+                >
+                  <option value="">-- Walk-in Customer --</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.phone ? `(${c.phone})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                  <MapPin className="h-3 w-3 text-amber-600" />
+                  <span>Site / Project Narrative:</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Kilifi Villa Project"
+                  value={editSiteName}
+                  onChange={(e) => setEditSiteName(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-5">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editIsEtr}
+                    onChange={(e) => setEditIsEtr(e.target.checked)}
+                    className="h-4 w-4 rounded text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>Fiscal ETR Invoice</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Product Selector */}
+            <div className="flex items-center space-x-2">
+              <select
+                value={editProductToAdd}
+                onChange={(e) => {
+                  setEditProductToAdd(e.target.value);
+                  if (e.target.value) handleAddProductToEdit(Number(e.target.value));
+                }}
+                className="flex-1 rounded-xl border border-amber-300 bg-white p-2.5 text-xs text-slate-900 focus:outline-none focus:border-amber-600 cursor-pointer shadow-2xs"
+              >
+                <option value="">-- Add Product to Invoice --</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.sku ? `(${p.sku})` : ''} — Stock: {p.formatted_stock || `${p.current_stock} ${p.unit}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Line items table */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                    <th className="p-3">Product</th>
+                    <th className="p-3 w-56">Sold Quantity</th>
+                    <th className="p-3 w-32">Unit Price (KES)</th>
+                    <th className="p-3 w-28 text-right">Line Total</th>
+                    <th className="p-3 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {editLines.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-6 text-center text-slate-400">
+                        No products added yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    editLines.map(line => {
+                      const isRoll = line.unit_type === 'roll';
+                      const mpr = Number(line.meters_per_roll) || 100;
+                      const totalQty = calculateEditLineQuantity(line);
+                      const price = parseFloat(line.unit_price || '0') || 0;
+                      const lineTotal = isRoll ? (totalQty / mpr) * price : totalQty * price;
+
+                      return (
+                        <tr key={line.product_id} className="hover:bg-slate-50/50">
+                          <td className="p-3">
+                            <div className="font-bold text-slate-900">{line.product_name}</div>
+                            {line.sku && <div className="text-[10px] text-slate-400 font-mono">SKU: {line.sku}</div>}
+                          </td>
+                          <td className="p-3">
+                            {isRoll ? (
+                              <div className="flex items-center space-x-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={line.rolls}
+                                  onChange={(e) => setEditLines(prev => prev.map(l => l.product_id === line.product_id ? { ...l, rolls: e.target.value } : l))}
+                                  className="w-14 rounded border border-slate-300 px-1 py-0.5 text-center font-mono"
+                                />
+                                <span className="text-[10px] text-slate-400">r +</span>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  value={line.loose}
+                                  onChange={(e) => setEditLines(prev => prev.map(l => l.product_id === line.product_id ? { ...l, loose: e.target.value } : l))}
+                                  className="w-16 rounded border border-slate-300 px-1 py-0.5 text-center font-mono"
+                                />
+                                <span className="text-[10px] text-slate-400">m</span>
+                              </div>
+                            ) : (
+                              <input
+                                type="number"
+                                min="1"
+                                value={line.qty}
+                                onChange={(e) => setEditLines(prev => prev.map(l => l.product_id === line.product_id ? { ...l, qty: e.target.value } : l))}
+                                className="w-20 rounded border border-slate-300 px-2 py-0.5 text-center font-mono font-bold"
+                              />
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <input
+                              type="number"
+                              value={line.unit_price}
+                              onChange={(e) => setEditLines(prev => prev.map(l => l.product_id === line.product_id ? { ...l, unit_price: e.target.value } : l))}
+                              className="w-28 rounded border border-slate-300 px-2 py-0.5 text-right font-mono"
+                            />
+                          </td>
+                          <td className="p-3 text-right font-bold font-mono text-slate-900">
+                            KES {lineTotal.toLocaleString()}
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => setEditLines(prev => prev.filter(l => l.product_id !== line.product_id))}
+                              className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Notes & Terms:</label>
+              <input
+                type="text"
+                placeholder="e.g. Delivery arranged via store pickup"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+              />
+            </div>
+
+            {/* Discount & Totals */}
+            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+              <div className="flex items-center space-x-2">
+                <label className="font-bold text-slate-700">Special Discount (KES):</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editDiscount}
+                  onChange={(e) => setEditDiscount(e.target.value)}
+                  className="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-right font-mono font-bold"
+                />
+              </div>
+
+              <div className="text-right">
+                <div className="text-xs text-slate-500">Invoice Total Amount:</div>
+                <div className="text-lg font-extrabold text-amber-700 font-mono">
+                  KES {editNetTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEditingSale(null)}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditSale}
+                disabled={savingEdit || editLines.length === 0}
+                className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                {savingEdit ? 'Saving Changes...' : 'Save Invoice Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Invoice Confirmation Modal */}
+      {deletingSale && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="p-2 bg-rose-50 rounded-xl border border-rose-100">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">
+                Delete Invoice #{deletingSale.invoice_no}?
+              </h3>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to permanently delete invoice <strong className="text-slate-900 font-mono">#{deletingSale.invoice_no}</strong> for <strong>{deletingSale.customer_name || 'Walk-in'}</strong> totaling <strong className="text-slate-900">KES {Number(deletingSale.total_amount).toLocaleString()}</strong>?
+            </p>
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+              <div className="font-bold flex items-center gap-1">
+                <RotateCcw className="h-3.5 w-3.5 text-amber-700" />
+                <span>Automatic Stock & Ledger Reversal:</span>
+              </div>
+              <p className="text-[11px] text-amber-800">
+                All sold items will be returned to inventory stock, and any outstanding debt on this invoice will be subtracted from the customer balance.
+              </p>
+            </div>
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingSale(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSale}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                <span>{isDeleting ? 'Deleting...' : 'Yes, Delete Invoice'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Record Invoice Payment Modal */}
       {payingSale && (
@@ -979,6 +1475,13 @@ export const SalesListPage: React.FC = () => {
         onVoidSale={(s) => {
           setSelectedSaleForDrawer(null);
           setVoidingSale(s);
+        }}
+        onEditSale={(s) => {
+          setSelectedSaleForDrawer(null);
+          handleOpenEditModal(s);
+        }}
+        onDeleteSale={(s) => {
+          setDeletingSale(s);
         }}
       />
 

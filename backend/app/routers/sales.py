@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.dependencies import get_current_user, require_permission
 from app.models.user import User
 from app.schemas.sale import (
-    SaleCreate, SaleResponse, SaleItemResponse, VoidSaleRequest, PaymentCreate, PaymentResponse
+    SaleCreate, SaleUpdate, SaleResponse, SaleItemResponse, VoidSaleRequest, PaymentCreate, PaymentResponse
 )
 from app.services import sale as sale_service
 
@@ -147,3 +147,28 @@ def void_sale_transaction(
     target_store_id = store_id or current_user.store_id or 1
     sale = sale_service.void_sale(db, target_store_id, current_user.id, sale_id, reason=void_in.reason)
     return _format_sale_response(sale)
+
+
+@router.put("/{sale_id}", response_model=SaleResponse)
+def update_existing_sale(
+    sale_id: int,
+    sale_in: SaleUpdate,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("pos:sell"))
+):
+    target_store_id = store_id or current_user.store_id or 1
+    updated = sale_service.update_sale(db, target_store_id, current_user.id, sale_id, sale_in)
+    return _format_sale_response(updated)
+
+
+@router.delete("/{sale_id}")
+def delete_existing_sale(
+    sale_id: int,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("pos:void"))
+):
+    target_store_id = store_id or current_user.store_id or 1
+    return sale_service.delete_sale(db, target_store_id, current_user.id, sale_id)
+

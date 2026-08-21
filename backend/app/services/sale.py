@@ -10,7 +10,7 @@ from app.models.inventory import Inventory, StockMovement
 from app.models.product import Product
 from app.schemas.sale import (
     CustomerCreate, CustomerUpdate, CustomerPaymentCreate, PaymentCreate,
-    SaleCreate, SaleItemCreate, PreSaleDocumentCreate, CustomerLedgerEntry,
+    SaleCreate, SaleUpdate, SaleItemCreate, PreSaleDocumentCreate, PreSaleDocumentUpdate, CustomerLedgerEntry,
     CustomerLedgerResponse, CustomerSummaryResponse
 )
 from app.utils.roll_conversion import roll_count_to_meters
@@ -747,6 +747,214 @@ def void_sale(db: Session, store_id: int, user_id: int, sale_id: int, reason: Op
     db.commit()
     db.refresh(sale)
     return sale
+
+
+def delete_sale(db: Session, store_id: int, user_id: int, sale_id: int) -> dict:
+    sale = get_sale(db, store_id, sale_id)
+
+    # 1. If not voided, restore stock and adjust customer balance
+    if sale.computed_status != "voided":
+        for item in sale.items:
+            inv = db.query(Inventory).filter(
+                Inventory.product_id == item.product_id,
+                Inventory.store_id == store_id
+            ).with_for_update().first()
+
+            if inv:
+                prev_qty = inv.quantity
+                inv.quantity += item.quantity
+                inv.last_updated = datetime.now(timezone.utc)
+
+                mov = StockMovement(
+                    product_id=item.product_id,
+                    store_id=store_id,
+                    type="deleted_invoice_return",
+                    quantity=item.quantity,
+                    unit_sold=item.unit_sold,
+                    previous_quantity=prev_qty,
+                    new_quantity=inv.quantity,
+                    reference_id=sale.invoice_no,
+                    note=f"Deleted Invoice {sale.invoice_no} (User #{user_id})",
+                    user_id=user_id
+                )
+                db.add(mov)
+
+        # Reverse customer debt balance on this invoice
+        if sale.customer_id and sale.balance_due > 0:
+            cust = db.query(Customer).filter(Customer.id == sale.customer_id).first()
+            if cust:
+                cust.balance = max(Decimal("0.00"), cust.balance - sale.balance_due)
+
+    invoice_no = sale.invoice_no
+    db.delete(sale)
+    db.commit()
+
+    return {"success": True, "detail": f"Invoice #{invoice_no} deleted successfully and inventory restored"}
+
+
+def update_sale(db: Session, store_id: int, user_id: int, sale_id: int, sale_in: SaleUpdate) -> Sale:
+    sale = get_sale(db, store_id, sale_id)
+    if sale.computed_status == "voided":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot edit a voided sale")
+
+    old_customer_id = sale.customer_id
+    old_balance_due = sale.balance_due
+
+    # 1. If line items are provided, recalculate line items and inventory diffs
+    if sale_in.items is not None:
+        if not sale_in.items:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sale must contain at least one item")
+
+        # Step A: Restore previous inventory
+        for old_item in sale.items:
+            inv = db.query(Inventory).filter(
+                Inventory.product_id == old_item.product_id,
+                Inventory.store_id == store_id
+            ).with_for_update().first()
+            if inv:
+                inv.quantity += old_item.quantity
+
+        # Step B: Sort new items to avoid deadlocks and validate stock
+        sorted_items = sorted(sale_in.items, key=lambda x: x.product_id)
+        new_line_items = []
+        new_subtotal = Decimal("0.00")
+        new_tax_amount = Decimal("0.00")
+
+        for item_in in sorted_items:
+            prod = db.query(Product).filter(Product.id == item_in.product_id, Product.is_active.is_(True)).first()
+            if not prod:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Product #{item_in.product_id} not found or inactive")
+
+            if prod.unit_type == "roll":
+                if item_in.unit_sold == "roll":
+                    rolls = item_in.rolls_qty or 1
+                    loose = Decimal(str(item_in.loose_meters or "0.00"))
+                    mpr = prod.meters_per_roll or Decimal("100.00")
+                    deduct_qty = roll_count_to_meters(rolls, loose, mpr)
+                    line_total = Decimal(str(item_in.unit_price)) * Decimal(str(rolls + (loose / mpr)))
+                elif item_in.unit_sold == "meter":
+                    deduct_qty = Decimal(str(item_in.quantity or "0.00"))
+                    line_total = Decimal(str(item_in.unit_price)) * deduct_qty
+                else:
+                    rolls = item_in.rolls_qty or 0
+                    loose = Decimal(str(item_in.loose_meters or "0.00"))
+                    mpr = prod.meters_per_roll or Decimal("100.00")
+                    deduct_qty = roll_count_to_meters(rolls, loose, mpr) if (rolls or loose) else Decimal(str(item_in.quantity or "0.00"))
+                    line_total = Decimal(str(item_in.unit_price)) * (deduct_qty / mpr)
+            else:
+                deduct_qty = Decimal(str(item_in.quantity or "1.00"))
+                line_total = Decimal(str(item_in.unit_price)) * deduct_qty
+
+            if deduct_qty <= 0:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid quantity for product {prod.name}")
+
+            inv = db.query(Inventory).filter(
+                Inventory.product_id == prod.id,
+                Inventory.store_id == store_id
+            ).with_for_update().first()
+
+            if not inv or inv.quantity < deduct_qty:
+                available = inv.quantity if inv else Decimal("0.00")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Insufficient stock for '{prod.name}'. Requested: {deduct_qty}, Available: {available}"
+                )
+
+            prev_qty = inv.quantity
+            inv.quantity -= deduct_qty
+            inv.last_updated = datetime.now(timezone.utc)
+
+            mov = StockMovement(
+                product_id=prod.id,
+                store_id=store_id,
+                type="invoice_edit_delta",
+                quantity=-deduct_qty,
+                unit_sold=item_in.unit_sold,
+                previous_quantity=prev_qty,
+                new_quantity=inv.quantity,
+                reference_id=sale.invoice_no,
+                note=f"Edited Sale {sale.invoice_no} (User #{user_id})",
+                user_id=user_id
+            )
+            db.add(mov)
+
+            item_tax_rate = prod.tax_rate or Decimal("0.0000")
+            if prod.is_taxable and item_tax_rate > 0:
+                vat_val = line_total * item_tax_rate / (Decimal("1.00") + item_tax_rate)
+                new_tax_amount += vat_val
+
+            new_subtotal += line_total
+
+            sale_item = SaleItem(
+                product_id=prod.id,
+                unit_type=prod.unit_type,
+                unit_sold=item_in.unit_sold,
+                quantity=deduct_qty,
+                rolls_qty=item_in.rolls_qty,
+                loose_meters=Decimal(str(item_in.loose_meters)) if item_in.loose_meters is not None else None,
+                unit_price=Decimal(str(item_in.unit_price)),
+                cost_price=prod.cost_price,
+                tax_rate=item_tax_rate,
+                total=line_total
+            )
+            new_line_items.append(sale_item)
+
+        # Clear old items and assign new
+        sale.items.clear()
+        for it in new_line_items:
+            sale.items.append(it)
+
+        sale.subtotal = new_subtotal
+        sale.tax_amount = new_tax_amount
+
+    # 2. Update discount and total amount
+    if sale_in.discount_amount is not None:
+        sale.discount_amount = Decimal(str(sale_in.discount_amount))
+
+    sale.total_amount = max(Decimal("0.00"), sale.subtotal - sale.discount_amount)
+
+    # 3. Update customer & balance due adjustments
+    new_customer_id = sale_in.customer_id if sale_in.customer_id is not None else old_customer_id
+    if new_customer_id == 0 or new_customer_id == -1:
+        new_customer_id = None
+
+    new_balance_due = sale.balance_due
+
+    if new_customer_id != old_customer_id:
+        # Revert debt from old customer
+        if old_customer_id and old_balance_due > 0:
+            old_cust = db.query(Customer).filter(Customer.id == old_customer_id).first()
+            if old_cust:
+                old_cust.balance = max(Decimal("0.00"), old_cust.balance - old_balance_due)
+        # Apply debt to new customer
+        if new_customer_id and new_balance_due > 0:
+            new_cust = db.query(Customer).filter(Customer.id == new_customer_id).first()
+            if new_cust:
+                new_cust.balance += new_balance_due
+        sale.customer_id = new_customer_id
+    else:
+        # Same customer: adjust by difference in balance due
+        if sale.customer_id:
+            diff = new_balance_due - old_balance_due
+            if diff != 0:
+                cust = db.query(Customer).filter(Customer.id == sale.customer_id).first()
+                if cust:
+                    cust.balance = max(Decimal("0.00"), cust.balance + diff)
+
+    # 4. Metadata updates
+    if sale_in.site_name is not None:
+        sale.site_name = sale_in.site_name.strip() or None
+    if sale_in.notes is not None:
+        sale.notes = sale_in.notes.strip() or None
+    if sale_in.is_etr is not None:
+        sale.is_etr = sale_in.is_etr
+    if sale_in.payment_reference is not None:
+        sale.payment_reference = sale_in.payment_reference.strip() or None
+
+    db.commit()
+    db.refresh(sale)
+    return sale
+
 
 
 # =========================================================================

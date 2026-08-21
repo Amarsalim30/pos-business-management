@@ -580,5 +580,100 @@ def test_presale_crud_and_conversion_guards(staff_auth_client):
     assert "already been converted" in del_conv.json()["detail"]
 
 
+def test_sale_update_and_delete_with_inventory_and_ledger(owner_auth_client, staff_auth_client):
+    # 1. Create a customer
+    cust = staff_auth_client.post("/api/v1/customers/", json={
+        "name": "General Hospital Contractor",
+        "phone": "+254788112233"
+    }).json()
+
+    # 2. Create product with initial stock = 50
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Industrial Isolator Switch",
+        "cost_price": 2000.0,
+        "selling_price": 3500.0,
+        "initial_stock": 50.0
+    }).json()
+
+    # 3. Create a credit sale: 10 items (stock becomes 40, customer debt = 35,000)
+    sale_res = staff_auth_client.post("/api/v1/sales/", json={
+        "customer_id": cust["id"],
+        "site_name": "Hospital Wing B",
+        "payment_method": "credit",
+        "notes": "Original invoice note",
+        "items": [
+            {
+                "product_id": prod["id"],
+                "unit_type": "piece",
+                "unit_sold": "piece",
+                "quantity": 10.0,
+                "unit_price": 3500.0
+            }
+        ]
+    })
+    assert sale_res.status_code == 201
+    sale = sale_res.json()
+    assert float(sale["total_amount"]) == 35000.0
+    assert float(sale["balance_due"]) == 35000.0
+
+    # Verify inventory is 40
+    inv1 = staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()
+    assert float(inv1["current_stock"]) == 40.0
+
+    # Verify customer balance is 35,000
+    c1 = staff_auth_client.get(f"/api/v1/customers/{cust['id']}").json()
+    assert float(c1["balance"]) == 35000.0
+
+    # 4. Edit sale: change quantity from 10 to 5, discount = 1000, update site_name
+    edit_res = staff_auth_client.put(f"/api/v1/sales/{sale['id']}", json={
+        "site_name": "Hospital Wing B - Ward 4",
+        "notes": "Updated invoice note",
+        "discount_amount": 1000.0,
+        "items": [
+            {
+                "product_id": prod["id"],
+                "unit_type": "piece",
+                "unit_sold": "piece",
+                "quantity": 5.0,
+                "unit_price": 3500.0
+            }
+        ]
+    })
+    assert edit_res.status_code == 200
+    updated_sale = edit_res.json()
+    assert updated_sale["site_name"] == "Hospital Wing B - Ward 4"
+    assert updated_sale["notes"] == "Updated invoice note"
+    # total = (5 * 3500) - 1000 = 17500 - 1000 = 16500
+    assert float(updated_sale["total_amount"]) == 16500.0
+    assert float(updated_sale["balance_due"]) == 16500.0
+
+    # Verify inventory is restored by 5 (now 45)
+    inv2 = staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()
+    assert float(inv2["current_stock"]) == 45.0
+
+    # Verify customer balance adjusted to 16,500
+    c2 = staff_auth_client.get(f"/api/v1/customers/{cust['id']}").json()
+    assert float(c2["balance"]) == 16500.0
+
+    # 5. Delete sale: using owner_auth_client
+    del_res = owner_auth_client.delete(f"/api/v1/sales/{sale['id']}")
+    assert del_res.status_code == 200
+    assert del_res.json()["success"] is True
+
+    # Check product stock back to 50
+    inv3 = staff_auth_client.get(f"/api/v1/products/{prod['id']}").json()
+    assert float(inv3["current_stock"]) == 50.0
+
+    # Check customer balance back to 0
+    c3 = staff_auth_client.get(f"/api/v1/customers/{cust['id']}").json()
+    assert float(c3["balance"]) == 0.0
+
+    # Check GET /sales/{id} is 404
+    get_del = staff_auth_client.get(f"/api/v1/sales/{sale['id']}")
+    assert get_del.status_code == 404
+
+
+
+
 
 

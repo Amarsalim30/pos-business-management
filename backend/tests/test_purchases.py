@@ -171,3 +171,55 @@ def test_prevent_cancelling_po_with_received_goods(staff_auth_client):
     cancel_res = staff_auth_client.post(f"/api/v1/purchases/orders/{po['id']}/cancel")
     assert cancel_res.status_code == 400
     assert "Cannot cancel a purchase order that has already received inventory" in cancel_res.json()["detail"]
+
+
+def test_direct_grn_receipt_without_po(staff_auth_client):
+    # 1. Setup supplier & products
+    supp = staff_auth_client.post("/api/v1/suppliers/", json={"name": "Direct Solar Importers Ltd"}).json()
+    prod1 = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Felicity 5kWh Lithium Battery 48V",
+        "sku": "FEL-5KWH-48V",
+        "cost_price": 140000.0,
+        "selling_price": 165000.0,
+        "initial_stock": 0.0
+    }).json()
+
+    # 2. Post Direct GRN without any PO (po_id is None)
+    grn_res = staff_auth_client.post("/api/v1/purchases/grn", json={
+        "po_id": None,
+        "supplier_id": supp["id"],
+        "invoice_number": "DIR-INV-88910",
+        "notes": "Direct shop delivery from port container",
+        "items": [
+            {
+                "product_id": prod1["id"],
+                "unit_type": "piece",
+                "quantity_received": 3.0,
+                "unit_cost": 142000.0  # Updated cost price
+            }
+        ]
+    })
+    assert grn_res.status_code == 201
+    grn = grn_res.json()
+    assert grn["grn_no"].startswith("GRN-")
+    assert grn["po_id"] is None
+    assert grn["supplier_id"] == supp["id"]
+    assert float(grn["total_amount"]) == 426000.0  # 3 * 142000
+
+    # 3. Verify product stock increased to 3 pcs and cost_price updated to 142,000
+    prod_check = staff_auth_client.get(f"/api/v1/products/{prod1['id']}").json()
+    assert float(prod_check["current_stock"]) == 3.0
+    assert float(prod_check["cost_price"]) == 142000.0
+
+    # 4. Verify supplier debt balance increased by 426,000
+    supp_check = staff_auth_client.get(f"/api/v1/suppliers/{supp['id']}").json()
+    assert float(supp_check["balance"]) == 426000.0
+
+    # 5. Verify stock movement was recorded with GRN reference
+    movements_res = staff_auth_client.get(f"/api/v1/inventory/movements?product_id={prod1['id']}").json()
+    assert len(movements_res) >= 1
+    latest_mov = movements_res[0]
+    assert latest_mov["type"] == "in"
+    assert float(latest_mov["quantity"]) == 3.0
+    assert grn["grn_no"] in latest_mov["reference_id"]
+

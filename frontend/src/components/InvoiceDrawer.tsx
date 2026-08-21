@@ -13,7 +13,9 @@ import {
   Check,
   Download,
   Share2,
-  MapPin
+  MapPin,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 
 export interface InvoiceDrawerProps {
@@ -24,6 +26,8 @@ export interface InvoiceDrawerProps {
   defaultFormat?: 'a4' | 'thermal';
   onRecordPayment?: (sale: Sale) => void;
   onVoidSale?: (sale: Sale) => void;
+  onEditPreSaleDoc?: (doc: PreSaleDocument) => void;
+  onDeletePreSaleDoc?: (doc: PreSaleDocument) => void;
   storeName?: string;
   storePhone?: string;
   storeAddress?: string;
@@ -38,6 +42,8 @@ export const InvoiceDrawer: React.FC<InvoiceDrawerProps> = ({
   defaultFormat = 'a4',
   onRecordPayment,
   onVoidSale,
+  onEditPreSaleDoc,
+  onDeletePreSaleDoc,
   storeName = COMPANY_CONSTANTS.companyName,
   storePhone = COMPANY_CONSTANTS.phone,
   storeAddress = COMPANY_CONSTANTS.address,
@@ -235,8 +241,30 @@ Thank you for your business!`;
               </button>
             </div>
 
-            {/* Contextual Actions (Payment / Void) */}
+            {/* Contextual Actions (Payment / Void / PreSale Edit & Delete) */}
             <div className="flex items-center space-x-2">
+              {preSaleDoc && preSaleDoc.status === 'draft' && onEditPreSaleDoc && (
+                <button
+                  onClick={() => onEditPreSaleDoc(preSaleDoc)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  title="Edit Quotation / Proforma"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-amber-700" />
+                  <span>Edit</span>
+                </button>
+              )}
+
+              {preSaleDoc && preSaleDoc.status === 'draft' && onDeletePreSaleDoc && (
+                <button
+                  onClick={() => onDeletePreSaleDoc(preSaleDoc)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  title="Delete Quotation / Proforma"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                  <span>Delete</span>
+                </button>
+              )}
+
               {sale && (isPartial || isUnpaid) && !isVoided && onRecordPayment && (
                 <button
                   onClick={() => onRecordPayment(sale)}

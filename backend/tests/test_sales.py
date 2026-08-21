@@ -464,4 +464,121 @@ def test_site_narrative_and_customer_sites_endpoint(staff_auth_client):
     assert any(s["id"] == s1_res.json()["id"] for s in search_sales)
 
 
+def test_presale_crud_and_conversion_guards(staff_auth_client):
+    # 1. Setup Customer & Products
+    cust = staff_auth_client.post("/api/v1/customers/", json={
+        "name": "Mwangi Solar Installations",
+        "phone": "+254722112233"
+    }).json()
+
+    prod1 = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Inverter 5KW Growatt",
+        "sku": "GRW-5KW",
+        "cost_price": 60000.0,
+        "selling_price": 85000.0,
+        "initial_stock": 10.0
+    }).json()
+
+    prod2 = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Panel 400W Mono",
+        "sku": "SP-400W",
+        "cost_price": 9000.0,
+        "selling_price": 13000.0,
+        "initial_stock": 50.0
+    }).json()
+
+    # 2. Create Quotation
+    doc_res = staff_auth_client.post("/api/v1/pre-sales/", json={
+        "type": "quotation",
+        "customer_id": cust["id"],
+        "site_name": "Runda Villa Project",
+        "discount_amount": 2000.0,
+        "notes": "Valid for 14 days",
+        "items": [
+            {
+                "product_id": prod1["id"],
+                "unit_type": "piece",
+                "unit_sold": "piece",
+                "quantity": 1.0,
+                "unit_price": 85000.0
+            }
+        ]
+    })
+    assert doc_res.status_code == 201
+    doc = doc_res.json()
+    assert doc["document_no"].startswith("QT-")
+    assert float(doc["subtotal"]) == 85000.0
+    assert float(doc["total_amount"]) == 83000.0  # 85000 - 2000
+
+    # 3. Edit Quotation (Update site_name, add prod2, increase discount)
+    put_res = staff_auth_client.put(f"/api/v1/pre-sales/{doc['id']}", json={
+        "type": "quotation",
+        "customer_id": cust["id"],
+        "site_name": "Runda Villa Project - Phase 2",
+        "discount_amount": 5000.0,
+        "notes": "Updated pricing for combined order",
+        "items": [
+            {
+                "product_id": prod1["id"],
+                "unit_type": "piece",
+                "unit_sold": "piece",
+                "quantity": 2.0,
+                "unit_price": 84000.0
+            },
+            {
+                "product_id": prod2["id"],
+                "unit_type": "piece",
+                "unit_sold": "piece",
+                "quantity": 10.0,
+                "unit_price": 12500.0
+            }
+        ]
+    })
+    assert put_res.status_code == 200
+    updated_doc = put_res.json()
+    assert updated_doc["site_name"] == "Runda Villa Project - Phase 2"
+    assert len(updated_doc["items"]) == 2
+    # subtotal = (2 * 84000) + (10 * 12500) = 168000 + 125000 = 293000
+    # total_amount = 293000 - 5000 = 288000
+    assert float(updated_doc["subtotal"]) == 293000.0
+    assert float(updated_doc["total_amount"]) == 288000.0
+
+    # 4. Create a second quote and test deletion
+    doc2_res = staff_auth_client.post("/api/v1/pre-sales/", json={
+        "type": "proforma",
+        "customer_id": cust["id"],
+        "items": [{"product_id": prod1["id"], "unit_type": "piece", "unit_sold": "piece", "quantity": 1.0, "unit_price": 85000.0}]
+    })
+    assert doc2_res.status_code == 201
+    doc2 = doc2_res.json()
+
+    del_res = staff_auth_client.delete(f"/api/v1/pre-sales/{doc2['id']}")
+    assert del_res.status_code == 200
+    assert del_res.json()["success"] is True
+
+    # Ensure doc2 is now 404
+    get_del = staff_auth_client.get(f"/api/v1/pre-sales/{doc2['id']}")
+    assert get_del.status_code == 404
+
+    # 5. Convert doc1 to Sale and verify Edit and Delete are blocked
+    conv_res = staff_auth_client.post(f"/api/v1/pre-sales/{doc['id']}/convert-to-sale", params={"payment_method": "mpesa"})
+    assert conv_res.status_code == 200
+    sale = conv_res.json()
+    assert sale["invoice_no"].startswith("INV-")
+
+    # Attempting to edit converted quote should fail
+    put_conv = staff_auth_client.put(f"/api/v1/pre-sales/{doc['id']}", json={
+        "type": "quotation",
+        "items": [{"product_id": prod1["id"], "unit_type": "piece", "unit_sold": "piece", "quantity": 1.0, "unit_price": 85000.0}]
+    })
+    assert put_conv.status_code == 400
+    assert "already been converted" in put_conv.json()["detail"]
+
+    # Attempting to delete converted quote should fail
+    del_conv = staff_auth_client.delete(f"/api/v1/pre-sales/{doc['id']}")
+    assert del_conv.status_code == 400
+    assert "already been converted" in del_conv.json()["detail"]
+
+
+
 

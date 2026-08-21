@@ -891,3 +891,89 @@ def convert_pre_sale_to_sale(db: Session, store_id: int, user_id: int, doc_id: i
     doc.converted_sale_id = sale.id
     db.commit()
     return sale
+
+
+def update_pre_sale_document(db: Session, store_id: int, user_id: int, doc_id: int, doc_in: PreSaleDocumentCreate) -> PreSaleDocument:
+    doc = get_pre_sale_document(db, store_id, doc_id)
+    if doc.status == "converted":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot edit a document that has already been converted to an active sale/invoice"
+        )
+
+    if not doc_in.items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document must have at least one item"
+        )
+
+    # 1. Update metadata
+    doc.type = doc_in.type
+    doc.customer_id = doc_in.customer_id
+    doc.site_name = doc_in.site_name.strip() if doc_in.site_name else None
+    doc.valid_until = doc_in.valid_until
+    doc.notes = doc_in.notes
+
+    # 2. Rebuild items
+    doc.items.clear()
+    subtotal = Decimal("0.00")
+    tax_amount = Decimal("0.00")
+
+    for item_in in doc_in.items:
+        prod = db.query(Product).filter(Product.id == item_in.product_id, Product.is_active.is_(True)).first()
+        if not prod:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Product #{item_in.product_id} not found")
+
+        if prod.unit_type == "roll":
+            if item_in.unit_sold == "roll":
+                rolls = item_in.rolls_qty or 1
+                loose = Decimal(str(item_in.loose_meters or "0.00"))
+                mpr = prod.meters_per_roll or Decimal("100.00")
+                qty = roll_count_to_meters(rolls, loose, mpr)
+                line_total = Decimal(str(item_in.unit_price)) * Decimal(str(rolls + (loose / mpr)))
+            else:
+                qty = Decimal(str(item_in.quantity or "0.00"))
+                line_total = Decimal(str(item_in.unit_price)) * qty
+        else:
+            qty = Decimal(str(item_in.quantity or "1.00"))
+            line_total = Decimal(str(item_in.unit_price)) * qty
+
+        item_tax_rate = prod.tax_rate or Decimal("0.0000")
+        if prod.is_taxable and item_tax_rate > 0:
+            tax_amount += line_total * item_tax_rate / (Decimal("1.00") + item_tax_rate)
+
+        subtotal += line_total
+        doc.items.append(PreSaleItem(
+            product_id=prod.id,
+            unit_type=prod.unit_type,
+            unit_sold=item_in.unit_sold,
+            quantity=qty,
+            rolls_qty=item_in.rolls_qty,
+            loose_meters=item_in.loose_meters,
+            unit_price=item_in.unit_price,
+            tax_rate=item_tax_rate,
+            total=line_total
+        ))
+
+    discount = Decimal(str(doc_in.discount_amount or "0.00"))
+    doc.subtotal = subtotal
+    doc.tax_amount = tax_amount
+    doc.discount_amount = discount
+    doc.total_amount = max(Decimal("0.00"), subtotal - discount)
+
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
+def delete_pre_sale_document(db: Session, store_id: int, doc_id: int) -> None:
+    doc = get_pre_sale_document(db, store_id, doc_id)
+    if doc.status == "converted":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete a document that has already been converted to an active sale/invoice"
+        )
+
+    db.delete(doc)
+    db.commit()
+

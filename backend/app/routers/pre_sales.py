@@ -91,6 +91,31 @@ def get_pre_sale_by_id(
     return _format_document_response(doc)
 
 
+@router.put("/{doc_id}", response_model=PreSaleDocumentResponse)
+def update_pre_sale(
+    doc_id: int,
+    doc_in: PreSaleDocumentCreate,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    target_store_id = store_id or current_user.store_id or 1
+    doc = sale_service.update_pre_sale_document(db, target_store_id, current_user.id, doc_id, doc_in)
+    return _format_document_response(doc)
+
+
+@router.delete("/{doc_id}", status_code=status.HTTP_200_OK)
+def delete_pre_sale(
+    doc_id: int,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    target_store_id = store_id or current_user.store_id or 1
+    sale_service.delete_pre_sale_document(db, target_store_id, doc_id)
+    return {"success": True, "detail": f"Document #{doc_id} deleted successfully"}
+
+
 @router.post("/{doc_id}/convert-to-sale", response_model=SaleResponse)
 def convert_to_sale(
     doc_id: int,
@@ -102,3 +127,4 @@ def convert_to_sale(
     target_store_id = store_id or current_user.store_id or 1
     sale = sale_service.convert_pre_sale_to_sale(db, target_store_id, current_user.id, doc_id, payment_method=payment_method)
     return _format_sale_response(sale)
+

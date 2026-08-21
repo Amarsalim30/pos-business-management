@@ -10,7 +10,9 @@ import {
   Sparkles,
   AlertCircle,
   Eye,
-  MapPin
+  MapPin,
+  Pencil,
+  Loader2
 } from 'lucide-react';
 
 interface PreSaleLine {
@@ -36,9 +38,9 @@ export const PreSalesPage: React.FC = () => {
   const [selectedDocForDrawer, setSelectedDocForDrawer] = useState<PreSaleDocument | null>(null);
   const [drawerFormat, setDrawerFormat] = useState<'a4' | 'thermal'>('a4');
 
-
-  // New Document Modal State
+  // New / Edit Document Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingDocId, setEditingDocId] = useState<number | null>(null);
   const [docCustomerId, setDocCustomerId] = useState<number | ''>('');
   const [docSiteName, setDocSiteName] = useState('');
   const [docValidDays, setDocValidDays] = useState('14');
@@ -48,6 +50,10 @@ export const PreSalesPage: React.FC = () => {
   const [productToAdd, setProductToAdd] = useState<string>('');
   const [submittingDoc, setSubmittingDoc] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
+
+  // Delete Confirmation State
+  const [deletingDoc, setDeletingDoc] = useState<PreSaleDocument | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Conversion state
   const [convertingDoc, setConvertingDoc] = useState<PreSaleDocument | null>(null);
@@ -85,6 +91,72 @@ export const PreSalesPage: React.FC = () => {
       setCustomers(data);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleOpenCreateModal = () => {
+    setEditingDocId(null);
+    setDocCustomerId('');
+    setDocSiteName('');
+    setDocValidDays('14');
+    setDocDiscount('0');
+    setDocNotes('');
+    setDocLines([]);
+    setDocError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (doc: PreSaleDocument) => {
+    if (doc.status === 'converted') {
+      alert('Cannot edit a document that has already been converted to an active invoice');
+      return;
+    }
+
+    setEditingDocId(doc.id);
+    setDocCustomerId(doc.customer_id || '');
+    setDocSiteName(doc.site_name || '');
+    setDocValidDays('14');
+    setDocDiscount(String(doc.discount_amount || 0));
+    setDocNotes(doc.notes || '');
+    setDocLines(
+      doc.items.map(it => {
+        const prod = products.find(p => p.id === it.product_id);
+        const mpr = Number(it.unit_type === 'roll' ? (prod?.meters_per_roll || 100) : 100);
+        return {
+          product_id: it.product_id,
+          product_name: it.product_name,
+          sku: it.sku,
+          unit_type: it.unit_type,
+          unit: prod?.unit || 'pcs',
+          meters_per_roll: mpr,
+          unit_sold: it.unit_sold as any,
+          rolls: String(it.rolls_qty || Math.floor(Number(it.quantity) / mpr)),
+          loose: String(it.loose_meters || (Number(it.quantity) % mpr)),
+          qty: String(it.quantity),
+          unit_price: String(it.unit_price)
+        };
+      })
+    );
+    setDocError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteDocument = async () => {
+    if (!deletingDoc) return;
+    setIsDeleting(true);
+    try {
+      await apiFetch(`/api/v1/pre-sales/${deletingDoc.id}`, {
+        method: 'DELETE'
+      });
+      if (selectedDocForDrawer?.id === deletingDoc.id) {
+        setSelectedDocForDrawer(null);
+      }
+      setDeletingDoc(null);
+      loadDocuments();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete document');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -134,7 +206,7 @@ export const PreSalesPage: React.FC = () => {
     }, 0);
   };
 
-  const handleCreateDocument = async () => {
+  const handleSaveDocument = async () => {
     if (docLines.length === 0) {
       setDocError('Please add at least one product item');
       return;
@@ -165,18 +237,29 @@ export const PreSalesPage: React.FC = () => {
     };
 
     try {
-      await apiFetch('/api/v1/pre-sales/', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      if (editingDocId) {
+        // PUT Update
+        await apiFetch(`/api/v1/pre-sales/${editingDocId}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        });
+      } else {
+        // POST Create
+        await apiFetch('/api/v1/pre-sales/', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+      }
+
       setIsModalOpen(false);
+      setEditingDocId(null);
       setDocLines([]);
       setDocSiteName('');
       setDocNotes('');
       setDocDiscount('0');
       loadDocuments();
     } catch (err: any) {
-      setDocError(err.message || 'Failed to create document');
+      setDocError(err.message || 'Failed to save document');
     } finally {
       setSubmittingDoc(false);
     }
@@ -212,7 +295,7 @@ export const PreSalesPage: React.FC = () => {
             <span>Pre-Sale Documents</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Create professional Quotations and Proforma Invoices with 1-click conversion to active sales
+            Create, edit, and convert professional Quotations and Proforma Invoices
           </p>
         </div>
 
@@ -241,7 +324,7 @@ export const PreSalesPage: React.FC = () => {
           </div>
 
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenCreateModal}
             className="flex items-center space-x-1.5 rounded-xl bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-amber-500 transition-all shadow-xs cursor-pointer active:scale-95"
           >
             <Plus className="h-4 w-4" />
@@ -328,29 +411,69 @@ export const PreSalesPage: React.FC = () => {
                         {doc.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end space-x-2" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end space-x-1.5">
                         <button
                           onClick={() => {
                             setSelectedDocForDrawer(doc);
                             setDrawerFormat('a4');
                           }}
-                          className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 cursor-pointer shadow-2xs"
+                          className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs"
                           title="View / Print Document"
                         >
                           <Eye className="h-3.5 w-3.5 text-slate-600" />
                         </button>
 
+                        {/* Edit Button */}
+                        {doc.status === 'draft' ? (
+                          <button
+                            onClick={() => handleOpenEditModal(doc)}
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs hover:text-amber-600"
+                            title="Edit Quotation / Proforma"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            disabled
+                            className="p-1.5 rounded-lg border border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
+                            title="Converted documents cannot be edited"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+
+                        {/* Delete Button */}
+                        {doc.status === 'draft' ? (
+                          <button
+                            onClick={() => setDeletingDoc(doc)}
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-600 cursor-pointer shadow-2xs"
+                            title="Delete Document"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            disabled
+                            className="p-1.5 rounded-lg border border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed"
+                            title="Converted documents cannot be deleted"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+
+                        {/* Convert to Sale Button */}
                         {doc.status === 'draft' ? (
                           <button
                             onClick={() => setConvertingDoc(doc)}
-                            className="inline-flex items-center space-x-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer shadow-2xs"
+                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] cursor-pointer shadow-2xs"
+                            title="Convert into Active Sale Invoice"
                           >
                             <Sparkles className="h-3 w-3" />
                             <span>Convert</span>
                           </button>
                         ) : (
-                          <span className="text-[11px] font-mono text-emerald-700 font-bold">
+                          <span className="text-[11px] font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
                             Sale #{doc.converted_sale_id}
                           </span>
                         )}
@@ -364,36 +487,86 @@ export const PreSalesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Convert to Sale Modal */}
-      {convertingDoc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center space-x-2 text-emerald-700">
-              <Sparkles className="h-5 w-5" />
-              <h3 className="font-bold text-base text-slate-900">Convert {convertingDoc.document_no} to Active Sale</h3>
+      {/* Delete Document Confirmation Dialog */}
+      {deletingDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="p-2 bg-rose-50 rounded-xl border border-rose-100">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">
+                Delete {deletingDoc.type.toUpperCase()}?
+              </h3>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              This will create a new sales transaction of <strong>KES {Number(convertingDoc.total_amount).toLocaleString()}</strong>, verify and deduct current inventory balances, and issue an official sales invoice.
+              Are you sure you want to permanently delete <strong className="text-slate-900 font-mono">#{deletingDoc.document_no}</strong> for <strong>{deletingDoc.customer_name || 'Walk-in'}</strong> totaling <strong className="text-slate-900">KES {Number(deletingDoc.total_amount).toLocaleString()}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingDoc(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteDocument}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                <span>{isDeleting ? 'Deleting...' : 'Yes, Delete Document'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Convert Document Modal */}
+      {convertingDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center space-x-2 text-emerald-600">
+              <Sparkles className="h-5 w-5" />
+              <h3 className="text-base font-bold text-slate-900">Convert to Official Sale</h3>
+            </div>
+            <p className="text-xs text-slate-600">
+              Converting <strong>{convertingDoc.document_no}</strong> will create a finalized Sale, deduct items from inventory stock, and mark this pre-sale document as converted.
             </p>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700">Payment Method:</label>
+            <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Customer:</span>
+                <span className="font-bold text-slate-800">{convertingDoc.customer_name || 'Walk-in / Cash'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Total Valuation:</span>
+                <span className="font-mono font-bold text-slate-900">KES {Number(convertingDoc.total_amount).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Select Payment Settlement Method:</label>
               <select
                 value={convertPaymentMethod}
                 onChange={(e) => setConvertPaymentMethod(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                className="w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-900 bg-white focus:outline-none focus:border-emerald-600"
               >
-                <option value="cash">Cash</option>
-                <option value="mpesa">M-Pesa</option>
-                <option value="bank">Bank Transfer</option>
-                <option value="credit">Credit Sale (Add to Customer Debt)</option>
+                <option value="cash">Cash Settlement</option>
+                <option value="mpesa">M-Pesa Direct</option>
+                <option value="credit">Credit (Invoice on Customer Ledger)</option>
+                <option value="bank">Bank Wire / Transfer</option>
+                <option value="cheque">Cheque</option>
               </select>
             </div>
 
-            <div className="flex items-center justify-end space-x-3 pt-2">
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setConvertingDoc(null)}
-                className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
               >
                 Cancel
               </button>
@@ -409,7 +582,7 @@ export const PreSalesPage: React.FC = () => {
         </div>
       )}
 
-      {/* New Document Modal */}
+      {/* New / Edit Document Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl p-6 max-w-3xl w-full shadow-2xl border border-slate-200 space-y-4 my-8">
@@ -417,10 +590,10 @@ export const PreSalesPage: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <FileCheck2 className="h-5 w-5 text-amber-600" />
                 <h3 className="text-base font-bold text-slate-900">
-                  New {activeTab === 'quotation' ? 'Quotation' : 'Proforma Invoice'}
+                  {editingDocId ? `Edit ${activeTab === 'quotation' ? 'Quotation' : 'Proforma Invoice'}` : `New ${activeTab === 'quotation' ? 'Quotation' : 'Proforma Invoice'}`}
                 </h3>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-xs font-bold">
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer">
                 ✕ Close
               </button>
             </div>
@@ -584,6 +757,18 @@ export const PreSalesPage: React.FC = () => {
               </table>
             </div>
 
+            {/* Notes */}
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">Notes & Terms:</label>
+              <input
+                type="text"
+                placeholder="e.g. Price includes delivery to site, payment terms 30 days"
+                value={docNotes}
+                onChange={(e) => setDocNotes(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:outline-none focus:border-amber-600"
+              />
+            </div>
+
             {/* Discount & Totals */}
             <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
               <div className="flex items-center space-x-2">
@@ -614,11 +799,11 @@ export const PreSalesPage: React.FC = () => {
                 Cancel
               </button>
               <button
-                onClick={handleCreateDocument}
+                onClick={handleSaveDocument}
                 disabled={submittingDoc || docLines.length === 0}
                 className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
-                {submittingDoc ? 'Creating Document...' : `Create ${activeTab === 'quotation' ? 'Quotation' : 'Proforma'}`}
+                {submittingDoc ? 'Saving Document...' : editingDocId ? 'Save Changes' : `Create ${activeTab === 'quotation' ? 'Quotation' : 'Proforma'}`}
               </button>
             </div>
           </div>
@@ -631,6 +816,13 @@ export const PreSalesPage: React.FC = () => {
         isOpen={!!selectedDocForDrawer}
         defaultFormat={drawerFormat}
         onClose={() => setSelectedDocForDrawer(null)}
+        onEditPreSaleDoc={(doc) => {
+          setSelectedDocForDrawer(null);
+          handleOpenEditModal(doc);
+        }}
+        onDeletePreSaleDoc={(doc) => {
+          setDeletingDoc(doc);
+        }}
       />
 
       {/* Invoice Drawer for Converted Sales */}

@@ -13,6 +13,7 @@ Fixes over original version:
 
 import os
 import csv
+from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, Optional
 from sqlalchemy.orm import Session
@@ -96,35 +97,41 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
         else:
             print(f"⚠️ GroupsT.csv not found at {groups_path}")
 
-        # 3. Build authoritative stock map from StockBalances.csv
-        stock_balances: Dict[str, Decimal] = {}
-        stock_bal_path = os.path.join(csv_dir, "StockBalances.csv")
-        if os.path.exists(stock_bal_path):
-            with open(stock_bal_path, "r", encoding="utf-8", errors="ignore") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    item_code = (row.get("ItemCode") or "").strip()
-                    cl_bal = _safe_decimal(row.get("ClBalWhole"))
-                    if item_code and cl_bal > 0:
-                        stock_balances[item_code] = cl_bal
-            print(f"✅ StockBalances loaded: {len(stock_balances)} items with closing stock")
-        else:
-            print(f"⚠️ StockBalances.csv not found at {stock_bal_path} — falling back to SysBal")
+        # 3. Stock source: ITEMS.SysBal only (legacy ledger data is unreliable)
+        print("ℹ️ Using ITEMS.SysBal as the sole stock source (per user decision)")
 
         # 4. Build cost price map from GRNs.csv + Movements2.csv (latest GRN cost per item)
+        grn_costs: Dict[str, Decimal] = {}
+
+        # Source 1: GRNs.csv CostPrice (primary) — LATEST GRN per item wins.
+        # The CSV is NOT sorted chronologically, so rank rows by (TDate, GRNNo, file order).
+        # Rows with zero/blank cost are skipped (legacy blanks = not recorded, not free).
         grn_costs: Dict[str, Decimal] = {}
 
         # Source 1: GRNs.csv CostPrice (primary)
         grns_path = os.path.join(csv_dir, "GRNs.csv")
         if os.path.exists(grns_path):
+            best: Dict[str, tuple] = {}  # item -> ((tdate, grn_no, seq), cost)
             with open(grns_path, "r", encoding="utf-8", errors="ignore") as f:
                 reader = csv.DictReader(f)
-                for row in reader:
+                for seq, row in enumerate(reader):
                     item_code = (row.get("Item") or "").strip()
                     cost_price = _safe_decimal(row.get("CostPrice"))
-                    if item_code and cost_price > 0:
-                        grn_costs[item_code] = cost_price  # last row per item = latest GRN
-            print(f"✅ GRNs.csv costs loaded: {len(grn_costs)} items")
+                    if not item_code or cost_price <= 0:
+                        continue
+                    try:
+                        tdate = datetime.strptime((row.get("TDate") or "").strip()[:8], "%m/%d/%y")
+                    except Exception:
+                        tdate = datetime.min
+                    try:
+                        grn_no = int((row.get("GRNNo") or "0").strip() or 0)
+                    except Exception:
+                        grn_no = 0
+                    key = (tdate, grn_no, seq)
+                    if item_code not in best or key >= best[item_code][0]:
+                        best[item_code] = (key, cost_price)
+            grn_costs = {item: cost for item, (_, cost) in best.items()}
+            print(f"✅ GRNs.csv costs loaded: {len(grn_costs)} items (latest GRN by date wins)")
 
         # Source 2: Movements2.csv Price column for GRN rows (补充)
         mov2_path = os.path.join(csv_dir, "Movements2.csv")
@@ -160,18 +167,13 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
                 if not item_code or not item_desc:
                     continue
 
-                # --- Stock: StockBalances.csv (authoritative) > SysBal > StockQnty ---
-                stock_to_use = stock_balances.get(item_code, Decimal("0"))
-                if stock_to_use <= 0:
-                    sys_bal = _safe_decimal(row.get("SysBal"))
-                    stock_to_use = sys_bal if sys_bal > 0 else _safe_decimal(row.get("StockQnty"))
+                # --- Stock: ITEMS.SysBal only ---
+                stock_to_use = _safe_decimal(row.get("SysBal"))
+                if stock_to_use < 0:
+                    stock_to_use = Decimal("0")
 
                 # Check if product already exists in DB (from previous migration run)
                 existing_prod = db.query(Product).filter(Product.store_id == store.id, Product.sku == item_code).first()
-
-                if stock_to_use <= 0 and not existing_prod:
-                    skipped_zero_stock += 1
-                    continue
 
                 # --- Prices ---
                 sp = _safe_decimal(row.get("SellingPrice01"))
@@ -258,19 +260,20 @@ def migrate_legacy_data(csv_dir: str = "/home/amar-salim/Downloads/2026_mdb_csv"
                         quantity=stock_to_use
                     )
                     db.add(inv)
-                    mov = StockMovement(
-                        product_id=prod.id,
-                        store_id=store.id,
-                        type="in",
-                        quantity=stock_to_use,
-                        unit_sold="meter" if is_roll else "piece",
-                        previous_quantity=Decimal("0.00"),
-                        new_quantity=stock_to_use,
-                        reference_id="LEGACY_MDB_MIGRATION",
-                        note=f"Imported from legacy MDB (ItemCode: {item_code})",
-                        user_id=user_id
-                    )
-                    db.add(mov)
+                    if stock_to_use > 0:
+                        mov = StockMovement(
+                            product_id=prod.id,
+                            store_id=store.id,
+                            type="in",
+                            quantity=stock_to_use,
+                            unit_sold="meter" if is_roll else "piece",
+                            previous_quantity=Decimal("0.00"),
+                            new_quantity=stock_to_use,
+                            reference_id="LEGACY_MDB_MIGRATION",
+                            note=f"Imported from legacy MDB (ItemCode: {item_code})",
+                            user_id=user_id
+                        )
+                        db.add(mov)
                 else:
                     old_qty = inv.quantity
                     inv.quantity = stock_to_use

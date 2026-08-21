@@ -3,6 +3,7 @@ import { apiFetch } from '../services/api';
 import type { PurchaseOrder, GoodsReceivedNote, Supplier, Product, Category } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { GRNDocumentDrawer } from '../components/GRNDocumentDrawer';
+import { PODocumentDrawer } from '../components/PODocumentDrawer';
 import { CreatePOModal } from '../components/CreatePOModal';
 import { DirectGRNModal } from '../components/DirectGRNModal';
 import { ReceivePOModal } from '../components/ReceivePOModal';
@@ -85,6 +86,10 @@ export const PurchasesPage: React.FC = () => {
   const [expReference, setExpReference] = useState('');
   const [savingExp, setSavingExp] = useState(false);
   const [expError, setExpError] = useState<string | null>(null);
+
+  // Universal PO Document Drawer State
+  const [selectedPOForDrawer, setSelectedPOForDrawer] = useState<PurchaseOrder | null>(null);
+  const [isPODrawerOpen, setIsPODrawerOpen] = useState(false);
 
   // Universal GRN Document Drawer State
   const [selectedGRNForDrawer, setSelectedGRNForDrawer] = useState<GoodsReceivedNote | null>(null);
@@ -351,9 +356,18 @@ export const PurchasesPage: React.FC = () => {
                     const expTotal = po.expenses.reduce((s, e) => s + Number(e.amount), 0);
 
                     return (
-                      <tr key={po.id} className="hover:bg-slate-50/75 transition-colors">
+                      <tr
+                        key={po.id}
+                        onClick={() => {
+                          setSelectedPOForDrawer(po);
+                          setIsPODrawerOpen(true);
+                        }}
+                        className="hover:bg-indigo-50/40 transition-colors cursor-pointer group"
+                      >
                         <td className="py-3.5 px-4">
-                          <div className="font-mono font-bold text-slate-900">{po.po_no}</div>
+                          <div className="font-mono font-bold text-slate-900 group-hover:text-indigo-600 transition-colors underline decoration-slate-300 underline-offset-2">
+                            {po.po_no}
+                          </div>
                           <div className="text-xs text-slate-400 mt-0.5">
                             {new Date(po.created_at).toLocaleDateString()}
                           </div>
@@ -390,14 +404,25 @@ export const PurchasesPage: React.FC = () => {
                             <span className="text-slate-400 text-xs">No</span>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 text-right space-x-2">
+                        <td className="py-3.5 px-4 text-right space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => {
+                              setSelectedPOForDrawer(po);
+                              setIsPODrawerOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                            title="View Purchase Order Document"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                            <span>View</span>
+                          </button>
                           {po.status !== 'received' && po.status !== 'cancelled' && (
                             <button
                               onClick={() => openReceiveModal(po)}
                               className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
                             >
                               <PackageCheck className="h-3.5 w-3.5" />
-                              Receive
+                              <span>Receive</span>
                             </button>
                           )}
                           <button
@@ -406,7 +431,7 @@ export const PurchasesPage: React.FC = () => {
                             title="Add Freight / Labour Expense"
                           >
                             <Banknote className="h-3.5 w-3.5" />
-                            Expense
+                            <span>Expense</span>
                           </button>
                         </td>
                       </tr>
@@ -740,6 +765,18 @@ export const PurchasesPage: React.FC = () => {
           setSelectedGRNForDrawer(null);
         }}
       />
+
+      {/* Universal Purchase Order (PO) Document Viewer Drawer */}
+      <PODocumentDrawer
+        po={selectedPOForDrawer}
+        isOpen={isPODrawerOpen}
+        onClose={() => {
+          setIsPODrawerOpen(false);
+          setSelectedPOForDrawer(null);
+        }}
+        onReceivePO={openReceiveModal}
+      />
     </div>
   );
 };
+

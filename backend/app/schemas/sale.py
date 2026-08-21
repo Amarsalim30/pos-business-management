@@ -176,6 +176,17 @@ class VoidSaleRequest(BaseModel):
     reason: Optional[str] = None
 
 
+class SaleUpdate(BaseModel):
+    customer_id: Optional[int] = None
+    site_name: Optional[str] = None
+    notes: Optional[str] = None
+    discount_amount: Optional[Decimal] = Field(None, ge=0)
+    is_etr: Optional[bool] = None
+    payment_reference: Optional[str] = None
+    items: Optional[List[SaleItemCreate]] = None
+
+
+
 # =========================================================================
 # Pre-Sale Document Schemas (Quotations & Proformas)
 # =========================================================================

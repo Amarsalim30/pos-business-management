@@ -4,7 +4,6 @@ import type { Product, Supplier, Category, PurchaseOrder } from '../types';
 import { RapidItemGrid, type GridItem } from './RapidItemGrid';
 import { QuickProductModal } from './QuickProductModal';
 import { QuickSupplierModal } from './QuickSupplierModal';
-import { ExcelPasteModal } from './ExcelPasteModal';
 import { ShoppingBag, X, Plus, Loader2, Calendar } from 'lucide-react';
 
 interface CreatePOModalProps {
@@ -35,33 +34,17 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
   // Sub-Modals
   const [isQuickProductOpen, setIsQuickProductOpen] = useState(false);
   const [isQuickSupplierOpen, setIsQuickSupplierOpen] = useState(false);
-  const [isExcelPasteOpen, setIsExcelPasteOpen] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize with 1 blank row
   useEffect(() => {
     if (isOpen) {
       setSupplierId('');
       setExpectedDate('');
       setIsEtr(false);
       setNotes('');
-      setItems([{
-        id: `row_${Date.now()}`,
-        product_id: null,
-        product_name: '',
-        product_sku: '',
-        unit_type: 'piece',
-        meters_per_roll: 100,
-        quantity: 1,
-        rolls: 1,
-        loose_meters: 0,
-        unit_cost: 0,
-        cost_per_meter: 0,
-        total_cost: 0,
-        is_new: true
-      }]);
+      setItems([]);
       setError(null);
     }
   }, [isOpen]);
@@ -84,7 +67,6 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
 
   const handleProductCreated = (newProd: Product) => {
     onRefreshData();
-    const emptyIdx = items.findIndex(it => !it.product_id);
     const mpr = newProd.meters_per_roll || 100;
     const isRoll = newProd.unit_type === 'roll';
     const newGridItem: GridItem = {
@@ -97,32 +79,21 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
       quantity: isRoll ? mpr : 1,
       rolls: isRoll ? 1 : 0,
       loose_meters: 0,
+      roll_mode: 'rolls',
       unit_cost: Number(newProd.cost_price),
       cost_per_meter: isRoll && mpr > 0 ? Number(newProd.cost_price) / mpr : 0,
       total_cost: Number(newProd.cost_price),
       current_stock: newProd.current_stock,
       formatted_stock: newProd.formatted_stock,
-      current_bp: newProd.cost_price,
-      is_new: false
+      current_bp: newProd.cost_price
     };
 
-    if (emptyIdx >= 0) {
-      const updated = [...items];
-      updated[emptyIdx] = newGridItem;
-      setItems(updated);
-    } else {
-      setItems([...items, newGridItem]);
-    }
+    setItems([...items, newGridItem]);
   };
 
   const handleSupplierCreated = (newSupplier: Supplier) => {
     onRefreshData();
     setSupplierId(newSupplier.id);
-  };
-
-  const handleExcelImport = (importedItems: GridItem[]) => {
-    const existingValid = items.filter(it => it.product_id !== null);
-    setItems([...existingValid, ...importedItems]);
   };
 
   const handleImportLowStock = () => {
@@ -135,7 +106,6 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
     const lowStockGridItems: GridItem[] = lowStockProds.map(p => {
       const isRoll = p.unit_type === 'roll';
       const mpr = p.meters_per_roll || 100;
-      // Recommended reorder quantity = reorder_level * 2 - current_stock (at least 1)
       const suggestedQty = Math.max(1, (p.reorder_level * 2) - p.current_stock);
       const totalCost = isRoll && mpr > 0
         ? (suggestedQty / mpr) * Number(p.cost_price)
@@ -151,18 +121,19 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
         quantity: suggestedQty,
         rolls: isRoll && mpr > 0 ? Math.floor(suggestedQty / mpr) : 0,
         loose_meters: isRoll && mpr > 0 ? suggestedQty % mpr : 0,
+        roll_mode: 'rolls',
         unit_cost: Number(p.cost_price),
         cost_per_meter: isRoll && mpr > 0 ? Number(p.cost_price) / mpr : 0,
         total_cost: totalCost,
         current_stock: p.current_stock,
         formatted_stock: p.formatted_stock,
-        current_bp: p.cost_price,
-        is_new: false
+        current_bp: p.cost_price
       };
     });
 
-    const existingValid = items.filter(it => it.product_id !== null);
-    setItems([...existingValid, ...lowStockGridItems]);
+    const existingIds = new Set(items.map(it => it.product_id));
+    const toAdd = lowStockGridItems.filter(it => !existingIds.has(it.product_id));
+    setItems([...items, ...toAdd]);
   };
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -253,7 +224,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsQuickSupplierOpen(true)}
-                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5"
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 cursor-pointer"
                   >
                     <Plus className="h-3 w-3" />
                     New
@@ -263,7 +234,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                   required
                   value={supplierId}
                   onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 shadow-2xs"
                 >
                   <option value="">Select Supplier *</option>
                   {suppliers.map(s => (
@@ -285,14 +256,14 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                     type="date"
                     value={expectedDate}
                     onChange={(e) => setExpectedDate(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 shadow-2xs"
                   />
                 </div>
               </div>
 
               {/* Fiscal ETR Checkbox */}
               <div className="flex items-center pt-5">
-                <label className="flex items-center gap-2 cursor-pointer select-none bg-white px-3.5 py-2 rounded-xl border border-slate-200 w-full hover:bg-slate-50 transition-colors">
+                <label className="flex items-center gap-2 cursor-pointer select-none bg-white px-3.5 py-2 rounded-xl border border-slate-200 w-full hover:bg-slate-50 transition-colors shadow-2xs">
                   <input
                     type="checkbox"
                     checked={isEtr}
@@ -314,7 +285,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
                 placeholder="e.g. Include 1-year manufacturer warranty certificate, delivery to Industrial Area warehouse"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 shadow-2xs"
               />
             </div>
 
@@ -325,7 +296,6 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
               items={items}
               onChange={setItems}
               onAddNewProduct={() => setIsQuickProductOpen(true)}
-              onOpenExcelPaste={() => setIsExcelPasteOpen(true)}
               onImportLowStock={handleImportLowStock}
             />
           </div>
@@ -333,7 +303,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
           {/* Modal Footer */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100">
             <div className="text-xs text-slate-500 font-medium">
-              Keyboard shortcut: Press <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px] text-slate-800">Ctrl + Enter</kbd> to submit
+              Shortcut: Press <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px] text-slate-800">Ctrl + Enter</kbd> to submit
             </div>
 
             <div className="flex items-center gap-3">
@@ -347,7 +317,7 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleSubmit()}
-                disabled={saving}
+                disabled={saving || items.length === 0}
                 className="inline-flex items-center gap-2 px-6 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50"
               >
                 {saving ? (
@@ -379,13 +349,6 @@ export const CreatePOModal: React.FC<CreatePOModalProps> = ({
         isOpen={isQuickSupplierOpen}
         onClose={() => setIsQuickSupplierOpen(false)}
         onSupplierCreated={handleSupplierCreated}
-      />
-
-      <ExcelPasteModal
-        isOpen={isExcelPasteOpen}
-        onClose={() => setIsExcelPasteOpen(false)}
-        products={products}
-        onImport={handleExcelImport}
       />
     </>
   );

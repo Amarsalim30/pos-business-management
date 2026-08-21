@@ -8,10 +8,10 @@ from app.core.database import get_db
 from app.dependencies import get_current_user, require_permission
 from app.models.user import User
 from app.schemas.account import (
-    PettyCashCreate, PettyCashResponse, PettyCashSummaryResponse,
+    PettyCashCreate, PettyCashUpdate, PettyCashResponse, PettyCashSummaryResponse,
     BankAccountCreate, BankAccountUpdate, BankAccountResponse, BankAccountDetailResponse,
-    BankTransactionCreate, BankTransactionResponse,
-    MpesaIncomeCreate, MpesaIncomeResponse, AccountsOverviewResponse
+    BankTransactionCreate, BankTransactionUpdate, BankTransactionResponse,
+    MpesaIncomeCreate, MpesaIncomeUpdate, MpesaIncomeResponse, AccountsOverviewResponse
 )
 from app.services import account as account_service
 
@@ -110,6 +110,40 @@ def create_petty_cash_entry(
     )
 
 
+@router.put("/petty-cash/{entry_id}", response_model=PettyCashResponse)
+def update_petty_cash_entry(
+    entry_id: int,
+    entry_in: PettyCashUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("accounts:petty_cash"))
+):
+    target_store_id = current_user.store_id or 1
+    entry = account_service.update_petty_cash_entry(db, target_store_id, entry_id, entry_in)
+    return PettyCashResponse(
+        id=entry.id,
+        store_id=entry.store_id,
+        date=entry.date,
+        description=entry.description,
+        amount=entry.amount,
+        type=entry.type,
+        category=entry.category,
+        receipt_no=entry.receipt_no,
+        user_id=entry.user_id,
+        user_name=entry.user.full_name if entry.user else current_user.full_name,
+        created_at=entry.created_at
+    )
+
+
+@router.delete("/petty-cash/{entry_id}")
+def delete_petty_cash_entry(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("accounts:petty_cash"))
+):
+    target_store_id = current_user.store_id or 1
+    return account_service.delete_petty_cash_entry(db, target_store_id, entry_id)
+
+
 # =========================================================================
 # Bank Accounts Endpoints
 # =========================================================================
@@ -155,6 +189,16 @@ def update_bank_account(
     return account_service.update_bank_account(db, target_store_id, account_id, account_in)
 
 
+@router.delete("/bank-accounts/{account_id}")
+def delete_bank_account(
+    account_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
+):
+    target_store_id = current_user.store_id or 1
+    return account_service.delete_bank_account(db, target_store_id, account_id)
+
+
 @router.post("/bank-accounts/{account_id}/transactions", response_model=BankTransactionResponse, status_code=status.HTTP_201_CREATED)
 def record_bank_transaction(
     account_id: int,
@@ -176,6 +220,41 @@ def record_bank_transaction(
         user_name=current_user.full_name,
         created_at=trans.created_at
     )
+
+
+@router.put("/bank-accounts/{account_id}/transactions/{transaction_id}", response_model=BankTransactionResponse)
+def update_bank_transaction(
+    account_id: int,
+    transaction_id: int,
+    trans_in: BankTransactionUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
+):
+    target_store_id = current_user.store_id or 1
+    trans = account_service.update_bank_transaction(db, target_store_id, account_id, transaction_id, trans_in)
+    return BankTransactionResponse(
+        id=trans.id,
+        bank_account_id=trans.bank_account_id,
+        date=trans.date,
+        description=trans.description,
+        amount=trans.amount,
+        type=trans.type,
+        reference=trans.reference,
+        user_id=trans.user_id,
+        user_name=trans.user.full_name if trans.user else current_user.full_name,
+        created_at=trans.created_at
+    )
+
+
+@router.delete("/bank-accounts/{account_id}/transactions/{transaction_id}")
+def delete_bank_transaction(
+    account_id: int,
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
+):
+    target_store_id = current_user.store_id or 1
+    return account_service.delete_bank_transaction(db, target_store_id, account_id, transaction_id)
 
 
 # =========================================================================
@@ -230,3 +309,35 @@ def create_mpesa_income(
         user_name=current_user.full_name,
         created_at=record.created_at
     )
+
+
+@router.put("/mpesa-income/{income_id}", response_model=MpesaIncomeResponse)
+def update_mpesa_income(
+    income_id: int,
+    mpesa_in: MpesaIncomeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
+):
+    target_store_id = current_user.store_id or 1
+    record = account_service.update_mpesa_income(db, target_store_id, income_id, mpesa_in)
+    return MpesaIncomeResponse(
+        id=record.id,
+        store_id=record.store_id,
+        date=record.date,
+        description=record.description,
+        amount=record.amount,
+        reference=record.reference,
+        user_id=record.user_id,
+        user_name=record.user.full_name if record.user else current_user.full_name,
+        created_at=record.created_at
+    )
+
+
+@router.delete("/mpesa-income/{income_id}")
+def delete_mpesa_income(
+    income_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("accounts:banking_mpesa"))
+):
+    target_store_id = current_user.store_id or 1
+    return account_service.delete_mpesa_income(db, target_store_id, income_id)

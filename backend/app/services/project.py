@@ -122,8 +122,42 @@ def update_project(db: Session, store_id: int, project_id: int, project_in: Proj
 
 
 
-def delete_project(db: Session, store_id: int, project_id: int) -> dict:
+def delete_project(db: Session, store_id: int, project_id: int, user_id: Optional[int] = None) -> dict:
     project = get_project_by_id(db, store_id, project_id)
+
+    # Return any allocated inventory materials back to store stock
+    for expense in project.expenses:
+        if expense.source == "inventory" and expense.product_id:
+            product = db.query(Product).filter(Product.id == expense.product_id).first()
+            if product:
+                if product.unit_type == "roll" and expense.unit_sold == "roll":
+                    meters_per_roll = Decimal(str(product.meters_per_roll or 100))
+                    base_return = expense.quantity * meters_per_roll
+                else:
+                    base_return = expense.quantity
+
+                inv = db.query(Inventory).filter(
+                    Inventory.product_id == product.id,
+                    Inventory.store_id == store_id
+                ).first()
+
+                if inv:
+                    prev_qty = inv.quantity
+                    inv.quantity += base_return
+                    movement = StockMovement(
+                        product_id=product.id,
+                        store_id=store_id,
+                        type="project_return",
+                        quantity=base_return,
+                        unit_sold=expense.unit_sold,
+                        previous_quantity=prev_qty,
+                        new_quantity=inv.quantity,
+                        reference_id=f"PROJ-{project_id}",
+                        note=f"Project #{project_id} deleted - material returned",
+                        user_id=user_id or project.created_by
+                    )
+                    db.add(movement)
+
     db.delete(project)
     db.commit()
     return {"detail": "Project deleted successfully"}

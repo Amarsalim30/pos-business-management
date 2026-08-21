@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../services/api';
 import type { ProjectDetail, Product, Category, Customer } from '../types';
 import { MaterialAllocationModal } from '../components/MaterialAllocationModal';
@@ -25,12 +25,17 @@ import {
 
 export const ProjectWorkspacePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'bom' | 'expenses' | 'incomes'>('bom');
   const [bomSearch, setBomSearch] = useState('');
+
+  // Delete Project State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
 
   // Product Catalog & Allocation State (for Modal)
   const [products, setProducts] = useState<Product[]>([]);
@@ -344,6 +349,22 @@ export const ProjectWorkspacePage: React.FC = () => {
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!project) return;
+    setIsDeletingProject(true);
+    try {
+      await apiFetch(`/api/v1/projects/${project.id}`, {
+        method: 'DELETE'
+      });
+      setIsDeleteModalOpen(false);
+      navigate('/projects');
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete project');
+    } finally {
+      setIsDeletingProject(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-white p-20 rounded-3xl border border-slate-200 text-center text-slate-400 space-y-3">
@@ -431,6 +452,15 @@ export const ProjectWorkspacePage: React.FC = () => {
           >
             <Banknote className="h-4 w-4" />
             <span>+ Record Client Payment</span>
+          </button>
+
+          <button
+            onClick={() => setIsDeleteModalOpen(true)}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+            title="Delete Project"
+          >
+            <Trash2 className="h-4 w-4 text-rose-600" />
+            <span>Delete Project</span>
           </button>
         </div>
       </div>
@@ -1259,10 +1289,9 @@ export const ProjectWorkspacePage: React.FC = () => {
               )}
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Payment Description</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Payment Description (Optional)</label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. 50% Initial Deposit"
                   value={payDescription}
                   onChange={(e) => setPayDescription(e.target.value)}
@@ -1327,6 +1356,52 @@ export const ProjectWorkspacePage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Project Confirmation Modal */}
+      {isDeleteModalOpen && project && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-50 rounded-2xl">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Project #{project.id}</h3>
+                <p className="text-xs text-slate-500">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs space-y-1.5 text-slate-600">
+              <div className="font-bold text-slate-900 text-sm">{project.name}</div>
+              <div>Client: <span className="font-semibold text-slate-800">{project.client_name}</span></div>
+              <div>Quoted Value: <span className="font-mono font-bold text-slate-800">KES {Number(project.quoted_amount).toLocaleString()}</span></div>
+              <p className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-xl border border-amber-200 mt-2 font-medium">
+                Note: All allocated inventory materials will automatically be returned to store stock.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingProject}
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingProject}
+                onClick={handleDeleteProject}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                {isDeletingProject && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Confirm Delete Project
+              </button>
+            </div>
           </div>
         </div>
       )}

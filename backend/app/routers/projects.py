@@ -82,7 +82,7 @@ def delete_project(
     current_user: User = Depends(require_staff)
 ):
     target_store_id = current_user.store_id or 1
-    return project_service.delete_project(db, target_store_id, project_id)
+    return project_service.delete_project(db, target_store_id, project_id, user_id=current_user.id)
 
 
 @router.post("/{project_id}/materials", response_model=ProjectExpenseResponse, status_code=status.HTTP_201_CREATED)

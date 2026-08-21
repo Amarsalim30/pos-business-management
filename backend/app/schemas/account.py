@@ -5,10 +5,19 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class PettyCashCreate(BaseModel):
-    description: str = Field(..., min_length=1)
+    description: Optional[str] = None
     amount: Decimal = Field(..., gt=0)
     type: str = Field("out", pattern="^(in|out)$")
     category: Optional[str] = "general"  # 'office', 'transport', 'tea_snacks', 'cleaning', 'repairs', 'general', 'float_deposit'
+    receipt_no: Optional[str] = None
+    date: Optional[datetime] = None
+
+
+class PettyCashUpdate(BaseModel):
+    description: Optional[str] = None
+    amount: Optional[Decimal] = Field(None, gt=0)
+    type: Optional[str] = Field(None, pattern="^(in|out)$")
+    category: Optional[str] = None
     receipt_no: Optional[str] = None
     date: Optional[datetime] = None
 
@@ -53,7 +62,15 @@ class BankAccountUpdate(BaseModel):
 class BankTransactionCreate(BaseModel):
     amount: Decimal = Field(..., gt=0)
     type: str = Field("deposit", pattern="^(deposit|withdrawal)$")
-    description: str = Field(..., min_length=1)
+    description: Optional[str] = None
+    reference: Optional[str] = None
+    date: Optional[datetime] = None
+
+
+class BankTransactionUpdate(BaseModel):
+    amount: Optional[Decimal] = Field(None, gt=0)
+    type: Optional[str] = Field(None, pattern="^(deposit|withdrawal)$")
+    description: Optional[str] = None
     reference: Optional[str] = None
     date: Optional[datetime] = None
 
@@ -91,8 +108,15 @@ class BankAccountDetailResponse(BankAccountResponse):
 
 
 class MpesaIncomeCreate(BaseModel):
-    description: str = Field(..., min_length=1)
+    description: Optional[str] = None
     amount: Decimal = Field(..., gt=0)
+    reference: Optional[str] = None
+    date: Optional[datetime] = None
+
+
+class MpesaIncomeUpdate(BaseModel):
+    description: Optional[str] = None
+    amount: Optional[Decimal] = Field(None, gt=0)
     reference: Optional[str] = None
     date: Optional[datetime] = None
 

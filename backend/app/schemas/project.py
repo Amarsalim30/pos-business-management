@@ -80,7 +80,7 @@ class ProjectExpenseResponse(BaseModel):
 
 
 class ProjectIncomeCreate(BaseModel):
-    description: str
+    description: Optional[str] = "Client payment"
     amount: Decimal = Field(..., gt=0)
     source: str = "client_payment"  # 'client_payment'
     payment_method: str = "cash"  # 'cash', 'mpesa', 'bank', 'other'

@@ -7,10 +7,10 @@ from fastapi import HTTPException, status
 
 from app.models.account import PettyCashEntry, BankAccount, BankTransaction, MpesaIncome
 from app.schemas.account import (
-    PettyCashCreate, PettyCashResponse, PettyCashSummaryResponse,
+    PettyCashCreate, PettyCashUpdate, PettyCashResponse, PettyCashSummaryResponse,
     BankAccountCreate, BankAccountUpdate, BankAccountResponse, BankAccountDetailResponse,
-    BankTransactionCreate, BankTransactionResponse,
-    MpesaIncomeCreate, MpesaIncomeResponse, AccountsOverviewResponse
+    BankTransactionCreate, BankTransactionUpdate, BankTransactionResponse,
+    MpesaIncomeCreate, MpesaIncomeUpdate, MpesaIncomeResponse, AccountsOverviewResponse
 )
 
 
@@ -21,13 +21,14 @@ from app.schemas.account import (
 def add_petty_cash_entry(
     db: Session, store_id: int, user_id: int, entry_in: PettyCashCreate
 ) -> PettyCashEntry:
+    desc_str = entry_in.description.strip() if entry_in.description and entry_in.description.strip() else f"Petty cash ({entry_in.category or 'general'})"
     entry = PettyCashEntry(
         store_id=store_id,
         date=entry_in.date or datetime.now(timezone.utc),
-        description=entry_in.description.strip(),
+        description=desc_str,
         amount=entry_in.amount,
         type=entry_in.type,
-        category=entry_in.category,
+        category=entry_in.category or "general",
         receipt_no=entry_in.receipt_no.strip() if entry_in.receipt_no else None,
         user_id=user_id
     )
@@ -35,6 +36,45 @@ def add_petty_cash_entry(
     db.commit()
     db.refresh(entry)
     return entry
+
+
+def get_petty_cash_entry(db: Session, store_id: int, entry_id: int) -> PettyCashEntry:
+    entry = db.query(PettyCashEntry).filter(
+        PettyCashEntry.id == entry_id,
+        PettyCashEntry.store_id == store_id
+    ).first()
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Petty cash entry not found")
+    return entry
+
+
+def update_petty_cash_entry(
+    db: Session, store_id: int, entry_id: int, entry_in: PettyCashUpdate
+) -> PettyCashEntry:
+    entry = get_petty_cash_entry(db, store_id, entry_id)
+    if entry_in.description is not None:
+        entry.description = entry_in.description.strip() if entry_in.description.strip() else f"Petty cash ({entry.category})"
+    if entry_in.amount is not None:
+        entry.amount = entry_in.amount
+    if entry_in.type is not None:
+        entry.type = entry_in.type
+    if entry_in.category is not None:
+        entry.category = entry_in.category
+    if entry_in.receipt_no is not None:
+        entry.receipt_no = entry_in.receipt_no.strip() if entry_in.receipt_no else None
+    if entry_in.date is not None:
+        entry.date = entry_in.date
+
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+def delete_petty_cash_entry(db: Session, store_id: int, entry_id: int) -> dict:
+    entry = get_petty_cash_entry(db, store_id, entry_id)
+    db.delete(entry)
+    db.commit()
+    return {"detail": "Petty cash entry deleted successfully"}
 
 
 def list_petty_cash_entries(
@@ -149,6 +189,13 @@ def update_bank_account(
     return account
 
 
+def delete_bank_account(db: Session, store_id: int, account_id: int) -> dict:
+    account = get_bank_account(db, store_id, account_id)
+    db.delete(account)
+    db.commit()
+    return {"detail": "Bank account deleted successfully"}
+
+
 def record_bank_transaction(
     db: Session, store_id: int, user_id: int, account_id: int, trans_in: BankTransactionCreate
 ) -> BankTransaction:
@@ -165,10 +212,11 @@ def record_bank_transaction(
     else:
         account.balance -= trans_in.amount
 
+    desc_str = trans_in.description.strip() if trans_in.description and trans_in.description.strip() else f"Bank {trans_in.type.capitalize()}"
     trans = BankTransaction(
         bank_account_id=account.id,
         date=trans_in.date or datetime.now(timezone.utc),
-        description=trans_in.description.strip(),
+        description=desc_str,
         amount=trans_in.amount,
         type=trans_in.type,
         reference=trans_in.reference.strip() if trans_in.reference else None,
@@ -178,6 +226,76 @@ def record_bank_transaction(
     db.commit()
     db.refresh(trans)
     return trans
+
+
+def update_bank_transaction(
+    db: Session, store_id: int, account_id: int, trans_id: int, trans_in: BankTransactionUpdate
+) -> BankTransaction:
+    account = get_bank_account(db, store_id, account_id)
+    trans = db.query(BankTransaction).filter(
+        BankTransaction.id == trans_id,
+        BankTransaction.bank_account_id == account.id
+    ).first()
+    if not trans:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bank transaction not found")
+
+    old_amount = trans.amount
+    old_type = trans.type
+    new_amount = trans_in.amount if trans_in.amount is not None else old_amount
+    new_type = trans_in.type if trans_in.type is not None else old_type
+
+    # Calculate net balance impact
+    old_impact = old_amount if old_type == "deposit" else -old_amount
+    new_impact = new_amount if new_type == "deposit" else -new_amount
+    net_diff = new_impact - old_impact
+
+    if account.balance + net_diff < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Insufficient funds in bank account for this adjustment. Resulting balance would be KES {(account.balance + net_diff):,.2f}"
+        )
+
+    account.balance += net_diff
+
+    if trans_in.description is not None:
+        trans.description = trans_in.description.strip() if trans_in.description.strip() else f"Bank {new_type.capitalize()}"
+    if trans_in.amount is not None:
+        trans.amount = trans_in.amount
+    if trans_in.type is not None:
+        trans.type = trans_in.type
+    if trans_in.reference is not None:
+        trans.reference = trans_in.reference.strip() if trans_in.reference else None
+    if trans_in.date is not None:
+        trans.date = trans_in.date
+
+    db.commit()
+    db.refresh(trans)
+    return trans
+
+
+def delete_bank_transaction(db: Session, store_id: int, account_id: int, trans_id: int) -> dict:
+    account = get_bank_account(db, store_id, account_id)
+    trans = db.query(BankTransaction).filter(
+        BankTransaction.id == trans_id,
+        BankTransaction.bank_account_id == account.id
+    ).first()
+    if not trans:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bank transaction not found")
+
+    # Reverse balance impact
+    if trans.type == "deposit":
+        if account.balance < trans.amount:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot delete deposit: insufficient remaining balance in account. Current balance: KES {account.balance:,.2f}"
+            )
+        account.balance -= trans.amount
+    else:
+        account.balance += trans.amount
+
+    db.delete(trans)
+    db.commit()
+    return {"detail": "Bank transaction deleted successfully"}
 
 
 def get_bank_account_detail(db: Session, store_id: int, account_id: int) -> BankAccountDetailResponse:
@@ -222,10 +340,11 @@ def get_bank_account_detail(db: Session, store_id: int, account_id: int) -> Bank
 def record_mpesa_income(
     db: Session, store_id: int, user_id: int, mpesa_in: MpesaIncomeCreate
 ) -> MpesaIncome:
+    desc_str = mpesa_in.description.strip() if mpesa_in.description and mpesa_in.description.strip() else "M-Pesa agency commission"
     record = MpesaIncome(
         store_id=store_id,
         date=mpesa_in.date or datetime.now(timezone.utc),
-        description=mpesa_in.description.strip(),
+        description=desc_str,
         amount=mpesa_in.amount,
         reference=mpesa_in.reference.strip() if mpesa_in.reference else None,
         user_id=user_id
@@ -234,6 +353,41 @@ def record_mpesa_income(
     db.commit()
     db.refresh(record)
     return record
+
+
+def get_mpesa_income(db: Session, store_id: int, income_id: int) -> MpesaIncome:
+    income = db.query(MpesaIncome).filter(
+        MpesaIncome.id == income_id,
+        MpesaIncome.store_id == store_id
+    ).first()
+    if not income:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="M-Pesa income entry not found")
+    return income
+
+
+def update_mpesa_income(
+    db: Session, store_id: int, income_id: int, income_in: MpesaIncomeUpdate
+) -> MpesaIncome:
+    income = get_mpesa_income(db, store_id, income_id)
+    if income_in.description is not None:
+        income.description = income_in.description.strip() if income_in.description.strip() else "M-Pesa agency commission"
+    if income_in.amount is not None:
+        income.amount = income_in.amount
+    if income_in.reference is not None:
+        income.reference = income_in.reference.strip() if income_in.reference else None
+    if income_in.date is not None:
+        income.date = income_in.date
+
+    db.commit()
+    db.refresh(income)
+    return income
+
+
+def delete_mpesa_income(db: Session, store_id: int, income_id: int) -> dict:
+    income = get_mpesa_income(db, store_id, income_id)
+    db.delete(income)
+    db.commit()
+    return {"detail": "M-Pesa income entry deleted successfully"}
 
 
 def list_mpesa_incomes(

@@ -31,9 +31,15 @@ def run_startup_migrations():
         "ALTER TABLE project_incomes ADD COLUMN IF NOT EXISTS reference VARCHAR(100);",
         "ALTER TABLE sales ADD COLUMN IF NOT EXISTS site_name VARCHAR(200);",
         "ALTER TABLE pre_sale_documents ADD COLUMN IF NOT EXISTS site_name VARCHAR(200);",
-        "CREATE INDEX IF NOT EXISTS ix_sales_site_name ON sales (site_name);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSON;",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL;"
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL;",
+        "ALTER TABLE stock_takes ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL;",
+        "ALTER TABLE stock_take_items ADD COLUMN IF NOT EXISTS is_counted BOOLEAN DEFAULT FALSE NOT NULL;",
+        "ALTER TABLE stock_take_items ADD COLUMN IF NOT EXISTS rolls_counted INTEGER;",
+        "ALTER TABLE stock_take_items ADD COLUMN IF NOT EXISTS loose_meters_counted NUMERIC(12, 2);",
+        "CREATE INDEX IF NOT EXISTS ix_stock_take_items_take_product ON stock_take_items (stock_take_id, product_id);",
+        "CREATE INDEX IF NOT EXISTS ix_stock_take_items_take_variance ON stock_take_items (stock_take_id, variance);",
+        "CREATE INDEX IF NOT EXISTS ix_stock_take_items_take_counted ON stock_take_items (stock_take_id, is_counted);"
     ]
 
     with engine.connect() as conn:

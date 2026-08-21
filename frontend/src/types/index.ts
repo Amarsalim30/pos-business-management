@@ -657,4 +657,53 @@ export interface ProductHistoryResponse {
   stock_movements: ProductStockMovementItem[];
 }
 
+export interface StockTakeSummary {
+  id: number;
+  store_id: number;
+  user_id: number;
+  category_id?: number | null;
+  category_name?: string | null;
+  status: 'in_progress' | 'completed' | 'cancelled';
+  notes: string | null;
+  created_at: string;
+  completed_at: string | null;
+  total_items: number;
+  counted_items: number;
+  discrepancy_count: number;
+  total_variance_value: number;
+}
+
+export interface StockTakeItemDetail {
+  id: number;
+  stock_take_id: number;
+  product_id: number;
+  product_name: string;
+  product_sku: string | null;
+  category_name?: string | null;
+  unit: string;
+  unit_type: 'piece' | 'roll';
+  meters_per_roll?: number | null;
+  cost_price: number;
+  expected_quantity: number;
+  counted_quantity: number;
+  variance: number;
+  variance_value: number;
+  is_counted: boolean;
+  rolls_counted: number | null;
+  loose_meters_counted: number | null;
+}
+
+export interface StockTakeItemsPaginated {
+  items: StockTakeItemDetail[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  total_items: number;
+  counted_items: number;
+  discrepancy_count: number;
+  total_variance_value: number;
+}
+
+
 

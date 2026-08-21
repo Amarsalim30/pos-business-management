@@ -11,7 +11,9 @@ from app.schemas.inventory import (
     StockTakeCreate,
     StockTakeItemCreate,
     StockTakeResponse,
-    StockTakeItemResponse
+    StockTakeItemResponse,
+    StockTakeSummaryResponse,
+    StockTakeItemsPaginatedResponse
 )
 from app.services import inventory as inventory_service
 from app.dependencies import get_current_user, require_permission
@@ -108,48 +110,20 @@ def get_stock_movements(
 
 
 # =========================================================================
-# Stock Take Endpoints
+# Stock Take Endpoints (Scaled for 10,000+ Products)
 # =========================================================================
 
-@stock_takes_router.get("/", response_model=List[StockTakeResponse])
+@stock_takes_router.get("/", response_model=List[StockTakeSummaryResponse])
 def get_stock_takes(
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("inventory:stock_take"))
 ):
     target_store_id = store_id or current_user.store_id or 1
-    sessions = inventory_service.list_stock_takes(db, target_store_id)
-    result = []
-    for st in sessions:
-        items = [
-            StockTakeItemResponse(
-                id=item.id,
-                product_id=item.product_id,
-                product_name=item.product.name if item.product else f"Product #{item.product_id}",
-                expected_quantity=item.expected_quantity,
-                counted_quantity=item.counted_quantity,
-                variance=item.variance,
-                rolls_counted=item.rolls_counted,
-                loose_meters_counted=item.loose_meters_counted
-            )
-            for item in st.items
-        ]
-        result.append(
-            StockTakeResponse(
-                id=st.id,
-                store_id=st.store_id,
-                user_id=st.user_id,
-                status=st.status,
-                notes=st.notes,
-                created_at=st.created_at,
-                completed_at=st.completed_at,
-                items=items
-            )
-        )
-    return result
+    return inventory_service.list_stock_takes(db, target_store_id)
 
 
-@stock_takes_router.post("/", response_model=StockTakeResponse, status_code=status.HTTP_201_CREATED)
+@stock_takes_router.post("/", response_model=StockTakeSummaryResponse, status_code=status.HTTP_201_CREATED)
 def post_stock_take(
     st_in: StockTakeCreate,
     store_id: Optional[int] = None,
@@ -157,34 +131,17 @@ def post_stock_take(
     current_user: User = Depends(require_permission("inventory:stock_take"))
 ):
     target_store_id = store_id or current_user.store_id or 1
-    st = inventory_service.start_stock_take(db, target_store_id, current_user.id, notes=st_in.notes)
-    
-    items = [
-        StockTakeItemResponse(
-            id=item.id,
-            product_id=item.product_id,
-            product_name=item.product.name if item.product else f"Product #{item.product_id}",
-            expected_quantity=item.expected_quantity,
-            counted_quantity=item.counted_quantity,
-            variance=item.variance,
-            rolls_counted=item.rolls_counted,
-            loose_meters_counted=item.loose_meters_counted
-        )
-        for item in st.items
-    ]
-    return StockTakeResponse(
-        id=st.id,
-        store_id=st.store_id,
-        user_id=st.user_id,
-        status=st.status,
-        notes=st.notes,
-        created_at=st.created_at,
-        completed_at=st.completed_at,
-        items=items
+    st = inventory_service.start_stock_take(
+        db,
+        target_store_id,
+        current_user.id,
+        notes=st_in.notes,
+        category_id=st_in.category_id
     )
+    return inventory_service.get_stock_take_summary(db, target_store_id, st.id)
 
 
-@stock_takes_router.get("/{stock_take_id}", response_model=StockTakeResponse)
+@stock_takes_router.get("/{stock_take_id}", response_model=StockTakeSummaryResponse)
 def get_stock_take_by_id(
     stock_take_id: int,
     store_id: Optional[int] = None,
@@ -192,29 +149,31 @@ def get_stock_take_by_id(
     current_user: User = Depends(require_permission("inventory:stock_take"))
 ):
     target_store_id = store_id or current_user.store_id or 1
-    st = inventory_service.get_stock_take(db, target_store_id, stock_take_id)
-    items = [
-        StockTakeItemResponse(
-            id=item.id,
-            product_id=item.product_id,
-            product_name=item.product.name if item.product else f"Product #{item.product_id}",
-            expected_quantity=item.expected_quantity,
-            counted_quantity=item.counted_quantity,
-            variance=item.variance,
-            rolls_counted=item.rolls_counted,
-            loose_meters_counted=item.loose_meters_counted
-        )
-        for item in st.items
-    ]
-    return StockTakeResponse(
-        id=st.id,
-        store_id=st.store_id,
-        user_id=st.user_id,
-        status=st.status,
-        notes=st.notes,
-        created_at=st.created_at,
-        completed_at=st.completed_at,
-        items=items
+    return inventory_service.get_stock_take_summary(db, target_store_id, stock_take_id)
+
+
+@stock_takes_router.get("/{stock_take_id}/items", response_model=StockTakeItemsPaginatedResponse)
+def get_stock_take_items(
+    stock_take_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    search: Optional[str] = None,
+    category_id: Optional[int] = None,
+    status_filter: Optional[str] = None,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("inventory:stock_take"))
+):
+    target_store_id = store_id or current_user.store_id or 1
+    return inventory_service.get_stock_take_items_paginated(
+        db=db,
+        store_id=target_store_id,
+        stock_take_id=stock_take_id,
+        limit=limit,
+        offset=offset,
+        search=search,
+        category_id=category_id,
+        status_filter=status_filter
     )
 
 
@@ -228,19 +187,29 @@ def post_stock_take_count(
 ):
     target_store_id = store_id or current_user.store_id or 1
     item = inventory_service.record_stock_take_count(db, target_store_id, stock_take_id, item_count)
+    cost = item.product.cost_price if item.product else 0
     return StockTakeItemResponse(
         id=item.id,
+        stock_take_id=item.stock_take_id,
         product_id=item.product_id,
-        product_name=item.product.name,
+        product_name=item.product.name if item.product else f"Product #{item.product_id}",
+        product_sku=item.product.sku if item.product else None,
+        category_name=item.product.category.name if item.product and item.product.category else None,
+        unit=item.product.unit if item.product else "pcs",
+        unit_type=item.product.unit_type if item.product else "piece",
+        meters_per_roll=item.product.meters_per_roll if item.product else None,
+        cost_price=cost,
         expected_quantity=item.expected_quantity,
         counted_quantity=item.counted_quantity,
         variance=item.variance,
+        variance_value=item.variance * cost,
+        is_counted=item.is_counted,
         rolls_counted=item.rolls_counted,
         loose_meters_counted=item.loose_meters_counted
     )
 
 
-@stock_takes_router.post("/{stock_take_id}/reconcile", response_model=StockTakeResponse)
+@stock_takes_router.post("/{stock_take_id}/reconcile", response_model=StockTakeSummaryResponse)
 def post_reconcile_stock_take(
     stock_take_id: int,
     store_id: Optional[int] = None,
@@ -249,32 +218,10 @@ def post_reconcile_stock_take(
 ):
     target_store_id = store_id or current_user.store_id or 1
     st = inventory_service.reconcile_stock_take(db, target_store_id, current_user.id, stock_take_id)
-    items = [
-        StockTakeItemResponse(
-            id=item.id,
-            product_id=item.product_id,
-            product_name=item.product.name if item.product else f"Product #{item.product_id}",
-            expected_quantity=item.expected_quantity,
-            counted_quantity=item.counted_quantity,
-            variance=item.variance,
-            rolls_counted=item.rolls_counted,
-            loose_meters_counted=item.loose_meters_counted
-        )
-        for item in st.items
-    ]
-    return StockTakeResponse(
-        id=st.id,
-        store_id=st.store_id,
-        user_id=st.user_id,
-        status=st.status,
-        notes=st.notes,
-        created_at=st.created_at,
-        completed_at=st.completed_at,
-        items=items
-    )
+    return inventory_service.get_stock_take_summary(db, target_store_id, st.id)
 
 
-@stock_takes_router.post("/{stock_take_id}/cancel", response_model=StockTakeResponse)
+@stock_takes_router.post("/{stock_take_id}/cancel", response_model=StockTakeSummaryResponse)
 def post_cancel_stock_take(
     stock_take_id: int,
     store_id: Optional[int] = None,
@@ -283,26 +230,4 @@ def post_cancel_stock_take(
 ):
     target_store_id = store_id or current_user.store_id or 1
     st = inventory_service.cancel_stock_take(db, target_store_id, current_user.id, stock_take_id)
-    items = [
-        StockTakeItemResponse(
-            id=item.id,
-            product_id=item.product_id,
-            product_name=item.product.name if item.product else f"Product #{item.product_id}",
-            expected_quantity=item.expected_quantity,
-            counted_quantity=item.counted_quantity,
-            variance=item.variance,
-            rolls_counted=item.rolls_counted,
-            loose_meters_counted=item.loose_meters_counted
-        )
-        for item in st.items
-    ]
-    return StockTakeResponse(
-        id=st.id,
-        store_id=st.store_id,
-        user_id=st.user_id,
-        status=st.status,
-        notes=st.notes,
-        created_at=st.created_at,
-        completed_at=st.completed_at,
-        items=items
-    )
+    return inventory_service.get_stock_take_summary(db, target_store_id, st.id)

@@ -149,9 +149,15 @@ def test_stock_take_lifecycle_and_variance(owner_auth_client):
     st_data = st_res.json()
     st_id = st_data["id"]
     assert st_data["status"] == "in_progress"
-    assert len(st_data["items"]) >= 1
+    assert st_data["total_items"] >= 1
 
-    target_item = next(i for i in st_data["items"] if i["product_id"] == prod["id"])
+    # 1.1 Fetch paginated items
+    items_res = owner_auth_client.get(f"/api/v1/stock-takes/{st_id}/items?limit=50&offset=0")
+    assert items_res.status_code == 200
+    items_data = items_res.json()
+    assert len(items_data["items"]) >= 1
+
+    target_item = next(i for i in items_data["items"] if i["product_id"] == prod["id"])
     prod_id = target_item["product_id"]
     exp_qty = float(target_item["expected_quantity"])
 
@@ -162,6 +168,7 @@ def test_stock_take_lifecycle_and_variance(owner_auth_client):
     })
     assert count_res.status_code == 200
     assert float(count_res.json()["variance"]) == 3.0
+    assert count_res.json()["is_counted"] is True
 
     # 3. Reconcile stock take
     rec_res = owner_auth_client.post(f"/api/v1/stock-takes/{st_id}/reconcile")

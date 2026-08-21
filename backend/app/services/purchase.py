@@ -7,7 +7,7 @@ from app.models.purchase import PurchaseOrder, PurchaseItem, PurchaseExpense, Go
 from app.models.supplier import Supplier
 from app.models.product import Product
 from app.models.inventory import Inventory, StockMovement
-from app.schemas.purchase import PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseExpenseCreate, GRNCreate, GRNUpdate
+from app.schemas.purchase import PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseExpenseCreate, PurchaseExpenseUpdate, GRNCreate, GRNUpdate
 
 
 def _generate_po_number(db: Session, store_id: int) -> str:
@@ -243,6 +243,71 @@ def add_purchase_expense(db: Session, store_id: int, user_id: int, po_id: int, e
     return expense
 
 
+def add_grn_expense(db: Session, store_id: int, user_id: int, grn_id: int, expense_in: PurchaseExpenseCreate) -> PurchaseExpense:
+    grn = get_grn_by_id(db, store_id, grn_id)
+
+    if expense_in.amount <= Decimal("0.00"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Expense amount must be greater than zero")
+
+    desc = expense_in.description.strip() if expense_in.description else f"GRN landed expense ({expense_in.category})"
+
+    expense = PurchaseExpense(
+        grn_id=grn.id,
+        po_id=grn.po_id,
+        store_id=store_id,
+        user_id=user_id,
+        category=expense_in.category,
+        description=desc,
+        amount=expense_in.amount,
+        payment_method=expense_in.payment_method,
+        reference=expense_in.reference.strip() if expense_in.reference else None
+    )
+    db.add(expense)
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
+def update_purchase_expense(db: Session, store_id: int, expense_id: int, expense_in: PurchaseExpenseUpdate) -> PurchaseExpense:
+    expense = db.query(PurchaseExpense).filter(
+        PurchaseExpense.id == expense_id,
+        PurchaseExpense.store_id == store_id
+    ).first()
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase expense not found")
+
+    if expense_in.amount is not None:
+        if expense_in.amount <= Decimal("0.00"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Expense amount must be greater than zero")
+        expense.amount = expense_in.amount
+
+    if expense_in.category is not None:
+        expense.category = expense_in.category
+    if expense_in.description is not None:
+        expense.description = expense_in.description.strip() or expense.description
+    if expense_in.payment_method is not None:
+        expense.payment_method = expense_in.payment_method
+    if expense_in.reference is not None:
+        expense.reference = expense_in.reference.strip() if expense_in.reference else None
+
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
+def delete_purchase_expense(db: Session, store_id: int, expense_id: int) -> bool:
+    expense = db.query(PurchaseExpense).filter(
+        PurchaseExpense.id == expense_id,
+        PurchaseExpense.store_id == store_id
+    ).first()
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase expense not found")
+
+    db.delete(expense)
+    db.commit()
+    return True
+
+
 def cancel_purchase_order(db: Session, store_id: int, po_id: int) -> PurchaseOrder:
     po = get_purchase_order_by_id(db, store_id, po_id)
     if po.status == "cancelled":
@@ -401,6 +466,23 @@ def receive_goods_grn(db: Session, store_id: int, user_id: int, grn_in: GRNCreat
     # Increase supplier liability balance
     if supplier:
         supplier.balance += total_grn_amount
+
+    # Persist initial landed expenses if provided
+    if getattr(grn_in, 'expenses', None):
+        for exp_in in grn_in.expenses:
+            if exp_in.amount and exp_in.amount > Decimal("0.00"):
+                desc = exp_in.description.strip() if exp_in.description else f"GRN landed expense ({exp_in.category})"
+                db.add(PurchaseExpense(
+                    grn_id=grn.id,
+                    po_id=grn.po_id,
+                    store_id=store_id,
+                    user_id=user_id,
+                    category=exp_in.category,
+                    description=desc,
+                    amount=exp_in.amount,
+                    payment_method=exp_in.payment_method,
+                    reference=exp_in.reference.strip() if exp_in.reference else None
+                ))
 
     db.commit()
     db.refresh(grn)

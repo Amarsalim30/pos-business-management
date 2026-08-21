@@ -35,8 +35,8 @@ import {
 
 export const SuppliersPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'debt' | 'zero' | 'active' | 'inactive'>('all');
-  const [sortBy, setSortBy] = useState<string>('name_asc');
+  const [sortBy, setSortBy] = useState<'name_asc' | 'balance_desc' | 'recent'>('name_asc');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'debt' | 'zero' | 'active' | 'inactive'>('active');
   const [summary, setSummary] = useState<SupplierSummaryResponse | null>(null);
 
   // Supplier Create / Edit Modal
@@ -95,8 +95,8 @@ export const SuppliersPage: React.FC = () => {
     fetchFn: async (offset, limit) => {
       let url = `/api/v1/suppliers/?limit=${limit}&offset=${offset}&sort_by=${sortBy}`;
       if (searchQuery.trim()) url += `&q=${encodeURIComponent(searchQuery.trim())}`;
-      if (statusFilter === 'debt') url += `&has_balance=true`;
-      if (statusFilter === 'zero') url += `&has_balance=false`;
+      if (statusFilter === 'debt') url += `&has_balance=true&is_active=true`;
+      if (statusFilter === 'zero') url += `&has_balance=false&is_active=true`;
       if (statusFilter === 'active') url += `&is_active=true`;
       if (statusFilter === 'inactive') url += `&is_active=false`;
       return await apiFetch<Supplier[]>(url);
@@ -107,7 +107,7 @@ export const SuppliersPage: React.FC = () => {
 
   const resetFilters = () => {
     setSearchQuery('');
-    setStatusFilter('all');
+    setStatusFilter('active');
     setSortBy('name_asc');
   };
 
@@ -500,7 +500,7 @@ export const SuppliersPage: React.FC = () => {
             <div className="relative flex-1 sm:flex-initial">
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => setSortBy(e.target.value as any)}
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-slate-900 shadow-2xs cursor-pointer"
               >
                 <option value="name_asc">Sort: Name (A-Z)</option>

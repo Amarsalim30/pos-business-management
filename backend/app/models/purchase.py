@@ -50,7 +50,8 @@ class PurchaseExpense(Base):
     __tablename__ = "purchase_expenses"
 
     id = Column(Integer, primary_key=True, index=True)
-    po_id = Column(Integer, ForeignKey("purchase_orders.id", ondelete="CASCADE"), nullable=False)
+    po_id = Column(Integer, ForeignKey("purchase_orders.id", ondelete="CASCADE"), nullable=True, index=True)
+    grn_id = Column(Integer, ForeignKey("goods_received_notes.id", ondelete="CASCADE"), nullable=True, index=True)
     store_id = Column(Integer, ForeignKey("stores.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     category = Column(String(30), default="transport", nullable=False)  # 'transport', 'labour', 'customs', 'other'
@@ -61,6 +62,7 @@ class PurchaseExpense(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     purchase_order = relationship("PurchaseOrder", back_populates="expenses")
+    grn = relationship("GoodsReceivedNote", back_populates="expenses")
     user = relationship("User")
     store = relationship("Store")
 
@@ -85,6 +87,7 @@ class GoodsReceivedNote(Base):
     user = relationship("User")
     store = relationship("Store")
     items = relationship("GoodsReceivedItem", back_populates="grn", cascade="all, delete-orphan")
+    expenses = relationship("PurchaseExpense", back_populates="grn", cascade="all, delete-orphan")
 
 
 class GoodsReceivedItem(Base):

@@ -334,7 +334,8 @@ export interface PurchaseItem {
 
 export interface PurchaseExpense {
   id: number;
-  po_id: number;
+  po_id?: number | null;
+  grn_id?: number | null;
   store_id: number;
   user_id: number;
   category: string;
@@ -395,9 +396,12 @@ export interface GoodsReceivedNote {
   invoice_number: string | null;
   delivery_date: string;
   total_amount: number;
+  total_expenses?: number;
+  landed_cost?: number;
   notes: string | null;
   created_at: string;
   items: GRNItem[];
+  expenses?: PurchaseExpense[];
 }
 
 // =========================================================================

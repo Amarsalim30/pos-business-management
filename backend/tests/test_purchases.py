@@ -371,3 +371,81 @@ def test_edit_and_delete_grn(staff_auth_client):
     assert float(prod_check4["current_stock"]) == 0.0
     supp_check4 = staff_auth_client.get(f"/api/v1/suppliers/{supp['id']}").json()
     assert float(supp_check4["balance"]) == 0.0
+
+
+def test_grn_landed_expenses_flow(staff_auth_client):
+    supp = staff_auth_client.post("/api/v1/suppliers/", json={"name": "Kenya Solar Wholesale"}).json()
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Solar Battery 200Ah",
+        "cost_price": 25000.0,
+        "selling_price": 32000.0,
+        "initial_stock": 0.0
+    }).json()
+
+    # 1. Create Direct GRN with initial freight expense
+    grn_res = staff_auth_client.post("/api/v1/purchases/grn", json={
+        "supplier_id": supp["id"],
+        "invoice_number": "DN-FREIGHT-101",
+        "items": [
+            {
+                "product_id": prod["id"],
+                "unit_type": "piece",
+                "quantity_received": 10.0,
+                "unit_cost": 25000.0
+            }
+        ],
+        "expenses": [
+            {
+                "category": "transport",
+                "description": "Port to warehouse freight delivery",
+                "amount": 4500.0,
+                "payment_method": "cash",
+                "reference": "RCP-5501"
+            }
+        ]
+    })
+    assert grn_res.status_code == 201
+    grn = grn_res.json()
+    assert float(grn["total_amount"]) == 250000.0
+    assert float(grn["total_expenses"]) == 4500.0
+    assert float(grn["landed_cost"]) == 254500.0
+    assert len(grn["expenses"]) == 1
+    exp_id = grn["expenses"][0]["id"]
+    assert grn["expenses"][0]["grn_id"] == grn["id"]
+
+    # 2. Add another landed expense (Labour/Offloading) via POST /purchases/grn/{id}/expenses
+    add_exp_res = staff_auth_client.post(f"/api/v1/purchases/grn/{grn['id']}/expenses", json={
+        "category": "labour",
+        "description": "Offloading 10 batteries at store",
+        "amount": 1200.0,
+        "payment_method": "mpesa",
+        "reference": "MP-OFFLOAD-99"
+    })
+    assert add_exp_res.status_code == 201
+    added_exp = add_exp_res.json()
+    assert added_exp["grn_id"] == grn["id"]
+    assert float(added_exp["amount"]) == 1200.0
+
+    # 3. Check updated GRN detail
+    grn_detail = staff_auth_client.get(f"/api/v1/purchases/grn/{grn['id']}").json()
+    assert len(grn_detail["expenses"]) == 2
+    assert float(grn_detail["total_expenses"]) == 5700.0
+    assert float(grn_detail["landed_cost"]) == 255700.0
+
+    # 4. Update an expense
+    put_exp = staff_auth_client.put(f"/api/v1/purchases/expenses/{added_exp['id']}", json={
+        "amount": 1500.0,
+        "description": "Offloading & stacking 10 batteries"
+    })
+    assert put_exp.status_code == 200
+    assert float(put_exp.json()["amount"]) == 1500.0
+
+    # 5. Delete an expense
+    del_exp = staff_auth_client.delete(f"/api/v1/purchases/expenses/{exp_id}")
+    assert del_exp.status_code == 200
+
+    grn_detail2 = staff_auth_client.get(f"/api/v1/purchases/grn/{grn['id']}").json()
+    assert len(grn_detail2["expenses"]) == 1
+    assert float(grn_detail2["total_expenses"]) == 1500.0
+    assert float(grn_detail2["landed_cost"]) == 251500.0
+

@@ -138,10 +138,10 @@ export const PurchasesPage: React.FC = () => {
     loadPrerequisites();
   }, []);
 
-  // Global Keyboard Shortcuts (F2 -> Create PO, F3 -> Direct GRN)
+  // Global Keyboard Shortcuts (F4 -> Create PO, F3 -> Direct GRN)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
+      if (e.key === 'F4') {
         e.preventDefault();
         setEditingPO(null);
         setIsPOModalOpen(true);
@@ -318,10 +318,10 @@ export const PurchasesPage: React.FC = () => {
               setIsPOModalOpen(true);
             }}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
-            title="Draft formal purchase order [Shortcut: F2]"
+            title="Draft formal purchase order [Shortcut: F4]"
           >
             <Plus className="h-4 w-4" />
-            <span>New Purchase Order [F2]</span>
+            <span>New Purchase Order [F4]</span>
           </button>
         </div>
       </div>
@@ -1016,6 +1016,7 @@ export const PurchasesPage: React.FC = () => {
           setIsGRNDrawerOpen(false);
           setDeletingGRN(grn);
         }}
+        onRefreshData={reloadGRNs}
       />
 
       {/* Universal Purchase Order (PO) Document Viewer Drawer */}

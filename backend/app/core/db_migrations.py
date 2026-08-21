@@ -39,7 +39,11 @@ def run_startup_migrations():
         "ALTER TABLE stock_take_items ADD COLUMN IF NOT EXISTS loose_meters_counted NUMERIC(12, 2);",
         "CREATE INDEX IF NOT EXISTS ix_stock_take_items_take_product ON stock_take_items (stock_take_id, product_id);",
         "CREATE INDEX IF NOT EXISTS ix_stock_take_items_take_variance ON stock_take_items (stock_take_id, variance);",
-        "CREATE INDEX IF NOT EXISTS ix_stock_take_items_take_counted ON stock_take_items (stock_take_id, is_counted);"
+        "CREATE INDEX IF NOT EXISTS ix_stock_take_items_take_counted ON stock_take_items (stock_take_id, is_counted);",
+        "ALTER TABLE purchase_expenses ALTER COLUMN po_id DROP NOT NULL;",
+        "ALTER TABLE purchase_expenses ADD COLUMN IF NOT EXISTS grn_id INTEGER REFERENCES goods_received_notes(id) ON DELETE CASCADE;",
+        "CREATE INDEX IF NOT EXISTS ix_purchase_expenses_grn_id ON purchase_expenses (grn_id);",
+        "CREATE INDEX IF NOT EXISTS ix_purchase_expenses_po_id ON purchase_expenses (po_id);"
     ]
 
     with engine.connect() as conn:

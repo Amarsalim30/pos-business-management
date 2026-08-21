@@ -4,7 +4,7 @@ import type { Product, Supplier, Category, GoodsReceivedNote } from '../types';
 import { RapidItemGrid, type GridItem } from './RapidItemGrid';
 import { QuickProductModal } from './QuickProductModal';
 import { QuickSupplierModal } from './QuickSupplierModal';
-import { PackageCheck, X, Plus, Loader2, FileText, Edit } from 'lucide-react';
+import { PackageCheck, X, Plus, Loader2, FileText, Edit, Truck, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface DirectGRNModalProps {
   isOpen: boolean;
@@ -16,6 +16,14 @@ interface DirectGRNModalProps {
   onGRNPosted: (grn: GoodsReceivedNote) => void;
   onGRNUpdated?: (grn: GoodsReceivedNote) => void;
   onRefreshData: () => void;
+}
+
+interface ExpenseEntry {
+  category: string;
+  description: string;
+  amount: string;
+  payment_method: string;
+  reference: string;
 }
 
 export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
@@ -35,6 +43,10 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<GridItem[]>([]);
 
+  // Optional Landed Expenses for new Direct GRN
+  const [expenses, setExpenses] = useState<ExpenseEntry[]>([]);
+  const [showExpenses, setShowExpenses] = useState(false);
+
   // Sub-Modals
   const [isQuickProductOpen, setIsQuickProductOpen] = useState(false);
   const [isQuickSupplierOpen, setIsQuickSupplierOpen] = useState(false);
@@ -48,6 +60,8 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
         setSupplierId(initialGRN.supplier_id || '');
         setInvoiceNumber(initialGRN.invoice_number || '');
         setNotes(initialGRN.notes || '');
+        setExpenses([]);
+        setShowExpenses(false);
 
         const mapped: GridItem[] = (initialGRN.items || []).map((it, idx) => {
           const prod = products.find(p => p.id === it.product_id);
@@ -79,6 +93,8 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
         setInvoiceNumber('');
         setNotes('');
         setItems([]);
+        setExpenses([]);
+        setShowExpenses(false);
       }
       setError(null);
     }
@@ -96,7 +112,7 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, supplierId, invoiceNumber, notes, items, initialGRN]);
+  }, [isOpen, supplierId, invoiceNumber, notes, items, initialGRN, expenses]);
 
   if (!isOpen) return null;
 
@@ -131,6 +147,22 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
     setSupplierId(newSupplier.id);
   };
 
+  const handleAddExpenseRow = () => {
+    setExpenses(prev => [
+      ...prev,
+      { category: 'transport', description: '', amount: '', payment_method: 'cash', reference: '' }
+    ]);
+    setShowExpenses(true);
+  };
+
+  const handleUpdateExpenseRow = (index: number, field: keyof ExpenseEntry, value: string) => {
+    setExpenses(prev => prev.map((exp, i) => i === index ? { ...exp, [field]: value } : exp));
+  };
+
+  const handleRemoveExpenseRow = (index: number) => {
+    setExpenses(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
@@ -140,10 +172,20 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
       return;
     }
 
+    const validExpenses = expenses
+      .filter(exp => parseFloat(exp.amount) > 0)
+      .map(exp => ({
+        category: exp.category,
+        description: exp.description.trim() || undefined,
+        amount: parseFloat(exp.amount),
+        payment_method: exp.payment_method,
+        reference: exp.reference.trim() || null
+      }));
+
     setSaving(true);
     setError(null);
     try {
-      const payload = {
+      const payload: any = {
         po_id: isEditing ? undefined : null,
         supplier_id: supplierId ? Number(supplierId) : null,
         invoice_number: invoiceNumber.trim() || null,
@@ -157,6 +199,10 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
           unit_cost: Number(it.unit_cost)
         }))
       };
+
+      if (!isEditing && validExpenses.length > 0) {
+        payload.expenses = validExpenses;
+      }
 
       if (isEditing && initialGRN) {
         const updated = await apiFetch<GoodsReceivedNote>(`/api/v1/purchases/grn/${initialGRN.id}`, {
@@ -289,6 +335,104 @@ export const DirectGRNModal: React.FC<DirectGRNModalProps> = ({
               onChange={setItems}
               onAddNewProduct={() => setIsQuickProductOpen(true)}
             />
+
+            {/* Landed Expenses / Additional Costs Section (New GRN only) */}
+            {!isEditing && (
+              <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowExpenses(!showExpenses)}
+                    className="flex items-center gap-2 text-xs font-bold text-slate-800 hover:text-slate-950 cursor-pointer"
+                  >
+                    <Truck className="h-4 w-4 text-amber-600" />
+                    <span>Landed Costs / Inbound Expenses (Transport, Offloading, etc.) {expenses.length > 0 && `(${expenses.length})`}</span>
+                    {showExpenses ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAddExpenseRow}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Add Expense</span>
+                  </button>
+                </div>
+
+                {showExpenses && (
+                  <div className="space-y-2 pt-2 border-t border-slate-200">
+                    {expenses.length === 0 ? (
+                      <div className="text-xs text-slate-400 text-center py-2">
+                        No additional landed expenses added. Click "+ Add Expense" to record freight or labour fees for this delivery.
+                      </div>
+                    ) : (
+                      expenses.map((exp, idx) => (
+                        <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200 text-xs">
+                          <div className="sm:col-span-3">
+                            <select
+                              value={exp.category}
+                              onChange={(e) => handleUpdateExpenseRow(idx, 'category', e.target.value)}
+                              className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800"
+                            >
+                              <option value="transport">Freight / Transport</option>
+                              <option value="labour">Labour / Offloading</option>
+                              <option value="customs">Customs / Duty</option>
+                              <option value="packaging">Packaging / Handling</option>
+                              <option value="other">Other Landed Cost</option>
+                            </select>
+                          </div>
+
+                          <div className="sm:col-span-3">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0.01"
+                              placeholder="Amount (KES) *"
+                              value={exp.amount}
+                              onChange={(e) => handleUpdateExpenseRow(idx, 'amount', e.target.value)}
+                              className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-900"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-3">
+                            <input
+                              type="text"
+                              placeholder="Description / Note..."
+                              value={exp.description}
+                              onChange={(e) => handleUpdateExpenseRow(idx, 'description', e.target.value)}
+                              className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <select
+                              value={exp.payment_method}
+                              onChange={(e) => handleUpdateExpenseRow(idx, 'payment_method', e.target.value)}
+                              className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-700"
+                            >
+                              <option value="cash">Cash</option>
+                              <option value="mpesa">M-Pesa</option>
+                              <option value="bank">Bank</option>
+                            </select>
+                          </div>
+
+                          <div className="sm:col-span-1 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveExpenseRow(idx)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Modal Footer */}

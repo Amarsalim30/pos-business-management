@@ -48,7 +48,8 @@ class PurchaseExpenseResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    po_id: int
+    po_id: Optional[int] = None
+    grn_id: Optional[int] = None
     store_id: int
     user_id: int
     category: str
@@ -133,6 +134,7 @@ class GRNCreate(BaseModel):
     invoice_number: Optional[str] = None
     notes: Optional[str] = None
     items: List[GRNItemCreate]
+    expenses: Optional[List[PurchaseExpenseCreate]] = []
 
 
 class GRNUpdate(BaseModel):
@@ -156,6 +158,9 @@ class GRNResponse(BaseModel):
     invoice_number: Optional[str] = None
     delivery_date: datetime
     total_amount: Decimal
+    total_expenses: Decimal = Decimal("0.00")
+    landed_cost: Decimal = Decimal("0.00")
     notes: Optional[str] = None
     created_at: datetime
     items: List[GRNItemResponse] = []
+    expenses: List[PurchaseExpenseResponse] = []

@@ -3,11 +3,13 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from decimal import Decimal
 from app.schemas.purchase import (
     PurchaseOrderCreate,
     PurchaseOrderUpdate,
     PurchaseOrderResponse,
     PurchaseExpenseCreate,
+    PurchaseExpenseUpdate,
     PurchaseExpenseResponse,
     GRNCreate,
     GRNUpdate,
@@ -57,6 +59,7 @@ def _format_po(po) -> PurchaseOrderResponse:
             {
                 "id": ex.id,
                 "po_id": ex.po_id,
+                "grn_id": ex.grn_id,
                 "store_id": ex.store_id,
                 "user_id": ex.user_id,
                 "category": ex.category,
@@ -72,6 +75,25 @@ def _format_po(po) -> PurchaseOrderResponse:
 
 
 def _format_grn(grn) -> GRNResponse:
+    expenses_list = [
+        PurchaseExpenseResponse(
+            id=ex.id,
+            po_id=ex.po_id,
+            grn_id=ex.grn_id,
+            store_id=ex.store_id,
+            user_id=ex.user_id,
+            category=ex.category,
+            description=ex.description,
+            amount=ex.amount,
+            payment_method=ex.payment_method,
+            reference=ex.reference,
+            created_at=ex.created_at
+        )
+        for ex in (grn.expenses or [])
+    ]
+    total_expenses = sum((ex.amount for ex in expenses_list), Decimal("0.00"))
+    landed_cost = (grn.total_amount or Decimal("0.00")) + total_expenses
+
     return GRNResponse(
         id=grn.id,
         store_id=grn.store_id,
@@ -85,6 +107,8 @@ def _format_grn(grn) -> GRNResponse:
         invoice_number=grn.invoice_number,
         delivery_date=grn.delivery_date,
         total_amount=grn.total_amount,
+        total_expenses=total_expenses,
+        landed_cost=landed_cost,
         notes=grn.notes,
         created_at=grn.created_at,
         items=[
@@ -104,7 +128,8 @@ def _format_grn(grn) -> GRNResponse:
                 "total_cost": it.total_cost
             }
             for it in grn.items
-        ]
+        ],
+        expenses=expenses_list
     )
 
 
@@ -263,3 +288,41 @@ def delete_grn(
     target_store_id = current_user.store_id or 1
     purchase_service.delete_goods_received_note(db, target_store_id, current_user.id, grn_id)
     return {"message": "Goods received note deleted successfully"}
+
+
+@router.post("/grn/{grn_id}/expenses", response_model=PurchaseExpenseResponse, status_code=status.HTTP_201_CREATED)
+def post_grn_expense(
+    grn_id: int,
+    expense_in: PurchaseExpenseCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    expense = purchase_service.add_grn_expense(db, target_store_id, current_user.id, grn_id, expense_in)
+    return PurchaseExpenseResponse.model_validate(expense)
+
+
+# --- Generic Purchase & Landed Expenses Management ---
+
+@router.put("/expenses/{expense_id}", response_model=PurchaseExpenseResponse)
+def put_purchase_expense(
+    expense_id: int,
+    expense_in: PurchaseExpenseUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    expense = purchase_service.update_purchase_expense(db, target_store_id, expense_id, expense_in)
+    return PurchaseExpenseResponse.model_validate(expense)
+
+
+@router.delete("/expenses/{expense_id}")
+def delete_purchase_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    purchase_service.delete_purchase_expense(db, target_store_id, expense_id)
+    return {"message": "Expense record deleted successfully"}
+

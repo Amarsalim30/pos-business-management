@@ -245,10 +245,10 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Keyboard shortcuts (F2 for POS, Ctrl+K / Cmd+K for Command Palette, Esc to close)
+  // Keyboard shortcuts (F7 for POS, Ctrl+K / Cmd+K for Command Palette, Esc to close)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
+      if (e.key === 'F7') {
         e.preventDefault();
         navigate('/pos');
       } else if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -451,12 +451,12 @@ export const NavigationLayout: React.FC<{ children: React.ReactNode }> = ({ chil
             <Link
               to="/pos"
               className="flex items-center space-x-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 active:scale-[0.98] text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer whitespace-nowrap"
-              title="Open POS Register (F2)"
+              title="Open POS Register (F7)"
             >
               <ShoppingCart className="h-4 w-4 text-amber-100 shrink-0" />
               <span>Open POS</span>
               <kbd className="hidden sm:inline-block ml-0.5 px-1 py-0.2 text-[9px] font-mono bg-amber-700/60 rounded text-amber-100 border border-amber-500/50">
-                F2
+                F7
               </kbd>
             </Link>
 

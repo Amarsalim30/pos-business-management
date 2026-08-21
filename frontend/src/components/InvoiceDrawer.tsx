@@ -8,7 +8,6 @@ import {
   Zap,
   FileText,
   Banknote,
-  RotateCcw,
   Copy,
   Check,
   Download,
@@ -25,7 +24,6 @@ export interface InvoiceDrawerProps {
   onClose: () => void;
   defaultFormat?: 'a4' | 'thermal';
   onRecordPayment?: (sale: Sale) => void;
-  onVoidSale?: (sale: Sale) => void;
   onEditSale?: (sale: Sale) => void;
   onDeleteSale?: (sale: Sale) => void;
   onEditPreSaleDoc?: (doc: PreSaleDocument) => void;
@@ -43,7 +41,6 @@ export const InvoiceDrawer: React.FC<InvoiceDrawerProps> = ({
   onClose,
   defaultFormat = 'a4',
   onRecordPayment,
-  onVoidSale,
   onEditSale,
   onDeleteSale,
   onEditPreSaleDoc,
@@ -298,17 +295,6 @@ Thank you for your business!`;
                 >
                   <Banknote className="h-3.5 w-3.5" />
                   <span>Record Payment</span>
-                </button>
-              )}
-
-              {sale && !isVoided && onVoidSale && (
-                <button
-                  onClick={() => onVoidSale(sale)}
-                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-bold cursor-pointer"
-                  title="Void Transaction"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  <span>Void</span>
                 </button>
               )}
             </div>

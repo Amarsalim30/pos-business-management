@@ -58,11 +58,6 @@ export const SalesListPage: React.FC = () => {
   const [drawerFormat, setDrawerFormat] = useState<'a4' | 'thermal'>('a4');
   const [selectedSaleForReceipt, setSelectedSaleForReceipt] = useState<Sale | null>(null);
 
-  // Void Modal State
-  const [voidingSale, setVoidingSale] = useState<Sale | null>(null);
-  const [voidReason, setVoidReason] = useState('');
-  const [voidLoading, setVoidLoading] = useState(false);
-
   // Edit Sale Modal State
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [editCustomerId, setEditCustomerId] = useState<number | ''>('');
@@ -349,24 +344,6 @@ export const SalesListPage: React.FC = () => {
       alert(err.message || 'Failed to delete sale invoice');
     } finally {
       setIsDeleting(false);
-    }
-  };
-
-  const handleVoidSale = async () => {
-    if (!voidingSale) return;
-    setVoidLoading(true);
-    try {
-      await apiFetch(`/api/v1/sales/${voidingSale.id}/void`, {
-        method: 'POST',
-        body: JSON.stringify({ reason: voidReason.trim() || 'Voided by cashier' })
-      });
-      setVoidingSale(null);
-      setVoidReason('');
-      reloadSales();
-    } catch (err: any) {
-      alert(err.message || 'Failed to void sale');
-    } finally {
-      setVoidLoading(false);
     }
   };
 
@@ -991,17 +968,6 @@ export const SalesListPage: React.FC = () => {
                           >
                             <Printer className="h-3.5 w-3.5 text-slate-600" />
                           </button>
-
-                          {/* Void Button */}
-                          {!isVoided && (
-                            <button
-                              onClick={() => setVoidingSale(s)}
-                              className="p-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 cursor-pointer shadow-2xs"
-                              title="Void Sale & Restore Stock"
-                            >
-                              <RotateCcw className="h-3.5 w-3.5" />
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -1415,52 +1381,6 @@ export const SalesListPage: React.FC = () => {
         </div>
       )}
 
-      {/* Void Confirmation Modal */}
-      {voidingSale && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center space-x-2 text-rose-600">
-              <AlertCircle className="h-5 w-5" />
-              <h3 className="text-base font-bold">Void Sale Transaction</h3>
-            </div>
-            
-            <p className="text-xs text-slate-600">
-              Are you sure you want to void invoice <strong className="font-mono text-slate-900">{voidingSale.invoice_no}</strong> (KES {Number(voidingSale.total_amount).toLocaleString()})?
-              All deducted stock will be immediately restored to inventory.
-            </p>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700">Reason for Voiding:</label>
-              <input
-                type="text"
-                placeholder="E.g. Customer cancelled order / Wrong product"
-                value={voidReason}
-                onChange={(e) => setVoidReason(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-xs text-slate-900 focus:outline-none focus:border-rose-600"
-              />
-            </div>
-
-            <div className="flex items-center justify-end space-x-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setVoidingSale(null)}
-                className="px-3 py-1.5 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={voidLoading}
-                onClick={handleVoidSale}
-                className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs cursor-pointer transition-all shadow-xs"
-              >
-                {voidLoading ? 'Voiding...' : 'Confirm Void'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Unified Document Drawer (A4 Tax Invoice & 80mm Thermal Slip) */}
       <InvoiceDrawer
         sale={selectedSaleForDrawer}
@@ -1471,10 +1391,6 @@ export const SalesListPage: React.FC = () => {
           setSelectedSaleForDrawer(null);
           setPayingSale(s);
           setInvoicePayAmount(String(s.balance_due || s.total_amount));
-        }}
-        onVoidSale={(s) => {
-          setSelectedSaleForDrawer(null);
-          setVoidingSale(s);
         }}
         onEditSale={(s) => {
           setSelectedSaleForDrawer(null);

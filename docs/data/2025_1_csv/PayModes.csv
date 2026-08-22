@@ -1,0 +1,6 @@
+PCode,ModeDesc,Requirement,NewCode
+"001","CASH","01",1
+"002","CHEQUE","02",2
+"004","CASH DEPOSIT","02",4
+"005","CHQ DEPOSIT","02",5
+"006","TRANSFER","01",6

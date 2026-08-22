@@ -85,8 +85,8 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
   const defaultTitle = isDeliveryNote
     ? "DELIVERY / DISPATCH NOTE"
     : preSaleDoc
-    ? (preSaleDoc.type === 'proforma' ? "PROFORMA INVOICE" : "QUOTATION")
-    : "TAX INVOICE";
+      ? (preSaleDoc.type === 'proforma' ? "PROFORMA INVOICE" : "QUOTATION")
+      : "INVOICE";
 
   const resolvedTitle = documentTitle || defaultTitle;
 
@@ -176,15 +176,14 @@ export const A4InvoiceDocument: React.FC<A4InvoiceDocumentProps> = ({
               </span>
             )}
             {sale && !isDeliveryNote && (
-              <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider ${
-                isPaid
+              <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider ${isPaid
                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                   : isPartial
-                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                  : isUnpaid
-                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                  : 'bg-slate-200 text-slate-800'
-              }`}>
+                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                    : isUnpaid
+                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                      : 'bg-slate-200 text-slate-800'
+                }`}>
                 {isPaid ? 'PAID' : isPartial ? 'PARTIAL' : isUnpaid ? 'UNPAID' : sale.status}
               </span>
             )}

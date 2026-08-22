@@ -12,7 +12,8 @@ import {
   X,
   Loader2,
   ArrowRight,
-  Trash2
+  Trash2,
+  Edit
 } from 'lucide-react';
 
 export const ProjectsPage: React.FC = () => {
@@ -26,6 +27,18 @@ export const ProjectsPage: React.FC = () => {
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
   const [isDeletingProject, setIsDeletingProject] = useState(false);
 
+  // Edit Project State
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editCustomerId, setEditCustomerId] = useState<number | ''>('');
+  const [editClientName, setEditClientName] = useState('');
+  const [editClientPhone, setEditClientPhone] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editQuotedAmount, setEditQuotedAmount] = useState('');
+  const [editStatus, setEditStatus] = useState<string>('active');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
   // New Project Modal State
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [name, setName] = useState('');
@@ -37,6 +50,7 @@ export const ProjectsPage: React.FC = () => {
   const [initialStatus, setInitialStatus] = useState<'draft' | 'active'>('active');
   const [savingProject, setSavingProject] = useState(false);
   const [projectFormError, setProjectFormError] = useState<string | null>(null);
+
 
   // Quick Customer Creation State
   const [isQuickCustOpen, setIsQuickCustOpen] = useState(false);
@@ -166,6 +180,48 @@ export const ProjectsPage: React.FC = () => {
       setSavingProject(false);
     }
   };
+
+  const handleOpenEditProject = (p: Project) => {
+    setEditingProject(p);
+    setEditName(p.name);
+    setEditCustomerId(p.customer_id || '');
+    setEditClientName(p.client_name);
+    setEditClientPhone(p.client_phone || '');
+    setEditDescription(p.description || '');
+    setEditQuotedAmount(String(p.quoted_amount ?? '0'));
+    setEditStatus(p.status || 'active');
+    setEditError(null);
+  };
+
+  const handleSaveEditProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProject) return;
+    if (!editName.trim() || !editClientName.trim()) return;
+
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      await apiFetch(`/api/v1/projects/${editingProject.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: editName.trim(),
+          client_name: editClientName.trim(),
+          client_phone: editClientPhone.trim() || null,
+          customer_id: editCustomerId ? Number(editCustomerId) : null,
+          description: editDescription.trim() || null,
+          quoted_amount: parseFloat(editQuotedAmount) || 0,
+          status: editStatus
+        })
+      });
+      setEditingProject(null);
+      await Promise.all([reloadProjects(), loadSummary()]);
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to update project');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
 
   const handleDeleteProject = async () => {
     if (!deletingProject) return;
@@ -349,22 +405,36 @@ export const ProjectsPage: React.FC = () => {
                   </div>
 
                   <div className="pt-1 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeletingProject(p);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                      title="Delete Project"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditProject(p);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                        title="Edit Project Details"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingProject(p);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Delete Project"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                     <div className="flex items-center gap-1 text-xs font-bold text-amber-600 group-hover:translate-x-0.5 transition-transform">
                       <span>Open Workspace</span>
                       <ArrowRight className="h-3.5 w-3.5" />
                     </div>
                   </div>
+
                 </div>
               </div>
             ))}
@@ -618,6 +688,171 @@ export const ProjectsPage: React.FC = () => {
                 >
                   {savingQuickCust && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Save & Select Customer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Project Modal */}
+      {editingProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                  <Edit className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Edit Solar Project</h3>
+                  <p className="text-xs text-slate-500">Update project details, client, or quoted amount.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingProject(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditProject} className="mt-4 space-y-4">
+              {editError && (
+                <div className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">
+                  {editError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Project Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Nyali 10kW Hybrid Solar Installation"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                />
+              </div>
+
+              {/* Linked Customer Selection */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 uppercase">Customer Account</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickCustOpen(true)}
+                    className="flex items-center gap-1 text-xs font-bold text-amber-600 hover:text-amber-700 cursor-pointer"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    <span>+ Register New Client</span>
+                  </button>
+                </div>
+
+                <select
+                  value={editCustomerId}
+                  onChange={(e) => {
+                    const custId = e.target.value ? Number(e.target.value) : '';
+                    setEditCustomerId(custId);
+                    if (custId) {
+                      const c = customers.find(x => x.id === custId);
+                      if (c) {
+                        setEditClientName(c.name);
+                        setEditClientPhone(c.phone || '');
+                      }
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none"
+                >
+                  <option value="">-- Choose from existing customers (or fill below) --</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.phone ? `(${c.phone})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Client Contact Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Captain Salim"
+                    value={editClientName}
+                    onChange={(e) => setEditClientName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Client Phone Number</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. +254 711 223344"
+                    value={editClientPhone}
+                    onChange={(e) => setEditClientPhone(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Quoted Contract (KES)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g. 450000"
+                    value={editQuotedAmount}
+                    onChange={(e) => setEditQuotedAmount(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Project Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  >
+                    <option value="draft">Draft / Scoping</option>
+                    <option value="active">Active Installation</option>
+                    <option value="commissioning">Testing & Commissioning</option>
+                    <option value="completed">Completed & Handed Over</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Project Scope / Technical Notes</label>
+                <textarea
+                  rows={3}
+                  placeholder="e.g. 10kW Deye Inverter, 16x 550W Jinko Tier-1 Mono Panels, 15kWh LiFePO4 battery bank."
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingProject(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {savingEdit && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Save Project Changes
                 </button>
               </div>
             </form>

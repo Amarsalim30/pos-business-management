@@ -20,7 +20,7 @@
 ### 3. KRA TIMS Hardware / VSCU Protocol Integration
 - **What:** Direct fiscal device middleware integration sending cryptographic invoice signatures to KRA in real-time.
 - **Why:** Fully automates tax compliance for stores requiring electronic fiscal signature devices.
-- **Pros:** Automated tax invoice validation.
+- **Pros:** Automated invoice validation.
 - **Cons:** High vendor lock-in, hardware failure points, requires physical device pairing.
 - **Context:** Current `is_etr` boolean flag allows full separation of compliant reporting without fiscal hardware instability.
 

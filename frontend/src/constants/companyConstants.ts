@@ -9,7 +9,7 @@ export const COMPANY_CONSTANTS = {
   // Remittance / Banking Details
   bankHeader: 'ALL CHEQUES SHOULD BE ADDRESSED TO: TASLAM ENERGY SOLUTIONS LTD',
   bankName: 'DIAMOND TRUST BANK',
-  bankAccountNo: 'ACC NO:0466377001',
+  bankAccountNo: '0466377001',
   bankBranch: 'JOMO KENYATTA AVENUE BRANCH, MOMBASA',
 
   // M-Pesa Remittance (Optional / Configurable)

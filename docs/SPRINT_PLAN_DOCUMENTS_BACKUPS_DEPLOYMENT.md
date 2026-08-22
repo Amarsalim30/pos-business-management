@@ -34,7 +34,7 @@ With all core POS operations, inventory, purchases, projects, accounts, and gran
 │  │ Document Print Hub      │  │ Settings: Backup Center │  │ Delivery Note Modal    │  │
 │  │ (A4DocumentHub.tsx)     │  │ (Settings.tsx)          │  │ (DeliveryNoteModal.tsx)│  │
 │  │ - A4 Quotation/Proforma │  │ - One-click DB snapshot │  │ - Dispatch quantities  │  │
-│  │ - A4 Tax Invoice        │  │ - Backup history log    │  │ - Vehicle & Driver info│  │
+│  │ - A4 Invoice        │  │ - Backup history log    │  │ - Vehicle & Driver info│  │
 │  │ - Customer Statement    │  │ - Scheduled dump guide  │  │ - Gate-pass printout   │  │
 │  └────────────┬────────────┘  └────────────┬────────────┘  └───────────┬────────────┘  │
 │               │                            │                           │               │
@@ -140,7 +140,7 @@ TEST PLAN ARTIFACT PERSISTED: ~/.gstack/projects/Amarsalim30-pos-business-manage
 | **Pass 4** | **AI Slop Risk & Typography** | 9/10 | **10/10** | Crisp Swiss-industrial A4 document styling with Slate-900 headers, JetBrains Mono currency alignment, official stamp boxes. |
 | **Pass 5** | **Design System Alignment** | 9/10 | **10/10** | Fully aligned with `docs/DESIGN.md`: Slate-50 background, pure white card containers, Amber-600 action triggers. |
 | **Pass 6** | **Responsive & Print Accessibility** | 8/10 | **10/10** | Strict `@media print` CSS rules hiding navigation, buttons, and drawers while scaling document cleanly to 210mm A4. |
-| **Pass 7** | **Unresolved Design Decisions** | 8/10 | **10/10** | Delivery Note clearly demarcated with "DELIVERY / DISPATCH NOTE" watermark header to avoid confusion with Tax Invoice. |
+| **Pass 7** | **Unresolved Design Decisions** | 8/10 | **10/10** | Delivery Note clearly demarcated with "DELIVERY / DISPATCH NOTE" watermark header to avoid confusion with Invoice. |
 
 ---
 

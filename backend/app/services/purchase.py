@@ -605,7 +605,7 @@ def update_goods_received_note(
         # Adjust supplier balance
         delta_total = total_new_amount - grn.total_amount
         if supplier and delta_total != Decimal("0.00"):
-            supplier.balance = max(Decimal("0.00"), supplier.balance + delta_total)
+            supplier.balance += delta_total
 
         # Replace GRN items using relationship collection
         new_grn_items = []
@@ -697,7 +697,7 @@ def delete_goods_received_note(
         po.status = "received" if all_fully_received else ("partial" if any_received else "ordered")
 
     if supplier:
-        supplier.balance = max(Decimal("0.00"), supplier.balance - grn.total_amount)
+        supplier.balance -= grn.total_amount
 
     db.delete(grn)
     db.commit()

@@ -10,8 +10,9 @@ from app.models.product import Product
 from app.models.sale import Customer
 from app.models.inventory import Inventory, StockMovement
 from app.schemas.project import (
-    ProjectCreate, ProjectUpdate, ProjectExpenseCreate,
-    ProjectMaterialAllocationCreate, ProjectMaterialBatchAllocationCreate, ProjectIncomeCreate,
+    ProjectCreate, ProjectUpdate, ProjectExpenseCreate, ProjectExpenseUpdate,
+    ProjectMaterialAllocationCreate, ProjectMaterialBatchAllocationCreate,
+    ProjectIncomeCreate, ProjectIncomeUpdate,
     ProjectResponse, ProjectDetailResponse, ProjectExpenseResponse,
     ProjectIncomeResponse, ProjectSummaryResponse
 )
@@ -617,4 +618,174 @@ def delete_project_income(
     db.delete(income)
     db.commit()
     return {"detail": "Project income removed successfully"}
+
+
+def update_project_expense(
+    db: Session, store_id: int, user_id: int, project_id: int, expense_id: int, exp_in: ProjectExpenseUpdate
+) -> ProjectExpense:
+    project = get_project_by_id(db, store_id, project_id)
+    expense = db.query(ProjectExpense).filter(
+        ProjectExpense.id == expense_id,
+        ProjectExpense.project_id == project_id
+    ).first()
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project expense not found")
+
+    if expense.source == "inventory":
+        product = db.query(Product).filter(Product.id == expense.product_id).first()
+        if not product:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Allocated product not found")
+
+        # 1. Determine old base quantity in inventory base units
+        old_unit = expense.unit_sold or ("roll" if product.unit_type == "roll" else "piece")
+        if product.unit_type == "roll":
+            meters_per_roll = Decimal(str(product.meters_per_roll or 100))
+            old_base_qty = (expense.quantity or Decimal("0.00")) * (meters_per_roll if old_unit == "roll" else Decimal("1.00"))
+        else:
+            old_base_qty = expense.quantity or Decimal("0.00")
+
+        # 2. Determine new quantity and unit
+        new_quantity = exp_in.quantity if exp_in.quantity is not None else expense.quantity
+        new_unit = exp_in.unit_sold if exp_in.unit_sold is not None else old_unit
+        if product.unit_type == "roll":
+            meters_per_roll = Decimal(str(product.meters_per_roll or 100))
+            new_base_qty = new_quantity * (meters_per_roll if new_unit == "roll" else Decimal("1.00"))
+        else:
+            new_base_qty = new_quantity
+
+        # 3. Inventory delta calculation: delta = new_base_qty - old_base_qty
+        delta = new_base_qty - old_base_qty
+        if delta != Decimal("0.00"):
+            inv = db.query(Inventory).filter(
+                Inventory.product_id == product.id,
+                Inventory.store_id == store_id
+            ).first()
+
+            if delta > Decimal("0.00"):
+                # Check sufficient inventory
+                current_stock = inv.quantity if inv else Decimal("0.00")
+                if not inv or current_stock < delta:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Insufficient inventory for {product.name}. Available: {current_stock}, Additional required: {delta}"
+                    )
+                prev_qty = inv.quantity
+                inv.quantity -= delta
+                movement = StockMovement(
+                    product_id=product.id,
+                    store_id=store_id,
+                    type="project_allocation",
+                    quantity=-delta,
+                    unit_sold=new_unit,
+                    previous_quantity=prev_qty,
+                    new_quantity=inv.quantity,
+                    reference_id=f"PROJ-{project.id}",
+                    note=f"Project #{project.id} ({project.name}) allocation updated (+{delta})",
+                    user_id=user_id
+                )
+                db.add(movement)
+            else:
+                # Return released stock to inventory
+                return_qty = abs(delta)
+                if not inv:
+                    inv = Inventory(product_id=product.id, store_id=store_id, quantity=Decimal("0.00"))
+                    db.add(inv)
+                prev_qty = inv.quantity
+                inv.quantity += return_qty
+                movement = StockMovement(
+                    product_id=product.id,
+                    store_id=store_id,
+                    type="project_return",
+                    quantity=return_qty,
+                    unit_sold=new_unit,
+                    previous_quantity=prev_qty,
+                    new_quantity=inv.quantity,
+                    reference_id=f"PROJ-{project.id}",
+                    note=f"Project #{project.id} ({project.name}) allocation reduced (-{return_qty})",
+                    user_id=user_id
+                )
+                db.add(movement)
+
+        # 4. Calculate updated cost and billed amounts
+        new_unit_price = exp_in.unit_price if exp_in.unit_price is not None else (expense.unit_price or Decimal("0.00"))
+
+        if product.unit_type == "roll":
+            meters_per_roll = Decimal(str(product.meters_per_roll or 100))
+            if new_unit == "roll":
+                unit_cost = product.cost_price or (product.cost_per_meter * meters_per_roll if product.cost_per_meter else Decimal("0.00"))
+            else:
+                unit_cost = product.cost_per_meter or (product.cost_price / meters_per_roll if product.cost_price else Decimal("0.00"))
+        else:
+            unit_cost = product.cost_price or Decimal("0.00")
+
+        total_cost = unit_cost * new_quantity
+        total_billed = new_unit_price * new_quantity
+        old_amount = expense.amount
+
+        expense.quantity = new_quantity
+        expense.unit_sold = new_unit
+        expense.unit_price = new_unit_price
+        expense.cost_price = unit_cost
+        expense.cost_amount = total_cost
+        expense.amount = total_billed
+        if exp_in.description is not None:
+            expense.description = exp_in.description.strip() or f"Material: {product.name}"
+
+        # 5. Update companion material income
+        companion_income = db.query(ProjectIncome).filter(
+            ProjectIncome.project_id == project_id,
+            ProjectIncome.source == "materials",
+            ProjectIncome.amount == old_amount
+        ).first()
+        if companion_income:
+            companion_income.amount = total_billed
+            companion_income.description = f"Materials: {product.name} ({new_quantity} {new_unit})"
+
+    else:
+        # source == 'external'
+        if exp_in.category is not None:
+            expense.category = exp_in.category
+        if exp_in.amount is not None:
+            expense.amount = exp_in.amount
+            expense.cost_amount = exp_in.amount
+        if exp_in.description is not None:
+            expense.description = exp_in.description.strip() if exp_in.description else None
+        if exp_in.vendor is not None:
+            expense.vendor = exp_in.vendor.strip() if exp_in.vendor else None
+        if exp_in.receipt_no is not None:
+            expense.receipt_no = exp_in.receipt_no.strip() if exp_in.receipt_no else None
+        if exp_in.date is not None:
+            expense.date = exp_in.date
+
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
+def update_project_income(
+    db: Session, store_id: int, user_id: int, project_id: int, income_id: int, inc_in: ProjectIncomeUpdate
+) -> ProjectIncome:
+    get_project_by_id(db, store_id, project_id)
+    income = db.query(ProjectIncome).filter(
+        ProjectIncome.id == income_id,
+        ProjectIncome.project_id == project_id
+    ).first()
+    if not income:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project income not found")
+
+    if inc_in.description is not None:
+        income.description = inc_in.description.strip()
+    if inc_in.amount is not None:
+        income.amount = inc_in.amount
+    if inc_in.payment_method is not None:
+        income.payment_method = inc_in.payment_method
+    if inc_in.reference is not None:
+        income.reference = inc_in.reference.strip() if inc_in.reference else None
+    if inc_in.date is not None:
+        income.date = inc_in.date
+
+    db.commit()
+    db.refresh(income)
+    return income
+
 

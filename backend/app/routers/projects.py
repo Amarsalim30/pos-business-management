@@ -7,9 +7,9 @@ from app.dependencies import get_current_user, require_staff
 from app.models.user import User
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse, ProjectDetailResponse,
-    ProjectExpenseCreate, ProjectExpenseResponse,
+    ProjectExpenseCreate, ProjectExpenseUpdate, ProjectExpenseResponse,
     ProjectMaterialAllocationCreate, ProjectMaterialBatchAllocationCreate,
-    ProjectIncomeCreate, ProjectIncomeResponse, ProjectSummaryResponse
+    ProjectIncomeCreate, ProjectIncomeUpdate, ProjectIncomeResponse, ProjectSummaryResponse
 )
 from app.services import project as project_service
 
@@ -210,6 +210,41 @@ def add_income(
     )
 
 
+@router.put("/{project_id}/expenses/{expense_id}", response_model=ProjectExpenseResponse)
+def update_expense(
+    project_id: int,
+    expense_id: int,
+    exp_in: ProjectExpenseUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    expense = project_service.update_project_expense(
+        db, target_store_id, current_user.id, project_id, expense_id, exp_in
+    )
+    return ProjectExpenseResponse(
+        id=expense.id,
+        project_id=expense.project_id,
+        source=expense.source,
+        category=expense.category,
+        product_id=expense.product_id,
+        product_name=expense.product.name if expense.product else None,
+        quantity=expense.quantity,
+        unit_sold=expense.unit_sold,
+        unit_price=expense.unit_price,
+        amount=expense.amount,
+        cost_price=expense.cost_price,
+        cost_amount=expense.cost_amount,
+        description=expense.description,
+        vendor=expense.vendor,
+        receipt_no=expense.receipt_no,
+        date=expense.date,
+        created_by=expense.created_by,
+        creator_name=current_user.full_name,
+        created_at=expense.created_at
+    )
+
+
 @router.delete("/{project_id}/expenses/{expense_id}")
 def delete_expense(
     project_id: int,
@@ -220,6 +255,33 @@ def delete_expense(
     target_store_id = current_user.store_id or 1
     return project_service.delete_project_expense(
         db, target_store_id, current_user.id, project_id, expense_id
+    )
+
+
+@router.put("/{project_id}/incomes/{income_id}", response_model=ProjectIncomeResponse)
+def update_income(
+    project_id: int,
+    income_id: int,
+    inc_in: ProjectIncomeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    target_store_id = current_user.store_id or 1
+    income = project_service.update_project_income(
+        db, target_store_id, current_user.id, project_id, income_id, inc_in
+    )
+    return ProjectIncomeResponse(
+        id=income.id,
+        project_id=income.project_id,
+        description=income.description,
+        amount=income.amount,
+        source=income.source,
+        payment_method=income.payment_method,
+        reference=income.reference,
+        date=income.date,
+        created_by=income.created_by,
+        creator_name=current_user.full_name,
+        created_at=income.created_at
     )
 
 
@@ -234,4 +296,5 @@ def delete_income(
     return project_service.delete_project_income(
         db, target_store_id, project_id, income_id
     )
+
 

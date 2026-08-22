@@ -66,9 +66,13 @@ def _parse_date(value: str) -> Optional[datetime]:
     """Parse legacy date string to datetime."""
     if not value or not value.strip():
         return None
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+    v = value.strip()
+    # mdb-tools exports MM/DD/YY HH:MM:SS — take the date part
+    if len(v) > 8 and v[2] == "/" == v[5]:
+        v = v[:8]
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%m/%d/%y"):
         try:
-            return datetime.strptime(value.strip(), fmt).replace(tzinfo=timezone.utc)
+            return datetime.strptime(v, fmt).replace(tzinfo=timezone.utc)
         except ValueError:
             continue
     return None
@@ -313,6 +317,23 @@ def migrate_sales(
     sale_map: Dict[str, Sale] = {}
     created = 0
 
+    # Ledger rows (MINTrans) keyed by (ref, item) — restores exact meter
+    # quantities for roll-product lines whose MINs Qnty is 0.
+    meters_by_ref_item: Dict[Tuple[str, str], Decimal] = defaultdict(Decimal)
+    mov2_path = os.path.join(csv_dir, "Movements2.csv")
+    if os.path.exists(mov2_path):
+        with open(mov2_path, "r", encoding="utf-8", errors="ignore") as f:
+            for row in csv.DictReader(f):
+                if not _flag(row.get("MINTrans")):
+                    continue
+                ref = (row.get("TransRefNo") or "").strip()
+                item = (row.get("Item") or "").strip()
+                qout = _sd(row.get("QntyOut"))
+                if ref and item and qout > 0:
+                    meters_by_ref_item[(ref, item)] += qout
+
+    skipped_items = 0
+
     for min_no, rows in sale_groups.items():
         existing = db.query(Sale).filter(Sale.invoice_no == min_no).first()
         if existing:
@@ -326,7 +347,7 @@ def migrate_sales(
         user = user_map.get(user_name) or next(iter(user_map.values()), None)
         tdate = _parse_date(first.get("TDate"))
         discount = _sd(first.get("Discount"))
-        is_cancelled = first.get("Cancelled", "") == "True"
+        is_cancelled = _flag(first.get("Cancelled"))
 
         # Calculate totals from line items
         subtotal = Decimal("0")
@@ -366,7 +387,7 @@ def migrate_sales(
             total_amount=total,
             payment_method="cash",
             status=status,
-            is_etr=first.get("Pos", "") == "True",
+            is_etr=_flag(first.get("Pos")),
             site_name=None,
             notes=f"Imported from legacy MDB (MINNo: {min_no})",
             created_at=tdate or datetime.now(timezone.utc),
@@ -379,9 +400,12 @@ def migrate_sales(
             item_code = (row.get("Item") or "").strip()
             product = product_map.get(item_code)
             if not product:
+                skipped_items += 1
                 continue
 
             qty = _sd(row.get("Qnty"))
+            if qty <= 0 and product.unit_type == "roll":
+                qty = meters_by_ref_item.get((min_no, item_code), Decimal("0"))
             price = _sd(row.get("Price"))
             vat = _sd(row.get("VAT"))
             net_price = _sd(row.get("NetPrice"))
@@ -412,7 +436,7 @@ def migrate_sales(
         created += 1
 
     db.commit()
-    print(f"   ✅ Sales: {created} created, {len(sale_map) - created} existing")
+    print(f"   ✅ Sales: {created} created, {len(sale_map) - created} existing | unmatched line items: {skipped_items}")
     return sale_map
 
 
@@ -442,16 +466,18 @@ def migrate_payments(
             customer = customer_map.get(customer_code)
             sale = sale_map.get(min_no) if min_no else None
 
-            # Check for duplicate
-            existing = db.query(Payment).filter(
+            # Check for duplicate (idempotent re-runs)
+            tdate = _parse_date(row.get("TDate"))
+            dup_q = db.query(Payment).filter(
                 Payment.store_id == store.id,
-                Payment.customer_id == customer.id if customer else None,
                 Payment.amount == amount,
-            ).first()
-            if existing:
+                Payment.created_at == (tdate or datetime.now(timezone.utc)),
+            )
+            if customer:
+                dup_q = dup_q.filter(Payment.customer_id == customer.id)
+            if dup_q.first():
                 continue
 
-            tdate = _parse_date(row.get("TDate"))
             user_name = (row.get("UserName") or "SUPPORT").strip().upper()
             user = user_map.get(user_name) or next(iter(user_map.values()), None)
             remark = (row.get("Remark") or "").strip()
@@ -511,15 +537,18 @@ def migrate_supplier_payments(
             supplier = supplier_map.get(supplier_code)
             grn = grn_map.get(grn_no) if grn_no else None
 
-            existing = db.query(SupplierPayment).filter(
+            # Check for duplicate (idempotent re-runs)
+            tdate = _parse_date(row.get("TDate"))
+            dup_q = db.query(SupplierPayment).filter(
                 SupplierPayment.store_id == store.id,
-                SupplierPayment.supplier_id == supplier.id if supplier else None,
                 SupplierPayment.amount == amount,
-            ).first()
-            if existing:
+                SupplierPayment.created_at == (tdate or datetime.now(timezone.utc)),
+            )
+            if supplier:
+                dup_q = dup_q.filter(SupplierPayment.supplier_id == supplier.id)
+            if dup_q.first():
                 continue
 
-            tdate = _parse_date(row.get("TDate"))
             user_name = (row.get("UserName") or "SUPPORT").strip().upper()
             user = user_map.get(user_name) or next(iter(user_map.values()), None)
             remark = (row.get("Remark") or "").strip()

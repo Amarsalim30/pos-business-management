@@ -96,7 +96,7 @@ export const InvoiceDrawer: React.FC<InvoiceDrawerProps> = ({
     }).join('\n');
 
     const text = `*${storeName}*
-*${preSaleDoc ? (preSaleDoc.type === 'proforma' ? 'PROFORMA INVOICE' : 'QUOTATION') : 'TAX INVOICE'}: #${docNo}*
+*${preSaleDoc ? (preSaleDoc.type === 'proforma' ? 'PROFORMA INVOICE' : 'QUOTATION') : 'INVOICE'}: #${docNo}*
 Customer: ${customerName || 'Walk-in'}${siteName ? `\n*Site / Project: ${siteName}*` : ''}
 Date: ${new Date().toLocaleDateString('en-GB')}
 ---------------------------------
@@ -125,7 +125,7 @@ Thank you for your business!`;
       {/* Slide-over Panel Container */}
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-10 print:static print:pl-0">
         <div className="w-screen max-w-4xl bg-slate-100 shadow-2xl flex flex-col print:shadow-none print:bg-white print:max-w-none print:w-full">
-          
+
           {/* Top Control Bar (Screen Only) */}
           <div className="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between shadow-md print:hidden shrink-0">
             <div className="flex items-center space-x-3">
@@ -135,11 +135,11 @@ Thank you for your business!`;
               <div>
                 <div className="flex items-center space-x-2">
                   <span className="font-bold text-sm tracking-tight text-white">
-                    {activeFormat === 'delivery' 
-                      ? `Delivery Note #${docNo}` 
-                      : preSaleDoc 
-                      ? (preSaleDoc.type === 'proforma' ? 'Proforma Invoice' : 'Quotation') 
-                      : 'Tax Invoice'} #{docNo}
+                    {activeFormat === 'delivery'
+                      ? `Delivery Note #${docNo}`
+                      : preSaleDoc
+                        ? (preSaleDoc.type === 'proforma' ? 'Proforma Invoice' : 'Quotation')
+                        : 'Invoice'} #{docNo}
                   </span>
                   <button
                     onClick={handleCopyDocNo}
@@ -166,11 +166,10 @@ Thank you for your business!`;
               <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
                 <button
                   onClick={() => setActiveFormat('a4')}
-                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    activeFormat === 'a4'
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeFormat === 'a4'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                    }`}
                 >
                   <FileText className="h-3.5 w-3.5" />
                   <span>A4 Invoice</span>
@@ -178,11 +177,10 @@ Thank you for your business!`;
                 {sale && (
                   <button
                     onClick={() => setActiveFormat('delivery')}
-                    className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      activeFormat === 'delivery'
-                        ? 'bg-sky-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
+                    className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeFormat === 'delivery'
+                      ? 'bg-sky-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                      }`}
                   >
                     <Download className="h-3.5 w-3.5" />
                     <span>Delivery Note</span>
@@ -190,11 +188,10 @@ Thank you for your business!`;
                 )}
                 <button
                   onClick={() => setActiveFormat('thermal')}
-                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    activeFormat === 'thermal'
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeFormat === 'thermal'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                    }`}
                 >
                   <Zap className="h-3.5 w-3.5" />
                   <span>80mm Thermal</span>
@@ -303,7 +300,7 @@ Thank you for your business!`;
           {/* Main Scrollable Document Canvas */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-8 print:p-0 print:overflow-visible">
             {activeFormat === 'a4' || activeFormat === 'delivery' ? (
-              /* A4 Formal Tax Invoice / Delivery Note View */
+              /* A4 Formal Invoice / Delivery Note View */
               <div className="print:block">
                 <A4InvoiceDocument
                   sale={sale}

@@ -22,7 +22,11 @@
   #a4-invoice-container,
   #a4-invoice-container *,
   #executive-report-container,
-  #executive-report-container * {
+  #executive-report-container *,
+  .printable-statement,
+  .printable-statement *,
+  .printable-document,
+  .printable-document * {
     visibility: visible;
   }
 
@@ -41,10 +45,12 @@
   }
 
   #a4-invoice-container,
-  #executive-report-container {
-    position: fixed !important;
-    left: 0 !important;
-    top: 0 !important;
+  #executive-report-container,
+  .printable-statement,
+  .printable-document {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
@@ -52,11 +58,36 @@
     border: none !important;
     box-shadow: none !important;
     background: #ffffff !important;
-    z-index: 999999 !important;
+    overflow: visible !important;
   }
 
   @page {
     size: A4 portrait;
-    margin: 8mm 10mm 8mm 10mm;
+    margin: 10mm 12mm 10mm 12mm;
+  }
+
+  /* Pagination & Table Page Break Rules */
+  table {
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  .print-break-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }

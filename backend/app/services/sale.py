@@ -362,7 +362,7 @@ def get_customer_ledger(db: Session, customer_id: int) -> CustomerLedgerResponse
             notes=ev["notes"],
             debit=ev["debit"],
             credit=ev["credit"],
-            running_balance=max(Decimal("0.00"), running),
+            running_balance=running,
             sale_id=ev.get("sale_id"),
             items_count=ev.get("items_count"),
             items_summary=ev.get("items_summary"),

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../services/api';
-import type { ProjectDetail, Product, Category, Customer } from '../types';
+import type { ProjectDetail, Product, Category, Customer, ProjectExpense, ProjectIncome } from '../types';
 import { MaterialAllocationModal } from '../components/MaterialAllocationModal';
+import { COMPANY_CONSTANTS } from '../constants/companyConstants';
 import {
   ArrowLeft,
   Sun,
@@ -12,6 +13,7 @@ import {
   Trash2,
   Search,
   Printer,
+  Download,
   Phone,
   MessageSquare,
   Wrench,
@@ -82,6 +84,36 @@ export const ProjectWorkspacePage: React.FC = () => {
   const [payRef, setPayRef] = useState('');
   const [savingPayment, setSavingPayment] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+
+  // Edit Material Form State
+  const [editingMaterial, setEditingMaterial] = useState<ProjectExpense | null>(null);
+  const [editMatQty, setEditMatQty] = useState('');
+  const [editMatUnitSold, setEditMatUnitSold] = useState<'piece' | 'roll' | 'meter'>('piece');
+  const [editMatUnitPrice, setEditMatUnitPrice] = useState('');
+  const [editMatDescription, setEditMatDescription] = useState('');
+  const [savingEditMaterial, setSavingEditMaterial] = useState(false);
+  const [editMatError, setEditMatError] = useState<string | null>(null);
+
+  // Edit Expense Form State
+  const [editingExpense, setEditingExpense] = useState<ProjectExpense | null>(null);
+  const [editExpCategory, setEditExpCategory] = useState('labor');
+  const [editExpAmount, setEditExpAmount] = useState('');
+  const [editExpDescription, setEditExpDescription] = useState('');
+  const [editExpVendor, setEditExpVendor] = useState('');
+  const [editExpReceiptNo, setEditExpReceiptNo] = useState('');
+  const [editExpDate, setEditExpDate] = useState('');
+  const [savingEditExpense, setSavingEditExpense] = useState(false);
+  const [editExpError, setEditExpError] = useState<string | null>(null);
+
+  // Edit Payment Form State
+  const [editingPayment, setEditingPayment] = useState<ProjectIncome | null>(null);
+  const [editPayDescription, setEditPayDescription] = useState('');
+  const [editPayAmount, setEditPayAmount] = useState('');
+  const [editPayMethod, setEditPayMethod] = useState('bank');
+  const [editPayRef, setEditPayRef] = useState('');
+  const [editPayDate, setEditPayDate] = useState('');
+  const [savingEditPayment, setSavingEditPayment] = useState(false);
+  const [editPayError, setEditPayError] = useState<string | null>(null);
 
   const [deletingExpenseId, setDeletingExpenseId] = useState<number | null>(null);
   const [deletingIncomeId, setDeletingIncomeId] = useState<number | null>(null);
@@ -308,6 +340,139 @@ export const ProjectWorkspacePage: React.FC = () => {
     }
   };
 
+  const handleOpenEditMaterial = (m: ProjectExpense) => {
+    setEditingMaterial(m);
+    setEditMatQty(String(m.quantity ?? '1'));
+    setEditMatUnitSold((m.unit_sold as any) || 'piece');
+    setEditMatUnitPrice(String(m.unit_price ?? '0'));
+    setEditMatDescription(m.description || '');
+    setEditMatError(null);
+  };
+
+  const handleSaveEditMaterial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!project || !editingMaterial) return;
+
+    const qtyVal = parseFloat(editMatQty);
+    if (!qtyVal || qtyVal <= 0) {
+      setEditMatError('Please enter a valid quantity greater than 0');
+      return;
+    }
+    const priceVal = parseFloat(editMatUnitPrice);
+    if (isNaN(priceVal) || priceVal < 0) {
+      setEditMatError('Please enter a valid unit price');
+      return;
+    }
+
+    setSavingEditMaterial(true);
+    setEditMatError(null);
+    try {
+      await apiFetch(`/api/v1/projects/${project.id}/expenses/${editingMaterial.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          quantity: qtyVal,
+          unit_sold: editMatUnitSold,
+          unit_price: priceVal,
+          description: editMatDescription.trim() || undefined
+        })
+      });
+      setEditingMaterial(null);
+      loadProject();
+      loadProductsAndCategories();
+    } catch (err: any) {
+      setEditMatError(err.message || 'Failed to update material allocation');
+    } finally {
+      setSavingEditMaterial(false);
+    }
+  };
+
+  const handleOpenEditExpense = (exp: ProjectExpense) => {
+    setEditingExpense(exp);
+    setEditExpCategory(exp.category || 'labor');
+    setEditExpAmount(String(exp.amount ?? '0'));
+    setEditExpDescription(exp.description || '');
+    setEditExpVendor(exp.vendor || '');
+    setEditExpReceiptNo(exp.receipt_no || '');
+    setEditExpDate(exp.date ? exp.date.split('T')[0] : '');
+    setEditExpError(null);
+  };
+
+  const handleSaveEditExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!project || !editingExpense) return;
+
+    const amtVal = parseFloat(editExpAmount);
+    if (!amtVal || amtVal <= 0) {
+      setEditExpError('Please enter a valid expense amount');
+      return;
+    }
+
+    setSavingEditExpense(true);
+    setEditExpError(null);
+    try {
+      await apiFetch(`/api/v1/projects/${project.id}/expenses/${editingExpense.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          category: editExpCategory,
+          amount: amtVal,
+          description: editExpDescription.trim() || undefined,
+          vendor: editExpVendor.trim() || undefined,
+          receipt_no: editExpReceiptNo.trim() || undefined,
+          date: editExpDate ? new Date(editExpDate).toISOString() : undefined
+        })
+      });
+      setEditingExpense(null);
+      loadProject();
+    } catch (err: any) {
+      setEditExpError(err.message || 'Failed to update expense');
+    } finally {
+      setSavingEditExpense(false);
+    }
+  };
+
+  const handleOpenEditPayment = (pay: ProjectIncome) => {
+    setEditingPayment(pay);
+    setEditPayDescription(pay.description || '');
+    setEditPayAmount(String(pay.amount ?? '0'));
+    setEditPayMethod(pay.payment_method || 'bank');
+    setEditPayRef(pay.reference || '');
+    setEditPayDate(pay.date ? pay.date.split('T')[0] : '');
+    setEditPayError(null);
+  };
+
+  const handleSaveEditPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!project || !editingPayment) return;
+
+    const amtVal = parseFloat(editPayAmount);
+    if (!amtVal || amtVal <= 0) {
+      setEditPayError('Please enter a valid payment amount');
+      return;
+    }
+
+    setSavingEditPayment(true);
+    setEditPayError(null);
+    try {
+      await apiFetch(`/api/v1/projects/${project.id}/incomes/${editingPayment.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          description: editPayDescription.trim() || undefined,
+          amount: amtVal,
+          payment_method: editPayMethod,
+          reference: editPayRef.trim() || undefined,
+          date: editPayDate ? new Date(editPayDate).toISOString() : undefined
+        })
+      });
+      setEditingPayment(null);
+      loadProject();
+    } catch (err: any) {
+      setEditPayError(err.message || 'Failed to update payment');
+    } finally {
+      setSavingEditPayment(false);
+    }
+  };
+
+
   const handleDeleteExpense = async (expenseId: number, isInventory: boolean) => {
     if (!project) return;
     const confirmMsg = isInventory
@@ -437,13 +602,23 @@ export const ProjectWorkspacePage: React.FC = () => {
         </div>
 
         {/* Global Print & Quick Action Buttons */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 print:hidden">
           <button
             onClick={() => window.print()}
             className="flex items-center space-x-1.5 px-3.5 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all shadow-xs cursor-pointer"
+            title="Print Project Summary (Ctrl+P / Cmd+P)"
           >
             <Printer className="h-4 w-4 text-slate-500" />
-            <span>Print Project Summary</span>
+            <span>Print Summary</span>
+          </button>
+
+          <button
+            onClick={() => window.print()}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+            title="Save as PDF (via Browser Print dialog)"
+          >
+            <Download className="h-4 w-4 text-amber-400" />
+            <span>Save PDF</span>
           </button>
 
           <button
@@ -462,6 +637,42 @@ export const ProjectWorkspacePage: React.FC = () => {
             <Trash2 className="h-4 w-4 text-rose-600" />
             <span>Delete Project</span>
           </button>
+        </div>
+      </div>
+
+      {/* Executive Corporate Print Letterhead Header */}
+      <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <h1 className="text-xl font-black tracking-tight text-slate-950 uppercase">{COMPANY_CONSTANTS.companyName}</h1>
+            <p className="text-[11px] text-slate-600 font-medium">{COMPANY_CONSTANTS.address} • {COMPANY_CONSTANTS.landmark}</p>
+            <p className="text-[11px] text-slate-600 font-medium">Tel: {COMPANY_CONSTANTS.phone} | Email: {COMPANY_CONSTANTS.email}</p>
+            <p className="text-[11px] text-slate-700 font-bold font-mono">KRA PIN: {COMPANY_CONSTANTS.taxId}</p>
+          </div>
+          <div className="text-right space-y-1">
+            <div className="inline-block px-3 py-1 bg-slate-900 text-white text-xs font-black tracking-widest uppercase rounded">
+              PROJECT EXECUTION STATEMENT
+            </div>
+            <div className="text-xs font-bold text-slate-800 mt-1">
+              Date: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </div>
+            <div className="text-[10px] text-slate-500 font-mono">
+              Project #{project.id} • Status: {project.status.toUpperCase()}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-xs">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Project / Site Name:</span>
+            <div className="text-sm font-black text-slate-900">{project.name}</div>
+            {project.description && <div className="text-slate-600">{project.description}</div>}
+          </div>
+          <div className="space-y-0.5 text-right sm:text-left">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Client Info:</span>
+            <div className="font-bold text-slate-900">{project.client_name}</div>
+            {project.client_phone && <div className="text-slate-700 font-mono">Tel: {project.client_phone}</div>}
+          </div>
         </div>
       </div>
 
@@ -745,18 +956,27 @@ export const ProjectWorkspacePage: React.FC = () => {
                             </span>
                           </td>
                           <td className="p-4 text-center whitespace-nowrap">
-                            <button
-                              onClick={() => handleDeleteExpense(m.id, true)}
-                              disabled={deletingExpenseId === m.id}
-                              title="Return to store inventory & remove from project"
-                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                            >
-                              {deletingExpenseId === m.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleOpenEditMaterial(m)}
+                                title="Edit material allocation"
+                                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteExpense(m.id, true)}
+                                disabled={deletingExpenseId === m.id}
+                                title="Return to store inventory & remove from project"
+                                className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {deletingExpenseId === m.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -836,14 +1056,24 @@ export const ProjectWorkspacePage: React.FC = () => {
                       <td className="p-4 text-right font-mono font-bold text-rose-600">
                         KES {Number(e.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="p-4 text-center">
-                        <button
-                          onClick={() => handleDeleteExpense(e.id, false)}
-                          disabled={deletingExpenseId === e.id}
-                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                      <td className="p-4 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleOpenEditExpense(e)}
+                            title="Edit expense record"
+                            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteExpense(e.id, false)}
+                            disabled={deletingExpenseId === e.id}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            title="Delete expense record"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -910,14 +1140,24 @@ export const ProjectWorkspacePage: React.FC = () => {
                       <td className="p-4 text-right font-mono font-bold text-emerald-700">
                         KES {Number(i.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="p-4 text-center">
-                        <button
-                          onClick={() => handleDeleteIncome(i.id)}
-                          disabled={deletingIncomeId === i.id}
-                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                      <td className="p-4 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleOpenEditPayment(i)}
+                            title="Edit payment record"
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteIncome(i.id)}
+                            disabled={deletingIncomeId === i.id}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            title="Delete payment record"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1353,6 +1593,377 @@ export const ProjectWorkspacePage: React.FC = () => {
                 >
                   {savingPayment && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Record Payment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Material Allocation Modal */}
+      {editingMaterial && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                  <Edit className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Edit Material Allocation</h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {editingMaterial.product_name || editingMaterial.description}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingMaterial(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditMaterial} className="space-y-3">
+              {editMatError && (
+                <div className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">
+                  {editMatError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Quantity *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    value={editMatQty}
+                    onChange={(e) => setEditMatQty(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Unit</label>
+                  <select
+                    value={editMatUnitSold}
+                    onChange={(e) => setEditMatUnitSold(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                  >
+                    <option value="piece">Piece (pcs)</option>
+                    <option value="roll">Roll</option>
+                    <option value="meter">Meter (m)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Unit Billed Price (KES) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={editMatUnitPrice}
+                  onChange={(e) => setEditMatUnitPrice(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Description / Location</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 4x 550W Panels on main roof"
+                  value={editMatDescription}
+                  onChange={(e) => setEditMatDescription(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              {/* Live Financial Breakdown Card */}
+              {(() => {
+                const qty = parseFloat(editMatQty) || 0;
+                const unitP = parseFloat(editMatUnitPrice) || 0;
+                const unitC = Number(editingMaterial.cost_price) || 0;
+                const lineBilled = qty * unitP;
+                const lineCost = qty * unitC;
+                const lineProfit = lineBilled - lineCost;
+                const margin = lineBilled > 0 ? Math.round((lineProfit / lineBilled) * 100) : 0;
+
+                return (
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Total Billed to Client:</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        KES {lineBilled.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Total Store Cost (BP):</span>
+                      <span className="font-mono">
+                        KES {lineCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-emerald-700 font-bold pt-1 border-t border-slate-200">
+                      <span>Line Profit:</span>
+                      <span className="font-mono">
+                        +KES {lineProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })} ({margin}%)
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingMaterial(null)}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEditMaterial}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {savingEditMaterial && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Save Material Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit External Expense Modal */}
+      {editingExpense && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-slate-100 text-slate-700 rounded-xl">
+                  <Edit className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Edit Project Expense</h3>
+                  <p className="text-xs text-slate-500">Update labor, transport, or subcontractor cost.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingExpense(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditExpense} className="space-y-3">
+              {editExpError && (
+                <div className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">
+                  {editExpError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Category</label>
+                <select
+                  value={editExpCategory}
+                  onChange={(e) => setEditExpCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                >
+                  <option value="labor">Technician & Labor</option>
+                  <option value="transport">Transport & Logistics</option>
+                  <option value="subcontract">Subcontracting</option>
+                  <option value="materials">Local Hardware & Consumables</option>
+                  <option value="other">Other Expenses</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Amount (KES) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editExpAmount}
+                  onChange={(e) => setEditExpAmount(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Description</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Solar panel roof mounting labour"
+                  value={editExpDescription}
+                  onChange={(e) => setEditExpDescription(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Payee / Vendor</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Technician Ali"
+                    value={editExpVendor}
+                    onChange={(e) => setEditExpVendor(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Receipt / Voucher #</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. REC-9922"
+                    value={editExpReceiptNo}
+                    onChange={(e) => setEditExpReceiptNo(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Date</label>
+                <input
+                  type="date"
+                  value={editExpDate}
+                  onChange={(e) => setEditExpDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingExpense(null)}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEditExpense}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {savingEditExpense && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Save Expense Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Client Payment Modal */}
+      {editingPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <Edit className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Edit Client Payment</h3>
+                  <p className="text-xs text-slate-500">Update payment amount, method, or reference.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingPayment(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditPayment} className="space-y-3">
+              {editPayError && (
+                <div className="p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">
+                  {editPayError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Description</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 50% Project Milestone Deposit"
+                  value={editPayDescription}
+                  onChange={(e) => setEditPayDescription(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Amount (KES) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editPayAmount}
+                  onChange={(e) => setEditPayAmount(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Payment Method</label>
+                  <select
+                    value={editPayMethod}
+                    onChange={(e) => setEditPayMethod(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                  >
+                    <option value="bank">Bank Transfer / EFT</option>
+                    <option value="mpesa">M-Pesa</option>
+                    <option value="cash">Cash</option>
+                    <option value="other">Cheque / Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Txn Reference #</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. NCBA-998811"
+                    value={editPayRef}
+                    onChange={(e) => setEditPayRef(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Date</label>
+                <input
+                  type="date"
+                  value={editPayDate}
+                  onChange={(e) => setEditPayDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingPayment(null)}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEditPayment}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {savingEditPayment && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Save Payment Changes
                 </button>
               </div>
             </form>

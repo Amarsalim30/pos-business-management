@@ -4,6 +4,7 @@ import type { Supplier, SupplierLedgerResponse, SupplierSummaryResponse, GoodsRe
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { GRNDocumentDrawer } from '../components/GRNDocumentDrawer';
 import { SupplierPaymentVoucherDrawer } from '../components/SupplierPaymentVoucherDrawer';
+import { COMPANY_CONSTANTS } from '../constants/companyConstants';
 import {
   Truck,
   Plus,
@@ -14,6 +15,7 @@ import {
   MapPin,
   FileText,
   Printer,
+  Download,
   X,
   User,
   Hash,
@@ -781,9 +783,19 @@ export const SuppliersPage: React.FC = () => {
                   type="button"
                   onClick={handlePrintLedger}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  title="Print Statement (Ctrl+P / Cmd+P)"
                 >
                   <Printer className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Print</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintLedger}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                  title="Save as PDF (via Browser Print dialog)"
+                >
+                  <Download className="h-3.5 w-3.5 text-amber-400" />
+                  <span>Save PDF</span>
                 </button>
                 <button
                   type="button"
@@ -795,7 +807,7 @@ export const SuppliersPage: React.FC = () => {
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
                 >
                   <Banknote className="h-3.5 w-3.5" />
-                  <span>+ Record Payment</span>
+                  <span className="hidden sm:inline">+ Record Payment</span>
                 </button>
                 <button
                   type="button"
@@ -808,15 +820,50 @@ export const SuppliersPage: React.FC = () => {
             </div>
 
             {/* Scrollable Statement Content */}
-            <div ref={ledgerPrintRef} id="executive-report-container" className="p-5 overflow-y-auto flex-1 space-y-4">
-              {/* Print Header */}
-              <div className="hidden print:block mb-6 border-b pb-4">
-                <div className="text-xl font-black uppercase tracking-wider text-slate-900">SUPPLIER STATEMENT OF ACCOUNT</div>
-                <div className="text-sm font-bold text-slate-800 mt-1">{ledgerSupplier.name}</div>
-                {ledgerSupplier.phone && <div>Tel: {ledgerSupplier.phone}</div>}
-                {ledgerSupplier.tax_pin && <div>Tax PIN: {ledgerSupplier.tax_pin}</div>}
-                <div className="text-slate-500 text-[10px] mt-2">
-                  Generated on: {new Date().toLocaleString()}
+            <div ref={ledgerPrintRef} id="executive-report-container" className="p-5 overflow-y-auto flex-1 space-y-4 print:p-0 print:overflow-visible">
+              {/* Executive Corporate Print Letterhead Header */}
+              <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <h1 className="text-xl font-black tracking-tight text-slate-950 uppercase">{COMPANY_CONSTANTS.companyName}</h1>
+                    <p className="text-[11px] text-slate-600 font-medium">{COMPANY_CONSTANTS.address} • {COMPANY_CONSTANTS.landmark}</p>
+                    <p className="text-[11px] text-slate-600 font-medium">Tel: {COMPANY_CONSTANTS.phone} | Email: {COMPANY_CONSTANTS.email}</p>
+                    <p className="text-[11px] text-slate-700 font-bold font-mono">KRA PIN: {COMPANY_CONSTANTS.taxId}</p>
+                  </div>
+                  <div className="text-right space-y-1">
+                    <div className="inline-block px-3 py-1 bg-slate-900 text-white text-xs font-black tracking-widest uppercase rounded">
+                      SUPPLIER STATEMENT
+                    </div>
+                    <div className="text-xs font-bold text-slate-800 mt-1">
+                      Date: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono">
+                      Account Ref: SUP-{String(ledgerSupplier.id).padStart(4, '0')}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-medium">
+                      Currency: KES (Kenya Shillings)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vendor Details Strip */}
+                <div className="mt-4 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-xs">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Vendor / Supplier:</span>
+                    <div className="text-sm font-black text-slate-900">{ledgerSupplier.name}</div>
+                    {ledgerSupplier.contact_person && (
+                      <div className="text-slate-600">Attn: {ledgerSupplier.contact_person}</div>
+                    )}
+                    {ledgerSupplier.address && (
+                      <div className="text-slate-600">{ledgerSupplier.address}</div>
+                    )}
+                  </div>
+                  <div className="space-y-0.5 text-right sm:text-left">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tax & Contact Details:</span>
+                    {ledgerSupplier.phone && <div className="text-slate-700 font-mono">Tel: {ledgerSupplier.phone}</div>}
+                    {ledgerSupplier.email && <div className="text-slate-700">{ledgerSupplier.email}</div>}
+                    {ledgerSupplier.tax_pin && <div className="text-slate-900 font-bold font-mono">PIN: {ledgerSupplier.tax_pin}</div>}
+                  </div>
                 </div>
               </div>
 
@@ -1044,9 +1091,24 @@ export const SuppliersPage: React.FC = () => {
 
                               {/* Running Balance */}
                               <td className="px-3.5 py-3 text-right font-mono font-bold align-top">
-                                <span className={en.running_balance > 0 ? 'text-rose-700' : 'text-emerald-700'}>
-                                  KES {Number(en.running_balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
+                                {Number(en.running_balance) > 0.005 ? (
+                                  <span className="text-rose-700">
+                                    KES {Number(en.running_balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                ) : Number(en.running_balance) < -0.005 ? (
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-emerald-700">
+                                      - KES {Math.abs(Number(en.running_balance)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-tight bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
+                                      Advance Credit
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500 font-semibold">
+                                    KES 0.00
+                                  </span>
+                                )}
                               </td>
 
                               {/* Document Action Button */}
@@ -1120,7 +1182,61 @@ export const SuppliersPage: React.FC = () => {
                       })
                     )}
                   </tbody>
+                  {/* Table Footer with Summary Totals */}
+                  {ledgerData && ledgerData.entries.length > 0 && (
+                    <tfoot className="border-t-2 border-slate-900 bg-slate-100/90 font-black text-xs">
+                      <tr>
+                        <td colSpan={2} className="px-3.5 py-3 text-slate-900 uppercase font-black tracking-wide">
+                          Closing Account Totals
+                        </td>
+                        <td className="px-3.5 py-3 text-right font-mono text-emerald-800 font-bold whitespace-nowrap">
+                          - KES {ledgerMetrics.totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3.5 py-3 text-right font-mono text-slate-950 font-bold whitespace-nowrap">
+                          + KES {ledgerMetrics.totalInvoiced.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3.5 py-3 text-right font-mono font-black whitespace-nowrap">
+                          {ledgerMetrics.currentDebt > 0.005 ? (
+                            <span className="text-rose-700">KES {ledgerMetrics.currentDebt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          ) : ledgerMetrics.currentDebt < -0.005 ? (
+                            <span className="text-emerald-700">- KES {Math.abs(ledgerMetrics.currentDebt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Credit)</span>
+                          ) : (
+                            <span className="text-slate-600">KES 0.00</span>
+                          )}
+                        </td>
+                        <td className="print:hidden"></td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
+              </div>
+
+              {/* Print-Only Official Remittance & Commercial Signoff Footer */}
+              <div className="hidden print:block mt-8 pt-4 border-t-2 border-slate-900 text-xs print-break-avoid">
+                <div className="grid grid-cols-2 gap-6 items-end">
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-600">Company Remittance Details</div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-300 space-y-1 text-[11px]">
+                      <div className="font-bold text-slate-900">{COMPANY_CONSTANTS.bankName}</div>
+                      <div className="font-mono text-slate-700">Account No: <span className="font-bold text-slate-950">{COMPANY_CONSTANTS.bankAccountNo}</span> ({COMPANY_CONSTANTS.bankBranch})</div>
+                      <div className="font-mono text-slate-700">M-Pesa Paybill: <span className="font-bold text-slate-950">{COMPANY_CONSTANTS.paybillNumber}</span> • Acc: <span className="font-bold text-slate-950">SUP-{String(ledgerSupplier.id).padStart(4, '0')}</span></div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 text-right">
+                    <div className="text-[10px] text-slate-500 font-mono">
+                      Generated: {new Date().toLocaleString('en-GB')}
+                    </div>
+                    <div className="pt-8 border-t border-dashed border-slate-400 flex justify-between items-center text-[10px] text-slate-700">
+                      <span>Prepared By: _____________________</span>
+                      <span>Authorized Stamp / Signature: _____________________</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 text-center text-[9px] text-slate-400 border-t border-slate-200 pt-2 font-mono">
+                  This is an official computer-generated Statement of Account issued by {COMPANY_CONSTANTS.companyName}.
+                </div>
               </div>
             </div>
 

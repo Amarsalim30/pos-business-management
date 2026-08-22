@@ -3,6 +3,7 @@ import { apiFetch } from '../services/api';
 import type { Customer, CustomerLedgerResponse, CustomerSummaryResponse, Sale } from '../types';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { InvoiceDrawer } from '../components/InvoiceDrawer';
+import { COMPANY_CONSTANTS } from '../constants/companyConstants';
 import {
   Users,
   UserPlus,
@@ -13,6 +14,7 @@ import {
   MapPin,
   FileText,
   Printer,
+  Download,
   X,
   ArrowDownRight,
   ArrowUpRight,
@@ -454,9 +456,8 @@ export const CustomersPage: React.FC = () => {
                       </div>
 
                       <div className="flex items-center space-x-1.5 shrink-0">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          hasDebt ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        }`}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${hasDebt ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}>
                           {hasDebt ? `Debt: KES ${Number(c.balance).toLocaleString()}` : 'Clean'}
                         </span>
                         <button
@@ -583,9 +584,19 @@ export const CustomersPage: React.FC = () => {
                   type="button"
                   onClick={() => window.print()}
                   className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs transition-colors cursor-pointer border border-slate-700 active:scale-95"
+                  title="Print Statement (Ctrl+P / Cmd+P)"
                 >
                   <Printer className="h-3.5 w-3.5" />
                   <span>Print A4</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors cursor-pointer shadow-xs active:scale-95"
+                  title="Save as PDF (via Browser Print dialog)"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Save PDF</span>
                 </button>
                 <button
                   type="button"
@@ -601,8 +612,50 @@ export const CustomersPage: React.FC = () => {
             </div>
 
             {/* Statement Document Body */}
-            <div ref={ledgerPrintRef} id="executive-report-container" className="p-4 sm:p-6 overflow-y-auto flex-1 font-sans text-xs space-y-4 bg-slate-50/50 print:bg-white print:p-4">
-              
+            <div ref={ledgerPrintRef} id="executive-report-container" className="p-4 sm:p-6 overflow-y-auto flex-1 font-sans text-xs space-y-4 bg-slate-50/50 print:bg-white print:p-0 print:overflow-visible">
+
+              {/* Executive Corporate Print Letterhead Header */}
+              <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <h1 className="text-xl font-black tracking-tight text-slate-950 uppercase">{COMPANY_CONSTANTS.companyName}</h1>
+                    <p className="text-[11px] text-slate-600 font-medium">{COMPANY_CONSTANTS.address} • {COMPANY_CONSTANTS.landmark}</p>
+                    <p className="text-[11px] text-slate-600 font-medium">Tel: {COMPANY_CONSTANTS.phone} | Email: {COMPANY_CONSTANTS.email}</p>
+                    <p className="text-[11px] text-slate-700 font-bold font-mono">KRA PIN: {COMPANY_CONSTANTS.taxId}</p>
+                  </div>
+                  <div className="text-right space-y-1">
+                    <div className="inline-block px-3 py-1 bg-slate-900 text-white text-xs font-black tracking-widest uppercase rounded">
+                      CUSTOMER STATEMENT
+                    </div>
+                    <div className="text-xs font-bold text-slate-800 mt-1">
+                      Date: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono">
+                      Account Ref: CUST-{String(ledgerCustomer.id).padStart(4, '0')}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-medium">
+                      Currency: KES (Kenya Shillings)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Customer Details Strip */}
+                <div className="mt-4 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-xs">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bill To / Client:</span>
+                    <div className="text-sm font-black text-slate-900">{ledgerCustomer.name}</div>
+                    {ledgerCustomer.address && (
+                      <div className="text-slate-600">{ledgerCustomer.address}</div>
+                    )}
+                  </div>
+                  <div className="space-y-0.5 text-right sm:text-left">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Contact & Account Info:</span>
+                    {ledgerCustomer.phone && <div className="text-slate-700 font-mono">Tel: {ledgerCustomer.phone}</div>}
+                    {ledgerCustomer.email && <div className="text-slate-700">{ledgerCustomer.email}</div>}
+                  </div>
+                </div>
+              </div>
+
               {/* Executive KPI Summary Dashboard */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:grid-cols-3">
                 <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
@@ -651,33 +704,30 @@ export const CustomersPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setLedgerFilter('all')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      ledgerFilter === 'all'
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                    }`}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${ledgerFilter === 'all'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                      }`}
                   >
                     All Records ({ledgerData?.entries.length || 0})
                   </button>
                   <button
                     type="button"
                     onClick={() => setLedgerFilter('sales')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      ledgerFilter === 'sales'
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                    }`}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${ledgerFilter === 'sales'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                      }`}
                   >
                     Sales Invoices ({ledgerMetrics.salesCount})
                   </button>
                   <button
                     type="button"
                     onClick={() => setLedgerFilter('payments')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      ledgerFilter === 'payments'
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                    }`}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${ledgerFilter === 'payments'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                      }`}
                   >
                     Payments & Credits ({ledgerMetrics.paymentsCount})
                   </button>
@@ -698,11 +748,10 @@ export const CustomersPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setLedgerSiteFilter('all')}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                      ledgerSiteFilter === 'all'
-                        ? 'bg-amber-600 text-white shadow-2xs'
-                        : 'bg-white text-slate-700 border border-amber-200 hover:bg-amber-100/50'
-                    }`}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${ledgerSiteFilter === 'all'
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'bg-white text-slate-700 border border-amber-200 hover:bg-amber-100/50'
+                      }`}
                   >
                     All Sites ({ledgerData?.entries.length || 0})
                   </button>
@@ -713,16 +762,14 @@ export const CustomersPage: React.FC = () => {
                         key={site}
                         type="button"
                         onClick={() => setLedgerSiteFilter(site)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                          ledgerSiteFilter === site
-                            ? 'bg-amber-600 text-white shadow-2xs'
-                            : 'bg-white text-slate-700 border border-amber-200 hover:bg-amber-100/50'
-                        }`}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 ${ledgerSiteFilter === site
+                          ? 'bg-amber-600 text-white shadow-2xs'
+                          : 'bg-white text-slate-700 border border-amber-200 hover:bg-amber-100/50'
+                          }`}
                       >
                         <span>{site}</span>
-                        <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${
-                          ledgerSiteFilter === site ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-600'
-                        }`}>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${ledgerSiteFilter === site ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}>
                           {count}
                         </span>
                       </button>
@@ -769,9 +816,8 @@ export const CustomersPage: React.FC = () => {
                         return (
                           <React.Fragment key={en.id}>
                             <tr
-                              className={`transition-colors ${
-                                isExpanded ? 'bg-amber-50/40' : 'hover:bg-slate-50/80'
-                              }`}
+                              className={`transition-colors ${isExpanded ? 'bg-amber-50/40' : 'hover:bg-slate-50/80'
+                                }`}
                             >
                               {/* Date */}
                               <td className="px-3.5 py-3 text-slate-600 whitespace-nowrap align-top font-mono text-[11px]">
@@ -805,7 +851,7 @@ export const CustomersPage: React.FC = () => {
                                         type="button"
                                         onClick={() => handleViewInvoice(en.sale_id!)}
                                         className="font-bold text-slate-900 hover:text-amber-700 underline decoration-slate-300 hover:decoration-amber-500 underline-offset-2 transition-colors flex items-center gap-1 cursor-pointer font-mono"
-                                        title="Click to view full Tax Invoice / Thermal receipt"
+                                        title="Click to view full Invoice / Thermal receipt"
                                       >
                                         <span>{en.reference}</span>
                                         {loadingSaleId === en.sale_id ? (
@@ -878,8 +924,25 @@ export const CustomersPage: React.FC = () => {
                               </td>
 
                               {/* Running Balance */}
-                              <td className="px-3.5 py-3 text-right font-black text-slate-950 whitespace-nowrap align-top font-mono">
-                                KES {Number(en.running_balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              <td className="px-3.5 py-3 text-right font-black whitespace-nowrap align-top font-mono">
+                                {Number(en.running_balance) > 0.005 ? (
+                                  <span className="text-slate-950">
+                                    KES {Number(en.running_balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  </span>
+                                ) : Number(en.running_balance) < -0.005 ? (
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-emerald-700">
+                                      - KES {Math.abs(Number(en.running_balance)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </span>
+                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-tight bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
+                                      Customer Credit
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500 font-semibold">
+                                    KES 0.00
+                                  </span>
+                                )}
                               </td>
 
                               {/* Document Action Button */}
@@ -917,7 +980,7 @@ export const CustomersPage: React.FC = () => {
                                           onClick={() => handleViewInvoice(en.sale_id!)}
                                           className="text-[10px] text-amber-700 hover:text-amber-800 font-bold flex items-center gap-1 underline cursor-pointer"
                                         >
-                                          Open Full A4 Tax Invoice / Thermal Receipt →
+                                          Open Full A4 Invoice / Thermal Receipt →
                                         </button>
                                       )}
                                     </div>
@@ -939,17 +1002,71 @@ export const CustomersPage: React.FC = () => {
                       })
                     )}
                   </tbody>
+                  {/* Table Footer with Summary Totals */}
+                  {ledgerData && ledgerData.entries.length > 0 && (
+                    <tfoot className="border-t-2 border-slate-900 bg-slate-100/90 font-black text-xs">
+                      <tr>
+                        <td colSpan={2} className="px-3.5 py-3 text-slate-900 uppercase font-black tracking-wide">
+                          Closing Account Totals
+                        </td>
+                        <td className="px-3.5 py-3 text-right font-mono text-slate-950 font-bold whitespace-nowrap">
+                          KES {ledgerMetrics.totalInvoiced.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3.5 py-3 text-right font-mono text-emerald-800 font-bold whitespace-nowrap">
+                          KES {ledgerMetrics.totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3.5 py-3 text-right font-mono font-black whitespace-nowrap">
+                          {ledgerMetrics.currentDebt > 0.005 ? (
+                            <span className="text-slate-950">KES {ledgerMetrics.currentDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          ) : ledgerMetrics.currentDebt < -0.005 ? (
+                            <span className="text-emerald-700">- KES {Math.abs(ledgerMetrics.currentDebt).toLocaleString(undefined, { minimumFractionDigits: 2 })} (Credit)</span>
+                          ) : (
+                            <span className="text-slate-600">KES 0.00</span>
+                          )}
+                        </td>
+                        <td className="print:hidden"></td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
 
               {/* Current Account Balance Summary Bar */}
-              <div className="p-4 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono shadow-md">
+              <div className="p-4 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono shadow-md print:hidden">
                 <div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Statement Reconciliation</div>
                   <div className="text-xs font-semibold text-slate-200">Current Outstanding Account Due:</div>
                 </div>
                 <div className="text-xl font-black text-amber-400">
                   KES {Number(ledgerData?.total_debt ?? ledgerCustomer.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+
+              {/* Print-Only Official Remittance & Commercial Signoff Footer */}
+              <div className="hidden print:block mt-8 pt-4 border-t-2 border-slate-900 text-xs print-break-avoid">
+                <div className="grid grid-cols-2 gap-6 items-end">
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-600">Company Remittance Details</div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-300 space-y-1 text-[11px]">
+                      <div className="font-bold text-slate-900">{COMPANY_CONSTANTS.bankName}</div>
+                      <div className="font-mono text-slate-700">Account No: <span className="font-bold text-slate-950">{COMPANY_CONSTANTS.bankAccountNo}</span> ({COMPANY_CONSTANTS.bankBranch})</div>
+                      <div className="font-mono text-slate-700">M-Pesa Paybill: <span className="font-bold text-slate-950">{COMPANY_CONSTANTS.paybillNumber}</span> • Acc: <span className="font-bold text-slate-950">CUST-{String(ledgerCustomer.id).padStart(4, '0')}</span></div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 text-right">
+                    <div className="text-[10px] text-slate-500 font-mono">
+                      Generated: {new Date().toLocaleString('en-GB')}
+                    </div>
+                    <div className="pt-8 border-t border-dashed border-slate-400 flex justify-between items-center text-[10px] text-slate-700">
+                      <span>Prepared By: _____________________</span>
+                      <span>Authorized Stamp / Signature: _____________________</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 text-center text-[9px] text-slate-400 border-t border-slate-200 pt-2 font-mono">
+                  This is an official computer-generated Statement of Account issued by {COMPANY_CONSTANTS.companyName}.
                 </div>
               </div>
             </div>

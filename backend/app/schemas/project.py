@@ -43,6 +43,19 @@ class ProjectExpenseCreate(BaseModel):
     date: Optional[datetime] = None
 
 
+class ProjectExpenseUpdate(BaseModel):
+    quantity: Optional[Decimal] = Field(default=None, gt=0)
+    unit_sold: Optional[str] = None  # 'piece', 'roll', 'meter'
+    unit_price: Optional[Decimal] = Field(default=None, ge=0)
+    category: Optional[str] = None
+    amount: Optional[Decimal] = Field(default=None, gt=0)
+    description: Optional[str] = None
+    vendor: Optional[str] = None
+    receipt_no: Optional[str] = None
+    date: Optional[datetime] = None
+
+
+
 class ProjectMaterialAllocationCreate(BaseModel):
     product_id: int
     unit_sold: str = "piece"  # 'piece', 'roll', 'meter'
@@ -86,6 +99,15 @@ class ProjectIncomeCreate(BaseModel):
     payment_method: str = "cash"  # 'cash', 'mpesa', 'bank', 'other'
     reference: Optional[str] = None
     date: Optional[datetime] = None
+
+
+class ProjectIncomeUpdate(BaseModel):
+    description: Optional[str] = None
+    amount: Optional[Decimal] = Field(default=None, gt=0)
+    payment_method: Optional[str] = None
+    reference: Optional[str] = None
+    date: Optional[datetime] = None
+
 
 
 class ProjectIncomeResponse(BaseModel):

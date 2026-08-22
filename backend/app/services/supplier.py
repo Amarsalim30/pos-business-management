@@ -67,6 +67,23 @@ def list_suppliers(
     return query.all()
 
 
+def calculate_supplier_balance(db: Session, store_id: int, supplier_id: int) -> Decimal:
+    """Dynamically compute exact net supplier balance (Total GRN Invoiced - Total Payments)."""
+    grns = db.query(GoodsReceivedNote).filter(
+        GoodsReceivedNote.store_id == store_id,
+        GoodsReceivedNote.supplier_id == supplier_id
+    ).all()
+    total_invoiced = sum((Decimal(str(g.total_amount or "0.00")) for g in grns), Decimal("0.00"))
+    
+    payments = db.query(SupplierPayment).filter(
+        SupplierPayment.store_id == store_id,
+        SupplierPayment.supplier_id == supplier_id
+    ).all()
+    total_paid = sum((Decimal(str(p.amount or "0.00")) for p in payments), Decimal("0.00"))
+    
+    return total_invoiced - total_paid
+
+
 def get_supplier_by_id(db: Session, store_id: int, supplier_id: int) -> Supplier:
     supplier = db.query(Supplier).filter(
         Supplier.id == supplier_id,
@@ -74,6 +91,12 @@ def get_supplier_by_id(db: Session, store_id: int, supplier_id: int) -> Supplier
     ).first()
     if not supplier:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+    
+    calc_bal = calculate_supplier_balance(db, store_id, supplier.id)
+    if supplier.balance != calc_bal:
+        supplier.balance = calc_bal
+        db.commit()
+        db.refresh(supplier)
     return supplier
 
 
@@ -107,7 +130,7 @@ def record_supplier_payment(db: Session, store_id: int, user_id: int, supplier_i
     db.add(payment)
 
     # Payments to suppliers reduce our outstanding liability/balance
-    supplier.balance = max(Decimal("0.00"), Decimal(str(supplier.balance)) - Decimal(str(payment_in.amount)))
+    supplier.balance = Decimal(str(supplier.balance)) - Decimal(str(payment_in.amount))
 
     db.commit()
     db.refresh(payment)
@@ -204,8 +227,6 @@ def get_supplier_ledger(db: Session, store_id: int, supplier_id: int) -> Supplie
     for item in timeline:
         running_bal += item["credit"]  # Inbound goods increase liability
         running_bal -= item["debit"]   # Payments decrease liability
-        if running_bal < Decimal("0.00"):
-            running_bal = Decimal("0.00")
 
         entries.append(SupplierLedgerEntry(
             id=item["id"],

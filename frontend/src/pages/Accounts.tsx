@@ -57,10 +57,8 @@ export const AccountsPage: React.FC = () => {
   const [pettyEntries, setPettyEntries] = useState<PettyCashEntry[]>([]);
   const [pettySummary, setPettySummary] = useState<PettyCashSummary | null>(null);
   const [pettyLoading, setPettyLoading] = useState(false);
-  const [pettyTypeFilter, setPettyTypeFilter] = useState('all');
   const [pettyCategoryFilter, setPettyCategoryFilter] = useState('all');
   const [isPettyModalOpen, setIsPettyModalOpen] = useState(false);
-  const [pettyType, setPettyType] = useState<'in' | 'out'>('out');
   const [pettyAmount, setPettyAmount] = useState('');
   const [pettyCategory, setPettyCategory] = useState('tea_snacks');
   const [pettyDesc, setPettyDesc] = useState('');
@@ -70,7 +68,6 @@ export const AccountsPage: React.FC = () => {
 
   // Petty Cash Edit & Delete State
   const [editingPetty, setEditingPetty] = useState<PettyCashEntry | null>(null);
-  const [editPettyType, setEditPettyType] = useState<'in' | 'out'>('out');
   const [editPettyAmount, setEditPettyAmount] = useState('');
   const [editPettyCategory, setEditPettyCategory] = useState('tea_snacks');
   const [editPettyDesc, setEditPettyDesc] = useState('');
@@ -150,7 +147,7 @@ export const AccountsPage: React.FC = () => {
       if (activeTab === 'banks' && canBanking) loadBankAccounts();
       if (activeTab === 'mpesa' && canBanking) loadMpesaIncomes();
     }
-  }, [activeTab, pettyTypeFilter, pettyCategoryFilter, canBanking, canPettyCash]);
+  }, [activeTab, pettyCategoryFilter, canBanking, canPettyCash]);
 
   const loadOverview = async () => {
     try {
@@ -165,7 +162,6 @@ export const AccountsPage: React.FC = () => {
     setPettyLoading(true);
     try {
       let url = '/api/v1/accounts/petty-cash?limit=50';
-      if (pettyTypeFilter !== 'all') url += `&type=${pettyTypeFilter}`;
       if (pettyCategoryFilter !== 'all') url += `&category=${pettyCategoryFilter}`;
       const [entries, sum] = await Promise.all([
         apiFetch<PettyCashEntry[]>(url),
@@ -235,8 +231,8 @@ export const AccountsPage: React.FC = () => {
         body: JSON.stringify({
           description: pettyDesc.trim() || undefined,
           amount: amt,
-          type: pettyType,
-          category: pettyType === 'in' ? 'float_deposit' : pettyCategory,
+          type: 'out',
+          category: pettyCategory,
           receipt_no: pettyReceipt.trim() || null
         })
       });
@@ -247,7 +243,7 @@ export const AccountsPage: React.FC = () => {
       loadPettyCash();
       loadOverview();
     } catch (err: any) {
-      setPettyError(err.message || 'Failed to record petty cash entry');
+      setPettyError(err.message || 'Failed to record expense');
     } finally {
       setSavingPetty(false);
     }
@@ -255,7 +251,6 @@ export const AccountsPage: React.FC = () => {
 
   const openEditPetty = (entry: PettyCashEntry) => {
     setEditingPetty(entry);
-    setEditPettyType(entry.type as 'in' | 'out');
     setEditPettyAmount(String(entry.amount));
     setEditPettyCategory(entry.category || 'general');
     setEditPettyDesc(entry.description);
@@ -276,8 +271,8 @@ export const AccountsPage: React.FC = () => {
         method: 'PUT',
         body: JSON.stringify({
           amount: amt,
-          type: editPettyType,
-          category: editPettyType === 'in' ? 'float_deposit' : editPettyCategory,
+          type: editingPetty.type || 'out',
+          category: editPettyCategory,
           description: editPettyDesc.trim() || undefined,
           receipt_no: editPettyReceipt.trim() || null
         })
@@ -286,7 +281,7 @@ export const AccountsPage: React.FC = () => {
       loadPettyCash();
       loadOverview();
     } catch (err: any) {
-      setEditPettyError(err.message || 'Failed to update petty cash entry');
+      setEditPettyError(err.message || 'Failed to update expense entry');
     } finally {
       setSavingEditPetty(false);
     }
@@ -591,7 +586,7 @@ export const AccountsPage: React.FC = () => {
           <p className="text-sm text-slate-500 mt-1 font-medium">
             {canBanking
               ? 'Consolidated management for Petty Cash, Bank Accounts, and M-Pesa Commissions.'
-              : 'Record and track everyday store expenses and petty cash floats.'}
+              : 'Record and track everyday store operational expenses and petty cash disbursements.'}
           </p>
         </div>
 
@@ -599,9 +594,9 @@ export const AccountsPage: React.FC = () => {
         {overview && (
           <div className="flex items-center gap-3">
             <div className="bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Petty Float Balance</div>
-              <div className={`text-base font-black font-mono ${Number(overview.petty_cash_balance) >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-                KES {Number(overview.petty_cash_balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Petty Expenses</div>
+              <div className="text-base font-black text-rose-600 font-mono">
+                KES {Number(pettySummary ? pettySummary.total_out : Math.abs(Number(overview.petty_cash_balance))).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
             </div>
 
@@ -673,25 +668,18 @@ export const AccountsPage: React.FC = () => {
       {activeTab === 'petty_cash' && (
         <div className="space-y-6">
           {/* Summary KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Cash In (Float)</div>
-              <div className="text-2xl font-black text-emerald-600 mt-2 font-mono">
-                +KES {Number(pettySummary ? pettySummary.total_in : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Expenses Out</div>
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Store Expenses (Out)</div>
               <div className="text-2xl font-black text-rose-600 mt-2 font-mono">
-                -KES {Number(pettySummary ? pettySummary.total_out : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                KES {Number(pettySummary ? pettySummary.total_out : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Current Float Balance</div>
-              <div className={`text-2xl font-black mt-2 font-mono ${Number(pettySummary ? pettySummary.balance : 0) >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
-                KES {Number(pettySummary ? pettySummary.balance : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Expense Entries Logged</div>
+              <div className="text-2xl font-black text-indigo-700 mt-2 font-mono">
+                {pettySummary ? pettySummary.entries_count : 0} <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Vouchers</span>
               </div>
             </div>
           </div>
@@ -700,54 +688,30 @@ export const AccountsPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
             <div className="flex items-center gap-2">
               <select
-                value={pettyTypeFilter}
-                onChange={(e) => setPettyTypeFilter(e.target.value)}
-                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
-              >
-                <option value="all">All Movements</option>
-                <option value="in">Cash In (Float Topup)</option>
-                <option value="out">Cash Out (Expenses)</option>
-              </select>
-
-              <select
                 value={pettyCategoryFilter}
                 onChange={(e) => setPettyCategoryFilter(e.target.value)}
                 className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
               >
-                <option value="all">All Categories</option>
+                <option value="all">All Expense Categories</option>
                 <option value="tea_snacks">Tea & Snacks</option>
                 <option value="office">Office Supplies</option>
                 <option value="transport">Transport</option>
                 <option value="cleaning">Cleaning</option>
                 <option value="repairs">Repairs</option>
                 <option value="general">General</option>
-                <option value="float_deposit">Float Deposits</option>
               </select>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  setPettyType('in');
-                  setPettyCategory('float_deposit');
-                  setIsPettyModalOpen(true);
-                }}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs transition-all"
-              >
-                <ArrowDownLeft className="h-4 w-4" />
-                <span>Add Float (In)</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setPettyType('out');
                   setPettyCategory('tea_snacks');
                   setIsPettyModalOpen(true);
                 }}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs transition-all"
               >
-                <ArrowUpRight className="h-4 w-4" />
-                <span>Record Expense Out</span>
+                <Plus className="h-4 w-4" />
+                <span>Record Expense</span>
               </button>
             </div>
           </div>
@@ -759,7 +723,6 @@ export const AccountsPage: React.FC = () => {
                 <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 sticky top-0">
                   <tr>
                     <th className="p-3">Date</th>
-                    <th className="p-3">Type</th>
                     <th className="p-3">Category</th>
                     <th className="p-3">Description</th>
                     <th className="p-3">Receipt / Ref</th>
@@ -771,33 +734,22 @@ export const AccountsPage: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {pettyLoading && pettyEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-400">
+                      <td colSpan={7} className="p-8 text-center text-slate-400">
                         <Loader2 className="h-6 w-6 animate-spin mx-auto text-indigo-600 mb-1" />
                         Loading petty cash ledger...
                       </td>
                     </tr>
                   ) : pettyEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-400">
-                        No petty cash entries found.
+                      <td colSpan={7} className="p-8 text-center text-slate-400">
+                        No expense entries found.
                       </td>
                     </tr>
                   ) : (
                     pettyEntries.map((e) => (
                       <tr key={e.id} className="hover:bg-slate-50/80">
                         <td className="p-3 text-slate-500 font-mono">{new Date(e.date).toLocaleDateString()}</td>
-                        <td className="p-3">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider ${
-                              e.type === 'in'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-rose-50 text-rose-700 border border-rose-200'
-                            }`}
-                          >
-                            {e.type === 'in' ? 'Cash In' : 'Cash Out'}
-                          </span>
-                        </td>
-                        <td className="p-3 capitalize font-semibold text-slate-700">{e.category?.replace('_', ' ') || '—'}</td>
+                        <td className="p-3 capitalize font-semibold text-slate-700">{e.category?.replace('_', ' ') || 'General'}</td>
                         <td className="p-3 text-slate-900 font-semibold">{e.description}</td>
                         <td className="p-3 text-slate-500">{e.receipt_no || '—'}</td>
                         <td className="p-3 text-slate-500">{e.user_name || 'Staff'}</td>
@@ -1110,7 +1062,7 @@ export const AccountsPage: React.FC = () => {
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">
-                {pettyType === 'in' ? 'Top Up Petty Cash Float' : 'Record Petty Cash Expense'}
+                Record Petty Cash Expense
               </h3>
               <button onClick={() => setIsPettyModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="h-5 w-5" />
@@ -1137,29 +1089,27 @@ export const AccountsPage: React.FC = () => {
                 />
               </div>
 
-              {pettyType === 'out' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Expense Category</label>
-                  <select
-                    value={pettyCategory}
-                    onChange={(e) => setPettyCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
-                  >
-                    <option value="tea_snacks">Tea & Snacks</option>
-                    <option value="office">Office Supplies / Stationery</option>
-                    <option value="transport">Transport / Fare / Delivery</option>
-                    <option value="cleaning">Cleaning Supplies</option>
-                    <option value="repairs">Small Repairs</option>
-                    <option value="general">General Expense</option>
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Expense Category</label>
+                <select
+                  value={pettyCategory}
+                  onChange={(e) => setPettyCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                >
+                  <option value="tea_snacks">Tea & Snacks</option>
+                  <option value="office">Office Supplies / Stationery</option>
+                  <option value="transport">Transport / Fare / Delivery</option>
+                  <option value="cleaning">Cleaning Supplies</option>
+                  <option value="repairs">Small Repairs</option>
+                  <option value="general">General Expense</option>
+                </select>
+              </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Description (Optional)</label>
                 <input
                   type="text"
-                  placeholder={pettyType === 'in' ? 'e.g. Weekly float replenishment' : 'e.g. Milk and coffee for staff'}
+                  placeholder="e.g. Milk and coffee for staff"
                   value={pettyDesc}
                   onChange={(e) => setPettyDesc(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
@@ -1188,10 +1138,10 @@ export const AccountsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={savingPetty}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                 >
                   {savingPetty && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Save Entry
+                  Save Expense
                 </button>
               </div>
             </form>
@@ -1205,7 +1155,7 @@ export const AccountsPage: React.FC = () => {
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">
-                Edit Petty Cash Entry #{editingPetty.id}
+                Edit Expense Entry #{editingPetty.id}
               </h3>
               <button onClick={() => setEditingPetty(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="h-5 w-5" />
@@ -1231,23 +1181,21 @@ export const AccountsPage: React.FC = () => {
                 />
               </div>
 
-              {editPettyType === 'out' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Expense Category</label>
-                  <select
-                    value={editPettyCategory}
-                    onChange={(e) => setEditPettyCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
-                  >
-                    <option value="tea_snacks">Tea & Snacks</option>
-                    <option value="office">Office Supplies / Stationery</option>
-                    <option value="transport">Transport / Fare / Delivery</option>
-                    <option value="cleaning">Cleaning Supplies</option>
-                    <option value="repairs">Small Repairs</option>
-                    <option value="general">General Expense</option>
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Expense Category</label>
+                <select
+                  value={editPettyCategory}
+                  onChange={(e) => setEditPettyCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none"
+                >
+                  <option value="tea_snacks">Tea & Snacks</option>
+                  <option value="office">Office Supplies / Stationery</option>
+                  <option value="transport">Transport / Fare / Delivery</option>
+                  <option value="cleaning">Cleaning Supplies</option>
+                  <option value="repairs">Small Repairs</option>
+                  <option value="general">General Expense</option>
+                </select>
+              </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Description (Optional)</label>
@@ -1280,7 +1228,7 @@ export const AccountsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={savingEditPetty}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                 >
                   {savingEditPetty && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Save Changes

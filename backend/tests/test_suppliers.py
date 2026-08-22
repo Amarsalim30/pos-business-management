@@ -214,4 +214,100 @@ def test_suppliers_infinite_scroll_and_filters(staff_auth_client):
     assert any(s["name"] == "AAA Vendor Alpha" for s in zero_bal)
 
 
+def test_supplier_advance_payment_and_ledger(staff_auth_client):
+    # 1. Create Supplier (e.g. East African Cables PLC)
+    supp = staff_auth_client.post("/api/v1/suppliers/", json={
+        "name": "East African Cables PLC",
+        "phone": "072155544",
+        "tax_pin": "P000595019S"
+    }).json()
+    supp_id = supp["id"]
+
+    # 2. Record Prepayment 1: 31,627.07
+    p1 = staff_auth_client.post(f"/api/v1/suppliers/{supp_id}/payments", json={
+        "amount": 31627.07,
+        "payment_method": "bank",
+        "reference": "8725",
+        "notes": "Advance Payment 1"
+    })
+    assert p1.status_code == 201
+
+    # Check ledger after Payment 1 -> Running balance must be -31,627.07
+    l1 = staff_auth_client.get(f"/api/v1/suppliers/{supp_id}/ledger").json()
+    assert len(l1["entries"]) == 1
+    assert round(float(l1["entries"][0]["running_balance"]), 2) == -31627.07
+
+    # 3. Record Prepayment 2: 59,949.96
+    p2 = staff_auth_client.post(f"/api/v1/suppliers/{supp_id}/payments", json={
+        "amount": 59949.96,
+        "payment_method": "bank",
+        "reference": "11225",
+        "notes": "Advance Payment 2"
+    })
+    assert p2.status_code == 201
+
+    # Check ledger after Payment 2 -> Running balance must be -91,577.03
+    l2 = staff_auth_client.get(f"/api/v1/suppliers/{supp_id}/ledger").json()
+    assert len(l2["entries"]) == 2
+    assert round(float(l2["entries"][1]["running_balance"]), 2) == -91577.03
+
+    # 4. Create Product & Receive GRN 1: 59,949.96
+    prod1 = staff_auth_client.post("/api/v1/products/", json={
+        "name": "BLUE SUBMERSIBLE 1.5MM 4 CORE",
+        "cost_price": 59949.96,
+        "selling_price": 75000.0,
+        "initial_stock": 0.0
+    }).json()
+
+    grn1 = staff_auth_client.post("/api/v1/purchases/grn", json={
+        "supplier_id": supp_id,
+        "invoice_number": "11225",
+        "items": [
+            {
+                "product_id": prod1["id"],
+                "unit_type": "piece",
+                "quantity_received": 1.0,
+                "unit_cost": 59949.96
+            }
+        ]
+    })
+    assert grn1.status_code == 201
+
+    # Check ledger after GRN 1 -> Running balance must be -31,627.07
+    l3 = staff_auth_client.get(f"/api/v1/suppliers/{supp_id}/ledger").json()
+    assert len(l3["entries"]) == 3
+    assert round(float(l3["entries"][2]["running_balance"]), 2) == -31627.07
+
+    # 5. Receive GRN 2: 31,626.90
+    prod2 = staff_auth_client.post("/api/v1/products/", json={
+        "name": "BLUE SUBMERSIBLE 2.5MM 4 CORE",
+        "cost_price": 31626.90,
+        "selling_price": 40000.0,
+        "initial_stock": 0.0
+    }).json()
+
+    grn2 = staff_auth_client.post("/api/v1/purchases/grn", json={
+        "supplier_id": supp_id,
+        "invoice_number": "8725",
+        "items": [
+            {
+                "product_id": prod2["id"],
+                "unit_type": "piece",
+                "quantity_received": 1.0,
+                "unit_cost": 31626.90
+            }
+        ]
+    })
+    assert grn2.status_code == 201
+
+    # 6. Check final ledger after all 4 transactions
+    l4 = staff_auth_client.get(f"/api/v1/suppliers/{supp_id}/ledger").json()
+    assert len(l4["entries"]) == 4
+    assert round(float(l4["total_invoiced"]), 2) == 91576.86
+    assert round(float(l4["total_paid"]), 2) == 91577.03
+    assert round(float(l4["current_balance"]), 2) == -0.17
+    assert round(float(l4["entries"][3]["running_balance"]), 2) == -0.17
+
+
+
 

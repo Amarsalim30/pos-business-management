@@ -673,6 +673,58 @@ def test_sale_update_and_delete_with_inventory_and_ledger(owner_auth_client, sta
     assert get_del.status_code == 404
 
 
+def test_customer_advance_payment_and_ledger(staff_auth_client):
+    # 1. Create customer
+    cust = staff_auth_client.post("/api/v1/customers/", json={
+        "name": "Prepaying Solar Client Ltd",
+        "phone": "+254711889900"
+    }).json()
+
+    # 2. Record standalone advance deposit payment of 50,000
+    dep = staff_auth_client.post(f"/api/v1/customers/{cust['id']}/payments", json={
+        "amount": 50000.0,
+        "payment_method": "bank",
+        "reference": "DEP-9911",
+        "notes": "Advance site deposit"
+    })
+    assert dep.status_code == 201
+
+    # 3. Check ledger: running balance must be -50,000.0 (Customer credit)
+    l1 = staff_auth_client.get(f"/api/v1/customers/{cust['id']}/ledger").json()
+    assert len(l1["entries"]) == 1
+    assert round(float(l1["entries"][0]["running_balance"]), 2) == -50000.0
+    assert float(l1["total_debt"]) == 0.0
+
+    # 4. Create product and issue credit invoice of 75,000
+    prod = staff_auth_client.post("/api/v1/products/", json={
+        "name": "5kW Solar Inverter",
+        "cost_price": 40000.0,
+        "selling_price": 75000.0,
+        "initial_stock": 10.0
+    }).json()
+
+    sale = staff_auth_client.post("/api/v1/sales/", json={
+        "customer_id": cust["id"],
+        "payment_method": "credit",
+        "items": [
+            {
+                "product_id": prod["id"],
+                "quantity": 1.0,
+                "unit_price": 75000.0,
+                "discount": 0.0
+            }
+        ]
+    }).json()
+
+    # 5. Check ledger: 2 entries, running balance transitions from -50,000 to +25,000
+    l2 = staff_auth_client.get(f"/api/v1/customers/{cust['id']}/ledger").json()
+    assert len(l2["entries"]) == 2
+    assert round(float(l2["entries"][0]["running_balance"]), 2) == -50000.0
+    assert round(float(l2["entries"][1]["running_balance"]), 2) == 25000.0
+    assert float(l2["total_debt"]) == 25000.0
+
+
+
 
 
 

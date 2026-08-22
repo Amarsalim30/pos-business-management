@@ -204,3 +204,135 @@ def test_project_batch_material_allocation(staff_auth_client):
     assert float(detail["materials_profit"]) == 9200.0
 
 
+def test_edit_project_materials_expenses_and_incomes(staff_auth_client):
+    # 1. Create a product with initial stock = 20
+    prod_res = staff_auth_client.post("/api/v1/products/", json={
+        "name": "Growatt 5kW Hybrid Inverter",
+        "unit": "pcs",
+        "unit_type": "piece",
+        "cost_price": 85000.0,
+        "selling_price": 110000.0,
+        "initial_stock": 20.0
+    })
+    assert prod_res.status_code == 201
+    prod = prod_res.json()
+
+    # 2. Create Project
+    proj_res = staff_auth_client.post("/api/v1/projects/", json={
+        "name": "Kizingo Backup Power",
+        "client_name": "Hamisi Salim",
+        "quoted_amount": 250000.0,
+        "status": "active"
+    })
+    assert proj_res.status_code == 201
+    proj_id = proj_res.json()["id"]
+
+    # 3. Allocate 2 inverters (2 * 110,000 = 220,000 billed, 2 * 85,000 = 170,000 cost)
+    mat_res = staff_auth_client.post(f"/api/v1/projects/{proj_id}/materials", json={
+        "product_id": prod["id"],
+        "unit_sold": "piece",
+        "quantity": 2.0,
+        "unit_price": 110000.0,
+        "description": "2x 5kW Growatt inverters"
+    })
+    assert mat_res.status_code == 201
+    mat_id = mat_res.json()["id"]
+
+    # Check inventory is 20 - 2 = 18
+    inv_res = staff_auth_client.get("/api/v1/inventory/")
+    inv_item = next(i for i in inv_res.json() if i["product_id"] == prod["id"])
+    assert float(inv_item["quantity"]) == 18.0
+
+    # 4. Edit material: increase quantity from 2 to 5 (needs 3 more from inventory)
+    edit_mat_res = staff_auth_client.put(f"/api/v1/projects/{proj_id}/expenses/{mat_id}", json={
+        "quantity": 5.0,
+        "unit_price": 105000.0,  # discounted unit price
+        "description": "5x 5kW Growatt inverters in parallel"
+    })
+    assert edit_mat_res.status_code == 200
+    edited_mat = edit_mat_res.json()
+    assert float(edited_mat["quantity"]) == 5.0
+    assert float(edited_mat["unit_price"]) == 105000.0
+    assert float(edited_mat["amount"]) == 525000.0  # 5 * 105,000
+    assert float(edited_mat["cost_amount"]) == 425000.0  # 5 * 85,000
+
+    # Verify inventory was deducted from 18 to 15 (20 - 5 = 15)
+    inv_res2 = staff_auth_client.get("/api/v1/inventory/")
+    inv_item2 = next(i for i in inv_res2.json() if i["product_id"] == prod["id"])
+    assert float(inv_item2["quantity"]) == 15.0
+
+    # 5. Edit material: decrease quantity from 5 to 3 (returns 2 to inventory)
+    edit_mat_res2 = staff_auth_client.put(f"/api/v1/projects/{proj_id}/expenses/{mat_id}", json={
+        "quantity": 3.0,
+        "unit_price": 105000.0
+    })
+    assert edit_mat_res2.status_code == 200
+    # Verify inventory restored from 15 to 17 (20 - 3 = 17)
+    inv_res3 = staff_auth_client.get("/api/v1/inventory/")
+    inv_item3 = next(i for i in inv_res3.json() if i["product_id"] == prod["id"])
+    assert float(inv_item3["quantity"]) == 17.0
+
+    # 6. Test insufficient stock error on increase: try setting quantity to 25 (only 17 available, currently holding 3 -> total available 20)
+    fail_res = staff_auth_client.put(f"/api/v1/projects/{proj_id}/expenses/{mat_id}", json={
+        "quantity": 25.0
+    })
+    assert fail_res.status_code == 400
+    assert "Insufficient inventory" in fail_res.json()["detail"]
+
+    # 7. Add & Edit External Expense
+    exp_res = staff_auth_client.post(f"/api/v1/projects/{proj_id}/expenses", json={
+        "category": "labor",
+        "amount": 15000.0,
+        "description": "Technician wiring fee",
+        "vendor": "Ali Electrician"
+    })
+    assert exp_res.status_code == 201
+    exp_id = exp_res.json()["id"]
+
+    edit_exp_res = staff_auth_client.put(f"/api/v1/projects/{proj_id}/expenses/{exp_id}", json={
+        "category": "subcontract",
+        "amount": 22000.0,
+        "description": "Master Electrician & Helper Wiring",
+        "vendor": "Ali & Sons Electrical",
+        "receipt_no": "VOUCH-102"
+    })
+    assert edit_exp_res.status_code == 200
+    edited_exp = edit_exp_res.json()
+    assert edited_exp["category"] == "subcontract"
+    assert float(edited_exp["amount"]) == 22000.0
+    assert edited_exp["vendor"] == "Ali & Sons Electrical"
+    assert edited_exp["receipt_no"] == "VOUCH-102"
+
+    # 8. Add & Edit Client Payment
+    inc_res = staff_auth_client.post(f"/api/v1/projects/{proj_id}/incomes", json={
+        "description": "Initial Deposit",
+        "amount": 100000.0,
+        "payment_method": "cash"
+    })
+    assert inc_res.status_code == 201
+    inc_id = inc_res.json()["id"]
+
+    edit_inc_res = staff_auth_client.put(f"/api/v1/projects/{proj_id}/incomes/{inc_id}", json={
+        "description": "Initial Bank Transfer Deposit",
+        "amount": 150000.0,
+        "payment_method": "bank",
+        "reference": "STANBIC-REF-909"
+    })
+    assert edit_inc_res.status_code == 200
+    edited_inc = edit_inc_res.json()
+    assert edited_inc["description"] == "Initial Bank Transfer Deposit"
+    assert float(edited_inc["amount"]) == 150000.0
+    assert edited_inc["payment_method"] == "bank"
+    assert edited_inc["reference"] == "STANBIC-REF-909"
+
+    # 9. Verify overall project detail financials
+    detail_res = staff_auth_client.get(f"/api/v1/projects/{proj_id}")
+    detail = detail_res.json()
+    assert float(detail["client_payments_total"]) == 150000.0
+    assert float(detail["external_expenses_total"]) == 22000.0
+    assert float(detail["materials_billed"]) == 315000.0  # 3 * 105,000
+    assert float(detail["materials_cost"]) == 255000.0  # 3 * 85,000
+    assert float(detail["materials_profit"]) == 60000.0  # 315,000 - 255,000
+
+
+

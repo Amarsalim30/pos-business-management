@@ -475,11 +475,10 @@ export const SalesListPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setCustomerDropdownOpen(!customerDropdownOpen)}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl border text-xs transition-all cursor-pointer shadow-2xs min-w-0 ${
-                selectedCustomerId !== 'all'
-                  ? 'border-amber-500 bg-amber-50/50 text-slate-900 font-bold'
-                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-              }`}
+              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl border text-xs transition-all cursor-pointer shadow-2xs min-w-0 ${selectedCustomerId !== 'all'
+                ? 'border-amber-500 bg-amber-50/50 text-slate-900 font-bold'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
             >
               <div className="flex items-center gap-1.5 truncate min-w-0 mr-1">
                 <Users className={`h-3.5 w-3.5 shrink-0 ${selectedCustomerId !== 'all' ? 'text-amber-600' : 'text-slate-400'}`} />
@@ -487,10 +486,10 @@ export const SalesListPage: React.FC = () => {
                   {selectedCustomerId === 'all'
                     ? `All Customers (${customers.length})`
                     : selectedCustomerId === '-1'
-                    ? 'Walk-in Only'
-                    : selectedCustomerObj
-                    ? selectedCustomerObj.name
-                    : `Customer #${selectedCustomerId}`}
+                      ? 'Walk-in Only'
+                      : selectedCustomerObj
+                        ? selectedCustomerObj.name
+                        : `Customer #${selectedCustomerId}`}
                 </span>
                 {selectedCustomerObj && Number(selectedCustomerObj.balance) > 0 && (
                   <span className="text-[9px] px-1 py-0.2 rounded bg-rose-100 text-rose-700 font-mono font-bold shrink-0 truncate max-w-[90px]">
@@ -537,18 +536,16 @@ export const SalesListPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setCustomerPickerTab('all')}
-                    className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
-                      customerPickerTab === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+                    className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${customerPickerTab === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
                   >
                     All ({customers.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setCustomerPickerTab('debt')}
-                    className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
-                      customerPickerTab === 'debt' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-                    }`}
+                    className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${customerPickerTab === 'debt' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                      }`}
                   >
                     With Debt ({debtCustomersCount})
                   </button>
@@ -558,9 +555,8 @@ export const SalesListPage: React.FC = () => {
                       setSelectedCustomerId('-1');
                       setCustomerDropdownOpen(false);
                     }}
-                    className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
-                      selectedCustomerId === '-1' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+                    className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${selectedCustomerId === '-1' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
                   >
                     Walk-in Only
                   </button>
@@ -574,9 +570,8 @@ export const SalesListPage: React.FC = () => {
                       setSelectedCustomerId('all');
                       setCustomerDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
-                      selectedCustomerId === 'all' ? 'bg-amber-50 font-bold text-amber-900' : 'text-slate-700'
-                    }`}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer ${selectedCustomerId === 'all' ? 'bg-amber-50 font-bold text-amber-900' : 'text-slate-700'
+                      }`}
                   >
                     <span>All Customers</span>
                     <span className="text-[10px] text-slate-400">{customers.length} accounts</span>
@@ -588,9 +583,8 @@ export const SalesListPage: React.FC = () => {
                       setSelectedCustomerId('-1');
                       setCustomerDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
-                      selectedCustomerId === '-1' ? 'bg-amber-50 font-bold text-amber-900' : 'text-slate-700'
-                    }`}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer ${selectedCustomerId === '-1' ? 'bg-amber-50 font-bold text-amber-900' : 'text-slate-700'
+                      }`}
                   >
                     <span className="italic text-slate-600">Walk-in Customers (No Account)</span>
                   </button>
@@ -605,11 +599,10 @@ export const SalesListPage: React.FC = () => {
                           setSelectedCustomerId(String(c.id));
                           setCustomerDropdownOpen(false);
                         }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors ${
-                          String(selectedCustomerId) === String(c.id)
-                            ? 'bg-amber-50 font-bold text-amber-900'
-                            : 'text-slate-800'
-                        }`}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors ${String(selectedCustomerId) === String(c.id)
+                          ? 'bg-amber-50 font-bold text-amber-900'
+                          : 'text-slate-800'
+                          }`}
                       >
                         <div className="truncate pr-2">
                           <div className="truncate font-semibold">{c.name}</div>
@@ -695,11 +688,10 @@ export const SalesListPage: React.FC = () => {
                 key={st.id}
                 type="button"
                 onClick={() => setStatusFilter(st.id)}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                  statusFilter === st.id
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${statusFilter === st.id
+                  ? 'bg-slate-900 text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
               >
                 {st.label}
               </button>
@@ -850,13 +842,12 @@ export const SalesListPage: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${
-                          s.payment_method === 'split'
-                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                            : s.payment_method === 'mpesa'
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${s.payment_method === 'split'
+                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                          : s.payment_method === 'mpesa'
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : 'bg-slate-100 text-slate-700 border border-slate-200'
-                        }`}>
+                          }`}>
                           {s.payment_method === 'split' ? (
                             <span className="flex items-center space-x-1">
                               <Split className="h-3 w-3" />
@@ -887,15 +878,14 @@ export const SalesListPage: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          isPaid
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : isPartial
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isPaid
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : isPartial
                             ? 'bg-amber-50 text-amber-800 border border-amber-200'
                             : isUnpaid
-                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : 'bg-slate-200 text-slate-700 border border-slate-300'
-                        }`}>
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-slate-200 text-slate-700 border border-slate-300'
+                          }`}>
                           {s.status}
                         </span>
                       </td>
@@ -909,7 +899,7 @@ export const SalesListPage: React.FC = () => {
                               setDrawerFormat('a4');
                             }}
                             className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer shadow-2xs"
-                            title="View A4 Tax Invoice / Document Hub"
+                            title="View A4 Invoice / Document Hub"
                           >
                             <Eye className="h-3.5 w-3.5 text-slate-600" />
                           </button>
@@ -1381,7 +1371,7 @@ export const SalesListPage: React.FC = () => {
         </div>
       )}
 
-      {/* Unified Document Drawer (A4 Tax Invoice & 80mm Thermal Slip) */}
+      {/* Unified Document Drawer (A4 Invoice & 80mm Thermal Slip) */}
       <InvoiceDrawer
         sale={selectedSaleForDrawer}
         isOpen={!!selectedSaleForDrawer}

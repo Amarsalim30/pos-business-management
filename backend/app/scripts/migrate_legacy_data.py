@@ -35,7 +35,10 @@ from app.models.purchase import (
 from app.models.inventory import Inventory, StockMovement
 
 
-CSV_DIR = "/home/amar-salim/Downloads/2026_mdb_csv"
+CSV_DIR = "/home/amar-salim/Documents/Projects/pos-business/docs/data/2026_3_csv"
+
+# Legacy internal accounts that must not become customers
+SKIP_CUSTOMER_NAMES = {"CASH AC", "TASLAM ENERGY SOLUTIONS LTD", "TASLAM"}
 
 
 def _sd(value, default="0") -> Decimal:
@@ -44,6 +47,11 @@ def _sd(value, default="0") -> Decimal:
         return Decimal(str(value or default))
     except Exception:
         return Decimal(default)
+
+
+def _flag(value) -> bool:
+    """Legacy boolean: mdb-tools exports True/False as 1/0."""
+    return str(value or "").strip() in ("True", "1", "1.0")
 
 
 def _si(value, default=0) -> int:
@@ -133,17 +141,18 @@ def migrate_customers_suppliers(db: Session, store: Store, csv_dir: str) -> Tupl
             if not code or not name:
                 continue
 
-            is_client = row.get("Client", "") == "True"
-            is_supplier = row.get("Supplier", "") == "True"
+            is_client = _flag(row.get("Client"))
+            is_supplier = _flag(row.get("Supplier"))
             tel = (row.get("Tel") or "").strip() or None
             pin = (row.get("PIN") or "").strip() or None
             email = (row.get("EMail") or "").strip() or None
             address = (row.get("Address") or "").strip() or None
             cperson = (row.get("CPerson") or "").strip() or None
-            opbal = _sd(row.get("OPBal"))
             totaldue = _sd(row.get("TotalDue"))
 
             if is_client:
+                if name.upper() in SKIP_CUSTOMER_NAMES:
+                    continue
                 existing = db.query(Customer).filter(
                     Customer.name == name, Customer.phone == tel
                 ).first()
@@ -156,7 +165,7 @@ def migrate_customers_suppliers(db: Session, store: Store, csv_dir: str) -> Tupl
                     phone=tel,
                     email=email,
                     address=address,
-                    balance=opbal,
+                    balance=totaldue,
                     is_active=True,
                 )
                 db.add(customer)
@@ -558,9 +567,9 @@ def migrate_stock_movements(
 
             qty_in = _sd(row.get("QntyIn"))
             qty_out = _sd(row.get("QntyOut"))
-            is_grn = row.get("GRN", "") == "True"
-            is_min = row.get("MINTrans", "") == "True"
-            is_return = row.get("Returned", "") == "True"
+            is_grn = _flag(row.get("GRN"))
+            is_min = _flag(row.get("MINTrans"))
+            is_return = _flag(row.get("Returned"))
             trans_ref = (row.get("TransRefNo") or "").strip()
             tdate = _parse_date(row.get("TransDate"))
             user_name = (row.get("Remarks") or "SYSTEM").strip().upper()
